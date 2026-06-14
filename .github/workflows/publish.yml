@@ -28,7 +28,7 @@ jobs:
         python-version: ["3.10", "3.14"]
     steps:
       - name: Check out release tag
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0  # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
       - name: Set up Python
@@ -54,7 +54,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out release tag
-        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0  # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -129,7 +129,7 @@ jobs:
       - name: Keep only Python distributions in the upload directory
         run: rm dist/SHA256SUMS
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@6733eb7d741f0b11ec6a39b58540dab7590f9b7d  # v1.14.0
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
         with:
           packages-dir: dist/
           print-hash: true
