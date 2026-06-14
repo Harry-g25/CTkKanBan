@@ -20,3 +20,10 @@ class KanbanUnknownColumnError(KanbanValidationError):
 class KanbanMoveCancelledError(KanbanError):
     """Raised by callers that choose to treat a cancelled move as an error."""
 
+
+class KanbanPersistenceError(KanbanError):
+    """Raised when a durable mutation cannot be saved."""
+
+
+class KanbanConflictError(KanbanPersistenceError):
+    """Raised for optimistic-concurrency conflicts."""

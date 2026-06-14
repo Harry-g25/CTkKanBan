@@ -1,13 +1,150 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "ctk-kanban"
-version = "0.1.0"
-description = "A configurable, database-independent Kanban board for CustomTkinter"
+dynamic = ["version"]
+description = "A configurable, database-ready Kanban board for CustomTkinter"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["customtkinter>=5.2.2"]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Harry Gomm", email = "Harry-g25@users.noreply.github.com"},
+]
+keywords = ["customtkinter", "kanban", "desktop", "sqlite", "database", "gui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "customtkinter>=5.2.2,<6",
+    "tzdata>=2025.2; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+test = [
+    "coverage[toml]>=7.6",
+    "pytest>=8.3",
+    "pytest-cov>=6",
+]
+quality = [
+    "mypy>=1.14",
+    "ruff>=0.9",
+    "yamllint>=1.35",
+    "zizmor>=1.7",
+]
+release = [
+    "build>=1.2",
+    "check-wheel-contents>=0.6",
+    "packaging>=24",
+    "pyroma>=4.2",
+    "twine>=6",
+]
+dev = [
+    "build>=1.2",
+    "check-wheel-contents>=0.6",
+    "coverage[toml]>=7.6",
+    "mypy>=1.14",
+    "packaging>=24",
+    "pip-audit>=2.7",
+    "pyroma>=4.2",
+    "pytest>=8.3",
+    "pytest-cov>=6",
+    "ruff>=0.9",
+    "tox>=4.23",
+    "twine>=6",
+    "yamllint>=1.35",
+    "zizmor>=1.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/Harry-g25/CTkKanBan"
+Documentation = "https://harry-g25.github.io/CTkKanBan/"
+Changelog = "https://github.com/Harry-g25/CTkKanBan/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Harry-g25/CTkKanBan/issues"
+Source = "https://github.com/Harry-g25/CTkKanBan"
 
 [tool.setuptools.packages.find]
 include = ["ctk_kanban*"]
+
+[tool.setuptools.package-data]
+ctk_kanban = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ctk_kanban.version.__version__"}
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["ctk_kanban"]
+
+[tool.coverage.report]
+fail_under = 65
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+    "ctk_kanban/contracts.py",
+    "ctk_kanban/datasource.py",
+    "ctk_kanban/events.py",
+    "ctk_kanban/exceptions.py",
+    "ctk_kanban/models.py",
+    "ctk_kanban/query.py",
+    "ctk_kanban/sqlite.py",
+    "ctk_kanban/themes.py",
+    "ctk_kanban/utils.py",
+    "ctk_kanban/validators.py",
+    "ctk_kanban/version.py",
+]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ctk_kanban.board",
+    "ctk_kanban.card",
+    "ctk_kanban.column",
+    "ctk_kanban.dialogs",
+    "ctk_kanban.drag",
+    "ctk_kanban.rendering",
+    "ctk_kanban.toolbar",
+    "ctk_kanban.widgets",
+]
+ignore_errors = true

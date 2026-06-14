@@ -1,0 +1,41 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read  # Read workflow metadata needed by CodeQL.
+      contents: read
+      security-events: write  # Upload analysis results to code scanning.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0  # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1a818fd5f97ed0ee9a823421bd5b171add01227f  # v4.36.2
+        with:
+          languages: python
+          queries: security-extended
+      - name: Analyze
+        uses: github/codeql-action/analyze@1a818fd5f97ed0ee9a823421bd5b171add01227f  # v4.36.2
+        with:
+          category: /language:python

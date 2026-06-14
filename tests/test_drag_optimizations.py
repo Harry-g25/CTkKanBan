@@ -5,8 +5,9 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from ctk_kanban import CTkKanbanBoard
 from gui_test_app import TEST_APP
+
+from ctk_kanban import CTkKanbanBoard
 
 
 class DragOptimizationTests(unittest.TestCase):

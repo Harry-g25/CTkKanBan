@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 import customtkinter as ctk
 
-from ctk_kanban import CTkKanbanBoard
-
+import ctk_kanban
+from ctk_kanban import CTkKanbanBoard, __version__
 
 COLUMNS = [
     {"id": "backlog", "title": "Backlog", "color": "#64748B"},
@@ -171,73 +172,6 @@ CARDS = [
     },
 ]
 
-THEME = {
-    "board_fg_color": ("#EEF2F7", "#09111F"),
-    "column_fg_color": ("#E2E8F0", "#152033"),
-    "column_header_fg_color": ("#E2E8F0", "#152033"),
-    "card_fg_color": ("#FFFFFF", "#101827"),
-    "card_hover_color": ("#F8FAFC", "#17233A"),
-    "card_selected_color": ("#DBEAFE", "#1E3A5F"),
-    "drop_indicator_color": "#38BDF8",
-}
-
-
-def custom_card_renderer(
-    card_frame: Any,
-    card_data: dict[str, Any],
-    _fields: list[dict[str, Any]],
-    theme: dict[str, Any],
-) -> None:
-    """A compact custom renderer; forms/search still use FIELDS above."""
-
-    card_frame.grid_columnconfigure(0, weight=1)
-    header = ctk.CTkFrame(card_frame, fg_color="transparent")
-    header.grid(row=0, column=0, sticky="ew", padx=10, pady=(9, 4))
-    header.grid_columnconfigure(0, weight=1)
-    ctk.CTkLabel(
-        header,
-        text=card_data["title"],
-        anchor="w",
-        justify="left",
-        wraplength=180,
-        font=ctk.CTkFont(size=14, weight="bold"),
-        text_color=theme["text_color"],
-    ).grid(row=0, column=0, sticky="ew")
-    priority = str(card_data.get("priority") or "")
-    if priority:
-        colors = {"Critical": "#B91C1C", "High": "#EF4444", "Medium": "#F59E0B", "Low": "#10B981"}
-        ctk.CTkLabel(
-            header,
-            text=priority,
-            height=20,
-            corner_radius=7,
-            fg_color=colors.get(priority, "#64748B"),
-            text_color="#FFFFFF",
-            font=ctk.CTkFont(size=9, weight="bold"),
-        ).grid(row=0, column=1, padx=(5, 0))
-    description = str(card_data.get("description") or "")
-    if description:
-        ctk.CTkLabel(
-            card_frame,
-            text=description if len(description) < 100 else description[:97] + "...",
-            anchor="w",
-            justify="left",
-            wraplength=235,
-            text_color=theme["muted_text_color"],
-            font=ctk.CTkFont(size=11),
-        ).grid(row=1, column=0, sticky="ew", padx=10, pady=2)
-    footer_text = " | ".join(
-        value for value in [str(card_data.get("assignee") or ""), str(card_data.get("due_date") or "")] if value
-    )
-    ctk.CTkLabel(
-        card_frame,
-        text=footer_text,
-        anchor="w",
-        text_color=theme["muted_text_color"],
-        font=ctk.CTkFont(size=10),
-    ).grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 9))
-
-
 def log_event(event: dict[str, Any]) -> None:
     """Stand-in for application logging or database persistence."""
 
@@ -260,11 +194,21 @@ def custom_assign_action(event: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    ctk.set_appearance_mode("System")
+    if "--diagnose" in sys.argv:
+        print(f"CTkKanban {__version__}")
+        print(f"Package: {ctk_kanban.__file__}")
+        print(f"Theme: {ctk_kanban.DEFAULT_THEME['board_fg_color']}")
+        return
+    appearance = "System"
+    if "--light" in sys.argv:
+        appearance = "Light"
+    elif "--dark" in sys.argv:
+        appearance = "Dark"
+    ctk.set_appearance_mode(appearance)
     ctk.set_default_color_theme("blue")
 
     app = ctk.CTk()
-    app.title("CTkKanbanBoard - All Features")
+    app.title(f"CTkKanban - Modern Showcase v{__version__}")
     app.geometry("1450x820")
     app.minsize(950, 600)
     app.grid_rowconfigure(0, weight=1)
@@ -280,7 +224,7 @@ def main() -> None:
         card_form_mode="sidepanel",
         column_width=280,
         column_height=680,
-        show_toolbar=False,
+        show_toolbar=True,
         show_search=True,
         show_filter_button=True,
         show_sort_button=True,
@@ -299,8 +243,9 @@ def main() -> None:
         enable_card_double_click=True,
         confirm_delete=True,
         filter_mode="hide",
-        style=THEME,
-        card_renderer=custom_card_renderer,
+        completed_columns=["done"],
+        responsive_columns=True,
+        show_drag_handles=True,
         card_context_menu_items=[
             {"label": "Assign to me", "callback": custom_assign_action, "separator_before": True},
         ],
@@ -314,6 +259,8 @@ def main() -> None:
         on_error=lambda event: print("Board error:", event["message"]),
     )
     board.grid(row=0, column=0, sticky="nsew")
+    if "--form" in sys.argv:
+        app.after(300, lambda: board.open_add_card_form("todo"))
 
     app.mainloop()
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 import unittest
 
 import customtkinter as ctk
+from gui_test_app import TEST_APP
 
 from ctk_kanban import CTkKanbanBoard
-from gui_test_app import TEST_APP
 
 
 class FullEfficiencyAuditTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class FullEfficiencyAuditTests(unittest.TestCase):
         self.assertNotIn(1, self.board._card_widgets)
         self.assertIs(self.board._card_widgets[2], widgets[2])
         self.assertIs(self.board._card_widgets[3], widgets[3])
-        self.assertEqual(self.board.get_card(2)["sort_order"], 1)
+        self.assertEqual(self.board.get_card(2)["sort_order"], 2)
 
     def test_cancelled_delete_never_touches_widgets(self) -> None:
         widgets = dict(self.board._card_widgets)
@@ -186,6 +186,7 @@ class FullEfficiencyAuditTests(unittest.TestCase):
             self.assertIs(self.board._card_widgets[card_id], widget)
 
     def test_column_id_rename_preserves_widgets_and_updates_cards(self) -> None:
+        self.board.immutable_column_ids = False
         widgets = dict(self.board._card_widgets)
         todo_column = self.board._column_widgets["todo"]
         self.board.refresh = lambda: self.fail("column rename performed a full refresh")  # type: ignore[method-assign]
@@ -207,6 +208,7 @@ class FullEfficiencyAuditTests(unittest.TestCase):
             columns=[{"id": "todo", "title": "To Do"}],
             cards=[{"id": 10, "column": "todo", "title": "Card"}],
             card_renderer=renderer,
+            immutable_column_ids=False,
             show_toolbar=False,
             column_height=300,
         )

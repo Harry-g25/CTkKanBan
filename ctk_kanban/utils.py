@@ -56,6 +56,46 @@ def parse_temporal(value: Any) -> datetime | None:
     return parsed
 
 
+def format_temporal(
+    value: Any,
+    *,
+    field_type: str,
+    timezone_info: Any = timezone.utc,
+    locale_name: str | None = None,
+) -> str:
+    """Format date-like values for display while keeping stored values unchanged."""
+
+    parsed = parse_temporal(value)
+    if parsed is None:
+        return display_value(value)
+
+    locale_key = (locale_name or "").replace("-", "_").casefold()
+    if field_type == "date":
+        if isinstance(value, str):
+            try:
+                shown_date = date.fromisoformat(value.strip()[:10])
+            except ValueError:
+                shown_date = parsed.date()
+        elif isinstance(value, datetime):
+            shown_date = value.date()
+        elif isinstance(value, date):
+            shown_date = value
+        else:
+            shown_date = parsed.date()
+        if locale_key.startswith("en_us"):
+            return shown_date.strftime("%m/%d/%Y")
+        if locale_key:
+            return shown_date.strftime("%d/%m/%Y")
+        return shown_date.isoformat()
+
+    localized = parsed.astimezone(timezone_info or timezone.utc)
+    if locale_key.startswith("en_us"):
+        return localized.strftime("%m/%d/%Y %I:%M %p %Z").lstrip("0")
+    if locale_key:
+        return localized.strftime("%d/%m/%Y %H:%M %Z")
+    return localized.isoformat(timespec="minutes")
+
+
 def comparable_value(value: Any) -> tuple[int, int, Any]:
     """Produce a stable sort value across common card field types."""
 

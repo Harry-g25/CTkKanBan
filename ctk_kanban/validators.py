@@ -14,7 +14,6 @@ from .exceptions import (
 from .models import DEFAULT_FIELDS
 from .utils import parse_temporal
 
-
 SUPPORTED_FIELD_TYPES = {
     "text",
     "textarea",
@@ -166,6 +165,9 @@ def validate_field(field: Mapping[str, Any]) -> dict[str, Any]:
     normalized.setdefault("filterable", False)
     normalized.setdefault("sortable", False)
     normalized.setdefault("read_only", False)
+    normalized.setdefault("help_text", "")
+    normalized.setdefault("checkbox_text", "")
+    normalized.setdefault("empty_value", None)
     for option_name in (
         "required",
         "show_on_card",
@@ -246,10 +248,29 @@ def validate_card_values(card: Mapping[str, Any], fields: Iterable[Mapping[str, 
                 raise KanbanValidationError(f"{field['label']} must be a list, tuple, or set")
             elif field_type in {"date", "datetime"} and parse_temporal(value) is None:
                 raise KanbanValidationError(f"{field['label']} must be a valid ISO date or datetime")
+            if isinstance(value, (int, float)):
+                minimum = field.get("min")
+                maximum = field.get("max")
+                if minimum is not None and value < minimum:
+                    raise KanbanValidationError(f"{field['label']} must be at least {minimum}")
+                if maximum is not None and value > maximum:
+                    raise KanbanValidationError(f"{field['label']} must be at most {maximum}")
+            if isinstance(value, str):
+                minimum_length = field.get("min_length")
+                maximum_length = field.get("max_length")
+                if minimum_length is not None and len(value) < minimum_length:
+                    raise KanbanValidationError(
+                        f"{field['label']} must be at least {minimum_length} characters"
+                    )
+                if maximum_length is not None and len(value) > maximum_length:
+                    raise KanbanValidationError(
+                        f"{field['label']} must be at most {maximum_length} characters"
+                    )
         options = field.get("options") or []
         if value not in (None, "", []) and options:
             if field_type == "multiselect":
-                invalid = [item for item in value if item not in options]
+                selected = value if isinstance(value, (list, tuple, set)) else []
+                invalid = [item for item in selected if item not in options]
                 if invalid:
                     raise KanbanValidationError(f"Invalid {field['label']} value: {invalid[0]!r}")
             elif field_type == "select" and value not in options:

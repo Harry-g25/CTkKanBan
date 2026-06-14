@@ -5,10 +5,10 @@ from __future__ import annotations
 import unittest
 
 import customtkinter as ctk
+from gui_test_app import TEST_APP
 
 from ctk_kanban import CTkKanbanBoard
 from ctk_kanban.dialogs import CardFormDialog, CardFormFrame
-from gui_test_app import TEST_APP
 
 
 def descendants(widget: object) -> list[object]:

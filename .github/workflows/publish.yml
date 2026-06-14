@@ -1,0 +1,155 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  verify:
+    name: Release tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.14"]
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0  # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Linux display server
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes xvfb
+      - name: Install package and tests
+        run: python -m pip install -e ".[test]"
+      - name: Run tests on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q
+      - name: Run tests on Windows or macOS
+        if: runner.os != 'Linux'
+        run: python -m pytest -q
+
+  build:
+    name: Test and build once
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0  # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+      - name: Require the tagged commit to be on main
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main
+      - name: Install Linux display server
+        run: sudo apt-get update && sudo apt-get install --yes xvfb
+      - name: Install release dependencies
+        run: python -m pip install ".[test,quality,release]"
+      - name: Run release quality gates
+        run: |
+          python -m ruff check ctk_kanban tests example_all_features.py example_sqlite.py scripts
+          python -m mypy
+          xvfb-run -a python -m pytest --cov=ctk_kanban --cov-report=term -q
+      - name: Build release distributions
+        run: python -m build
+      - name: Validate tag, metadata, and artifacts
+        run: python scripts/validate_dist.py --dist dist --tag "${GITHUB_REF_NAME}" --write-checksums
+      - name: Upload immutable release artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-distributions
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  attest:
+    name: Attest release artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read  # Download the build job's artifact.
+      attestations: write  # Store provenance for release files.
+      contents: read
+      id-token: write  # Sign provenance through GitHub OIDC.
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-distributions
+          path: dist
+      - name: Create build provenance attestations
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
+        with:
+          subject-path: dist/*
+
+  publish:
+    name: Publish with trusted publishing
+    needs: attest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/p/ctk-kanban
+    permissions:
+      actions: read  # Download the attested artifact.
+      contents: read
+      id-token: write  # Authenticate to PyPI without a long-lived token.
+    steps:
+      - name: Download attested distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-distributions
+          path: dist
+      - name: Keep only Python distributions in the upload directory
+        run: rm dist/SHA256SUMS
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@6733eb7d741f0b11ec6a39b58540dab7590f9b7d  # v1.14.0
+        with:
+          packages-dir: dist/
+          print-hash: true
+          verbose: true
+
+  github-release:
+    name: Create GitHub release
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read  # Download the published artifact.
+      contents: write  # Create the GitHub release and upload its assets.
+    steps:
+      - name: Download published distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: release-distributions
+          path: dist
+      - name: Create release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/* --verify-tag --generate-notes --title "CTkKanban ${GITHUB_REF_NAME}"

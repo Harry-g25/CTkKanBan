@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from ctk_kanban import CTkKanbanBoard
 from gui_test_app import TEST_APP
+
+from ctk_kanban import CTkKanbanBoard
 
 
 class DatabasePersistenceApiTests(unittest.TestCase):
@@ -75,6 +76,22 @@ class DatabasePersistenceApiTests(unittest.TestCase):
         snapshot = self.board.get_data()
         self.assertEqual([column["id"] for column in snapshot["columns"]], ["ready", "done"])
         self.assertEqual([card["id"] for card in snapshot["cards"]], [10])
+
+    def test_legacy_persistence_callback_can_return_canonical_record(self) -> None:
+        self.board._callbacks["on_data_changed"] = lambda event: {
+            "card": {
+                **event["action_event"]["card_data"],
+                "id": 30,
+                "version": 4,
+                "updated_at": "2026-06-14T12:00:00+00:00",
+            }
+        }
+
+        created = self.board.add_card({"id": 3, "column": "todo", "title": "Canonical"})
+
+        self.assertEqual(created["id"], 30)
+        self.assertIsNone(self.board.get_card(3))
+        self.assertEqual(self.board.get_card(30)["version"], 4)
 
 
 if __name__ == "__main__":

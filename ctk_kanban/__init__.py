@@ -3,10 +3,24 @@
 from .board import CTkKanbanBoard
 from .card import CTkKanbanCard
 from .column import CTkKanbanColumn
+from .contracts import (
+    BoardLoadResult,
+    CardPage,
+    CardQuery,
+    ChangePage,
+    ConflictDetails,
+    EventMetadata,
+    MutationEvent,
+    MutationResult,
+    PersistenceState,
+)
+from .datasource import KanbanDataSource, PersistenceCoordinator, RetryPolicy
 from .exceptions import (
+    KanbanConflictError,
     KanbanDuplicateIDError,
     KanbanError,
     KanbanMoveCancelledError,
+    KanbanPersistenceError,
     KanbanUnknownColumnError,
     KanbanValidationError,
 )
@@ -20,8 +34,10 @@ from .models import (
     KanbanCallback,
     KanbanEvent,
 )
+from .sqlite import SQLiteKanbanDataSource
 from .themes import DEFAULT_PRIORITY_COLORS, DEFAULT_STYLE, DEFAULT_THEME, merge_style, merge_theme
 from .toolbar import CTkKanbanToolbar
+from .version import __version__
 
 __all__ = [
     "CTkKanbanBoard",
@@ -41,11 +57,25 @@ __all__ = [
     "KanbanDuplicateIDError",
     "KanbanUnknownColumnError",
     "KanbanMoveCancelledError",
+    "KanbanPersistenceError",
+    "KanbanConflictError",
+    "KanbanDataSource",
+    "PersistenceCoordinator",
+    "RetryPolicy",
+    "EventMetadata",
+    "MutationEvent",
+    "MutationResult",
+    "ConflictDetails",
+    "PersistenceState",
+    "CardQuery",
+    "CardPage",
+    "BoardLoadResult",
+    "ChangePage",
+    "SQLiteKanbanDataSource",
     "DEFAULT_STYLE",
     "DEFAULT_THEME",
     "DEFAULT_PRIORITY_COLORS",
     "merge_style",
     "merge_theme",
+    "__version__",
 ]
-
-__version__ = "0.1.0"

@@ -14,16 +14,16 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
     <link rel="stylesheet" href="styles.css" />
 
-    <link rel="icon" href="/docs/assests/favicon/favicon-32x32.png" sizes="32x32" type="image/x-icon">
-    <link rel="apple-touch-icon" href="/docs/assests/favicon/apple-touch-icon.png">
-    <link rel="manifest" href="/docs/assests/favicon/site.webmanifest">
+    <link rel="icon" href="assests/favicon/favicon-32x32.png" sizes="32x32" type="image/x-icon">
+    <link rel="apple-touch-icon" href="assests/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="assests/favicon/site.webmanifest">
   </head>
   <body>
     <div class="overlay" id="overlay"></div>
 
     <nav class="topnav">
       <a class="nav-title" href="#hero">CTkKanBan</a>
-      <span class="nav-version">v0.1.0 Docs</span>
+      <span class="nav-version">v0.2.0 Docs</span>
       <div class="nav-spacer"></div>
       <a class="nav-link" href="#installation">Installation</a>
       <button class="hamburger" id="hamburger" type="button" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
@@ -92,8 +92,8 @@
             <div class="hero-eyebrow">&#10022; CustomTkinter Widget</div>
             <h1>CTkKanBan</h1>
             <p class="hero-sub">
-              A configurable, database-independent Kanban board for CustomTkinter. Build desktop workflows with
-              draggable cards, generated forms, search, filters, sorting, and cancellable persistence callbacks.
+              A configurable, database-ready Kanban board for CustomTkinter. Build desktop workflows with
+              draggable cards, generated forms, advanced querying, undo, and transactional persistence.
             </p>
             <div class="hero-install">
               <span class="prompt">$</span>
@@ -126,8 +126,8 @@
                 state in place.
               </li>
               <li>
-                Persistence is callback-driven. You can save to SQLite, PostgreSQL, a REST API, a file, or nothing at
-                all. The widget does not force a storage model.
+                Persistence is adapter-driven for database applications, with a legacy callback path for files and
+                small local boards. The included SQLite adapter is transactional and operation-first.
               </li>
             </ul>
 
@@ -142,8 +142,8 @@
               <article class="info-card">
                 <h4>What CTkKanBan leaves to you</h4>
                 <p>
-                  Persistence, application-level validation rules beyond field validators, deployment, and any
-                  higher-level workflow rules specific to your project.
+                  Deployment, authentication, application-level rules beyond field validators, and any
+                  backend-specific authorization policy.
                 </p>
               </article>
             </div>
@@ -162,7 +162,7 @@
             </p>
             <ul>
               <li><code>requires-python = "&gt;=3.10"</code></li>
-              <li><code>dependencies = ["customtkinter&gt;=5.2.2"]</code></li>
+              <li><code>dependencies = ["customtkinter&gt;=5.2.2", "tzdata ..."]</code></li>
             </ul>
 
             <h3>1. Create a virtual environment</h3>
@@ -551,10 +551,11 @@ board.sort_cards("manual", reverse=True, column_id="review")</code></pre>
             <div class="section-rule"></div>
             <h2>Persistence Hooks</h2>
             <p>
-              CTkKanBan does not write to storage on its own. Instead, it emits events before or after mutations and
-              lets you decide how to persist them. For most applications, <code>on_data_changed</code> is the simplest
-              place to integrate with your database or file format because it receives one full board snapshot after
-              each accepted mutation.
+              CTkKanBan can use the included transactional SQLite adapter or any implementation of
+              <code>KanbanDataSource</code>. For most small file-based applications, <code>on_data_changed</code> is the simplest
+              legacy integration point for files or small local boards. Database-backed applications should prefer a
+              <code>KanbanDataSource</code>, which receives focused typed operations on a worker thread and may return
+              canonical records, revisions, conflicts, and generated IDs.
             </p>
 
             <div class="code-block">
@@ -607,6 +608,11 @@ board = CTkKanbanBoard(
           <section class="doc-section" id="tutorial-rendering">
             <div class="section-rule"></div>
             <h2>Custom Rendering and Theme</h2>
+            <p>
+              The default renderer uses a modern adaptive light/dark system: layered board surfaces, colored column
+              rails, priority-accented cards, compact metadata tiles, filter chips, persistence status pills, and
+              matching form controls. These defaults work without a custom style and remain fully configurable.
+            </p>
             <p>
               The default card renderer is field-driven, but you can fully replace card content with a custom
               renderer while still using the built-in search, form, filter, and callback infrastructure.
@@ -796,6 +802,13 @@ board = CTkKanbanBoard(
               <code>theme</code> or <code>style</code>, and the constructor merges nested
               <code>priority_colors</code>, <code>tag_colors</code>, and <code>font_config</code> overrides from the
               <code>style</code> mapping.
+            </p>
+            <p>
+              Visual details such as <code>card_metadata_fg_color</code>, <code>card_accent_width</code>,
+              <code>column_control_fg_color</code>, <code>column_count_full_fg_color</code>,
+              <code>filter_chip_fg_color</code>, and the success, warning, and danger surface colors can be changed
+              independently. Existing broad keys such as <code>card_fg_color</code> and <code>button_fg_color</code>
+              continue to work.
             </p>
             <p>
               In practice:
@@ -2378,14 +2391,15 @@ board = CTkKanbanBoard(
 
             <h3>Why does the overdue filter not match anything?</h3>
             <p>
-              The built-in overdue check reads the <code>due_date</code> field and expects an ISO date or datetime
-              value. A truthy <code>completed</code> card key suppresses the overdue match.
+              The built-in overdue check reads the configured due-date and completion fields. Completed columns and
+              the display timezone are configurable, and database timestamps can be rendered for the chosen locale.
             </p>
 
             <h3>How do I add my own database layer?</h3>
             <p>
-              Use <code>on_data_changed</code> for a full-snapshot persistence hook, or combine the granular mutation
-              callbacks if you prefer operation-specific writes.
+              Implement <code>KanbanDataSource</code> for operation-specific writes, canonical records, revisions,
+              conflicts, server-side queries, and change polling. See <code>docs/database.md</code>. Use
+              <code>on_data_changed</code> only for the legacy full-snapshot path.
             </p>
           </section>
 
@@ -2394,19 +2408,20 @@ board = CTkKanbanBoard(
             <h2>Notes and Limitations</h2>
             <ul>
               <li>
-                The repository includes no built-in database adapters. Persistence is entirely callback-based.
+                The package includes a transactional SQLite adapter. Other databases can implement the
+                <code>KanbanDataSource</code> protocol.
               </li>
               <li>
                 The built-in UI does not provide a column creation, edit, or delete dialog. Column structure changes are
                 available through the API, not a dedicated editor.
               </li>
               <li>
-                The built-in form does not provide a dedicated multi-select widget. <code>multiselect</code> values are
-                entered as text and normalized to <code>list[str]</code>.
+                Multiselect values use comma-separated entry. Date fields use the built-in calendar picker.
               </li>
               <li>
-                The allowed sort keys include <code>created_date</code> and <code>updated_date</code>, but the board
-                does not populate those keys automatically. They only matter if your card data includes them.
+                Database adapters may populate canonical <code>created_at</code>, <code>updated_at</code>, and
+                <code>version</code> fields. Legacy <code>created_date</code> and <code>updated_date</code> sort keys remain
+                available for existing schemas.
               </li>
               <li>
                 The internal filter matcher accepts both <code>column</code> and <code>status</code> as aliases for the

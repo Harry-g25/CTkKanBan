@@ -2,5 +2,16 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.tox/
+.tools/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 build/
 dist/
+*.db
+.coverage
+coverage.xml
+htmlcov/
+reports/
+*.egg

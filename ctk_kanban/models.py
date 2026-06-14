@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Literal, TypedDict
 
+from .contracts import MutationEvent, MutationResult
 
 FieldType = Literal[
     "text",
@@ -75,6 +76,13 @@ class FieldDefinition(_RequiredFieldDefinition, total=False):
     filterable: bool
     sortable: bool
     read_only: bool
+    help_text: str
+    checkbox_text: str
+    empty_value: Any
+    min: int | float
+    max: int | float
+    min_length: int
+    max_length: int
     validator: Callable[[Any, dict[str, Any]], bool | str | None]
 
 
@@ -90,8 +98,9 @@ class ContextMenuItem(_RequiredContextMenuItem, total=False):
     separator_before: bool
 
 
-KanbanEvent = dict[str, Any]
+KanbanEvent = dict[str, Any] | MutationEvent
 KanbanCallback = Callable[[KanbanEvent], Any]
+KanbanResult = MutationResult
 CardRenderer = Callable[[Any, dict[str, Any], list[dict[str, Any]], dict[str, Any]], None]
 
 

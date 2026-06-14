@@ -2,27 +2,35 @@
 
 from __future__ import annotations
 
+import logging
+import queue
 import tkinter as tk
 from datetime import date, datetime, timezone
 from math import isfinite
-from time import monotonic
 from tkinter import messagebox
 from typing import Any, Callable, Iterable, Mapping
+from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import customtkinter as ctk
 
 from .card import CTkKanbanCard
 from .column import CTkKanbanColumn
+from .contracts import CardQuery, MutationEvent, MutationResult, PersistenceState, coerce_mutation_result
+from .datasource import KanbanDataSource, PersistenceCoordinator, RetryPolicy
 from .dialogs import CardFormDialog, CardFormFrame, FilterDialog
+from .drag import DragDropMixin
 from .events import cancellation_reason, create_event
 from .exceptions import (
     KanbanDuplicateIDError,
+    KanbanPersistenceError,
     KanbanUnknownColumnError,
     KanbanValidationError,
 )
 from .models import BoardData, CardRenderer, ContextMenuItem, KanbanCallback
+from .query import card_matches_filters
+from .rendering import RenderingMixin
 from .themes import DEFAULT_PRIORITY_COLORS, merge_theme
-from .toolbar import CTkKanbanToolbar
 from .utils import clone, comparable_value, generate_card_id, parse_temporal, searchable_text
 from .validators import (
     validate_card,
@@ -65,7 +73,7 @@ def _validated_mapping(value: Any, name: str) -> Mapping[str, Any] | None:
     return value
 
 
-class CTkKanbanBoard(ctk.CTkFrame):
+class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     """A reusable, configurable Kanban board for CustomTkinter.
 
     The board owns defensive copies of column and card dictionaries. All
@@ -79,17 +87,21 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def __init__(
         self,
         master: Any,
-        columns: Iterable[Mapping[str, Any]],
+        columns: Iterable[Mapping[str, Any]] | None = None,
         cards: Iterable[Mapping[str, Any]] | None = None,
         fields: Iterable[Mapping[str, Any]] | None = None,
         *,
         # Layout
         enable_horizontal_scroll: bool = True,
         enable_column_scroll: bool = True,
-        column_width: int = 280,
+        column_width: int = 300,
         column_height: int = 600,
-        column_gap: int = 12,
+        column_gap: int = 14,
         board_padding: int | None = None,
+        responsive_columns: bool = True,
+        min_column_width: int = 240,
+        max_column_width: int = 420,
+        column_control_size: int = 30,
         # Toolbar
         show_toolbar: bool = True,
         show_search: bool = True,
@@ -105,6 +117,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
         enable_column_drag: bool = True,
         # Cards
         card_mode: str = "detailed",
+        card_density: str = "comfortable",
+        show_drag_handles: bool = True,
+        max_visible_tags: int = 6,
+        tags_per_row: int = 3,
         enable_card_hover: bool = True,
         enable_card_selection: bool = True,
         enable_card_context_menu: bool = True,
@@ -112,6 +128,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         enable_builtin_card_form: bool = True,
         card_form_mode: str = "popup",
         confirm_delete: bool = True,
+        confirm_discard_changes: bool = True,
         # Drag and drop
         enable_card_drag: bool = True,
         enable_card_reorder: bool = True,
@@ -133,6 +150,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         default_sort: str = "manual",
         filter_mode: str = "hide",
         show_no_results: bool = True,
+        highlight_search_matches: bool = True,
         # Styling and extension points
         theme: Mapping[str, Any] | None = None,
         style: Mapping[str, Any] | None = None,
@@ -141,6 +159,28 @@ class CTkKanbanBoard(ctk.CTkFrame):
         font_config: Mapping[str, Any] | None = None,
         card_renderer: CardRenderer | None = None,
         card_context_menu_items: Iterable[ContextMenuItem] | None = None,
+        # Data source and durable state
+        data_source: KanbanDataSource | None = None,
+        board_id: str = "default",
+        actor_id: str | None = None,
+        auto_load: bool = False,
+        server_side_query: bool = False,
+        page_size: int = 100,
+        poll_interval_ms: int = 0,
+        retry_policy: RetryPolicy | None = None,
+        disable_while_saving: bool = True,
+        id_factory: Callable[[], Any] | None = None,
+        use_temporary_ids: bool = True,
+        immutable_card_ids: bool = True,
+        immutable_column_ids: bool = True,
+        conflict_strategy: str = "server_wins",
+        undo_limit: int = 50,
+        completion_field: str = "completed",
+        completed_columns: Iterable[Any] | None = None,
+        timezone_name: str = "UTC",
+        locale_name: str | None = None,
+        normalize_empty_values: bool = True,
+        logger: logging.Logger | None = None,
         # Callbacks
         on_card_clicked: KanbanCallback | None = None,
         on_card_double_clicked: KanbanCallback | None = None,
@@ -162,11 +202,18 @@ class CTkKanbanBoard(ctk.CTkFrame):
         on_error: KanbanCallback | None = None,
         on_add_card_requested: KanbanCallback | None = None,
         on_edit_card_requested: KanbanCallback | None = None,
+        on_persistence_status: KanbanCallback | None = None,
+        on_conflict: KanbanCallback | None = None,
         **kwargs: Any,
     ) -> None:
         column_width = _validated_int(column_width, "column_width", minimum=160)
         column_height = _validated_int(column_height, "column_height", minimum=180)
         column_gap = _validated_int(column_gap, "column_gap", minimum=0)
+        min_column_width = _validated_int(min_column_width, "min_column_width", minimum=160)
+        max_column_width = _validated_int(max_column_width, "max_column_width", minimum=min_column_width)
+        column_control_size = _validated_int(column_control_size, "column_control_size", minimum=28)
+        max_visible_tags = _validated_int(max_visible_tags, "max_visible_tags", minimum=1)
+        tags_per_row = _validated_int(tags_per_row, "tags_per_row", minimum=1)
         drag_update_interval_ms = _validated_int(
             drag_update_interval_ms,
             "drag_update_interval_ms",
@@ -182,6 +229,9 @@ class CTkKanbanBoard(ctk.CTkFrame):
             "cleanup_time_budget_ms",
             minimum=1,
         )
+        page_size = _validated_int(page_size, "page_size", minimum=1)
+        poll_interval_ms = _validated_int(poll_interval_ms, "poll_interval_ms", minimum=0)
+        undo_limit = _validated_int(undo_limit, "undo_limit", minimum=0)
         drag_preview_opacity = _validated_opacity(drag_preview_opacity)
         theme = _validated_mapping(theme, "theme")
         style = _validated_mapping(style, "style")
@@ -210,12 +260,15 @@ class CTkKanbanBoard(ctk.CTkFrame):
             tag_colors = merged_tag_colors
         if card_mode not in {"compact", "detailed"}:
             raise KanbanValidationError("card_mode must be 'compact' or 'detailed'")
+        if card_density not in {"compact", "comfortable", "spacious"}:
+            raise KanbanValidationError("card_density must be 'compact', 'comfortable', or 'spacious'")
         if filter_mode not in {"hide", "dim"}:
             raise KanbanValidationError("filter_mode must be 'hide' or 'dim'")
         if card_form_mode not in {"popup", "sidepanel"}:
             raise KanbanValidationError("card_form_mode must be 'popup' or 'sidepanel'")
         boolean_options = {
             "enable_horizontal_scroll": enable_horizontal_scroll,
+            "responsive_columns": responsive_columns,
             "enable_column_scroll": enable_column_scroll,
             "show_toolbar": show_toolbar,
             "show_search": show_search,
@@ -229,11 +282,13 @@ class CTkKanbanBoard(ctk.CTkFrame):
             "enforce_column_limits": enforce_column_limits,
             "enable_column_drag": enable_column_drag,
             "enable_card_hover": enable_card_hover,
+            "show_drag_handles": show_drag_handles,
             "enable_card_selection": enable_card_selection,
             "enable_card_context_menu": enable_card_context_menu,
             "enable_card_double_click": enable_card_double_click,
             "enable_builtin_card_form": enable_builtin_card_form,
             "confirm_delete": confirm_delete,
+            "confirm_discard_changes": confirm_discard_changes,
             "enable_card_drag": enable_card_drag,
             "enable_card_reorder": enable_card_reorder,
             "enable_drag_preview": enable_drag_preview,
@@ -247,12 +302,13 @@ class CTkKanbanBoard(ctk.CTkFrame):
             "enable_sorting": enable_sorting,
             "allow_column_sorting": allow_column_sorting,
             "show_no_results": show_no_results,
+            "highlight_search_matches": highlight_search_matches,
         }
         for option_name, option_value in boolean_options.items():
             if not isinstance(option_value, bool):
                 raise KanbanValidationError(f"{option_name} must be a boolean")
 
-        normalized_columns = validate_columns(columns)
+        normalized_columns = validate_columns(columns if columns is not None else [])
         normalized_cards = validate_cards(
             cards if cards is not None else [],
             {column["id"] for column in normalized_columns},
@@ -296,26 +352,50 @@ class CTkKanbanBoard(ctk.CTkFrame):
             "on_error": on_error,
             "on_add_card_requested": on_add_card_requested,
             "on_edit_card_requested": on_edit_card_requested,
+            "on_persistence_status": on_persistence_status,
+            "on_conflict": on_conflict,
         }
         for callback_name, callback in callbacks.items():
             if callback is not None and not callable(callback):
                 raise KanbanValidationError(f"{callback_name} must be callable or None")
         if card_renderer is not None and not callable(card_renderer):
             raise KanbanValidationError("card_renderer must be callable or None")
+        if data_source is not None and on_data_changed is not None:
+            raise KanbanValidationError(
+                "Use either data_source or on_data_changed, not both; two persistence writers can diverge"
+            )
+        if data_source is not None and not isinstance(data_source, KanbanDataSource):
+            raise KanbanValidationError("data_source does not implement the KanbanDataSource protocol")
+        if id_factory is not None and not callable(id_factory):
+            raise KanbanValidationError("id_factory must be callable or None")
+        if conflict_strategy not in {"server_wins", "local_wins", "callback"}:
+            raise KanbanValidationError("conflict_strategy must be 'server_wins', 'local_wins', or 'callback'")
+        if timezone_name.upper() in {"UTC", "ETC/UTC", "GMT"}:
+            configured_timezone = timezone.utc
+        else:
+            try:
+                configured_timezone = ZoneInfo(timezone_name)
+            except (KeyError, ValueError) as exc:
+                raise KanbanValidationError(f"Unknown timezone: {timezone_name!r}") from exc
 
         self.theme = merge_theme(style_overrides)
         self.style = self.theme
         for font_name, font_value in dict(font_config or {}).items():
             self.theme[f"{font_name}_font"] = font_value
         font_defaults = {
-            "card_title_font": {"size": 14, "weight": "bold"},
+            "card_title_font": {"size": 15, "weight": "bold"},
             "card_body_font": {"size": 12},
-            "card_metadata_font": {"size": 11},
-            "badge_font": {"size": 10, "weight": "bold"},
+            "card_metadata_font": {"size": 10},
+            "badge_font": {"size": 9, "weight": "bold"},
             "column_title_font": {"size": 14, "weight": "bold"},
             "column_count_font": {"size": 11, "weight": "bold"},
             "form_title_font": {"size": 20, "weight": "bold"},
+            "form_label_font": {"size": 11, "weight": "bold"},
             "filter_title_font": {"size": 19, "weight": "bold"},
+            "toolbar_font": {"size": 12, "weight": "bold"},
+            "button_font": {"size": 12, "weight": "bold"},
+            "secondary_button_font": {"size": 12, "weight": "bold"},
+            "input_font": {"size": 12},
         }
         for font_key, options in font_defaults.items():
             if font_key not in self.theme:
@@ -343,6 +423,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.column_width = column_width
         self.column_height = column_height
         self.column_gap = column_gap
+        self.responsive_columns = responsive_columns
+        self.min_column_width = min_column_width
+        self.max_column_width = max_column_width
+        self.column_control_size = column_control_size
         self.board_padding = board_padding
         self.show_toolbar = show_toolbar
         self.show_search = show_search and enable_search
@@ -356,6 +440,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.enforce_column_limits = enforce_column_limits
         self.enable_column_drag = enable_column_drag
         self.card_mode = card_mode
+        self.card_density = card_density
+        self.show_drag_handles = show_drag_handles
+        self.max_visible_tags = max_visible_tags
+        self.tags_per_row = tags_per_row
         self.enable_card_hover = enable_card_hover
         self.enable_card_selection = enable_card_selection
         self.enable_card_context_menu = enable_card_context_menu
@@ -363,6 +451,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.enable_builtin_card_form = enable_builtin_card_form
         self.card_form_mode = card_form_mode
         self.confirm_delete = confirm_delete
+        self.confirm_discard_changes = confirm_discard_changes
         self.enable_card_drag = enable_card_drag
         self.enable_card_reorder = enable_card_reorder
         self.enable_drag_preview = enable_drag_preview
@@ -381,8 +470,46 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.allow_column_sorting = allow_column_sorting
         self.filter_mode = filter_mode
         self.show_no_results = show_no_results
+        self.highlight_search_matches = highlight_search_matches
 
         self._callbacks = callbacks
+
+        self.data_source = data_source
+        self.board_id = str(board_id)
+        self.actor_id = actor_id
+        self.auto_load = auto_load
+        self.server_side_query = server_side_query
+        self.page_size = page_size
+        self.poll_interval_ms = poll_interval_ms
+        self.disable_while_saving = disable_while_saving
+        self.id_factory = id_factory
+        self.use_temporary_ids = use_temporary_ids
+        self.immutable_card_ids = immutable_card_ids
+        self.immutable_column_ids = immutable_column_ids
+        self.conflict_strategy = conflict_strategy
+        self.undo_limit = undo_limit
+        self.completion_field = str(completion_field)
+        self.completed_columns = set(completed_columns or [])
+        self.timezone = configured_timezone
+        self.timezone_name = timezone_name
+        self.locale_name = locale_name
+        self.normalize_empty_values = normalize_empty_values
+        self.logger = logger or logging.getLogger("ctk_kanban.board")
+        self._board_revision: int | str | None = None
+        self._persistence_state: PersistenceState = "idle"
+        self._persistence_message: str | None = None
+        self._mutation_locked = False
+        self._column_totals: dict[Any, int] = {}
+        self._loaded_offsets: dict[Any, int] = {}
+        self._has_more = False
+        self._poll_after_id: str | None = None
+        self._history_undo: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        self._history_redo: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        self._history_suspended = False
+        self._batch_events: list[MutationEvent] | None = None
+        self._persistence: PersistenceCoordinator | None = None
+        self._ui_queue: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
+        self._ui_after_id: str | None = None
 
         self._search_query = ""
         self._filters: dict[str, Any] = {}
@@ -394,463 +521,182 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._hidden_card_widgets: dict[Any, CTkKanbanCard] = {}
         self._retired_card_widgets: list[CTkKanbanCard] = []
         self._retire_after_id: str | None = None
-        self._empty_label: ctk.CTkLabel | None = None
+        self._empty_label: Any | None = None
+        self._status_overlay: ctk.CTkFrame | None = None
         self._drag_state: dict[str, Any] | None = None
         self._drag_preview: tk.Toplevel | None = None
         self._drag_preview_position: tuple[int, int] | None = None
         self._indicator_column: CTkKanbanColumn | None = None
         self._highlighted_column: CTkKanbanColumn | None = None
         self._last_cancellation_reason: str | None = None
+        self._last_callback_result = MutationResult()
         self._card_form_panel: CardFormFrame | None = None
         self._card_form_dialog: CardFormDialog | None = None
 
         self._build_board()
-
-    # ------------------------------------------------------------------
-    # Construction and rendering
-    # ------------------------------------------------------------------
-    def destroy(self) -> None:
-        """Cancel deferred cleanup before destroying the board widget."""
-
-        self._cancel_retired_cleanup()
-        self._close_card_form()
-        super().destroy()
-
-    def _cancel_retired_cleanup(self) -> None:
-        """Cancel pending cleanup when parent destruction will handle widgets."""
-
-        if self._retire_after_id is not None:
-            try:
-                self.after_cancel(self._retire_after_id)
-            except (tk.TclError, ValueError):
-                pass
-            self._retire_after_id = None
-        self._retired_card_widgets.clear()
-
-    def _build_board(self) -> None:
-        self.grid_rowconfigure(1 if self.show_toolbar else 0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        if self.show_toolbar:
-            self.toolbar = CTkKanbanToolbar(
-                self,
-                self.theme,
-                show_search=self.show_search,
-                show_filter_button=self.show_filter_button,
-                show_sort_button=self.show_sort_button,
-                show_add_card_button=self.show_add_card_button,
-                show_clear_filters_button=self.show_clear_filters_button,
-                on_search=self.search,
-                on_filter=self._open_filter_dialog,
-                on_sort=self._show_sort_menu,
-                on_add=self._show_add_menu,
-                on_clear=self._clear_toolbar_state,
+        self._ui_after_id = self.after(10, self._drain_ui_queue)
+        if self.data_source is not None:
+            self._persistence = PersistenceCoordinator(
+                self.data_source,
+                schedule=self._ui_queue.put,
+                on_status=self._set_persistence_status,
+                retry_policy=retry_policy,
+                logger=self.logger,
             )
-            self.toolbar.grid(row=0, column=0, sticky="ew", padx=self.board_padding, pady=(self.board_padding, 0))
-
-        row = 1 if self.show_toolbar else 0
-        if self.enable_horizontal_scroll:
-            self.board_area: Any = ctk.CTkScrollableFrame(
-                self,
-                orientation="horizontal",
-                fg_color="transparent",
-                scrollbar_button_color=self.theme["scrollbar_button_color"],
-                scrollbar_button_hover_color=self.theme["scrollbar_button_hover_color"],
-            )
-        else:
-            self.board_area = ctk.CTkFrame(self, fg_color="transparent")
-        self.board_area.grid(
-            row=row,
-            column=0,
-            sticky="nsew",
-            padx=self.board_padding,
-            pady=self.board_padding,
-        )
-        self.refresh()
-
-    def refresh(self) -> None:
-        """Rebuild the current visual board from owned data and view state."""
-
-        self._cancel_retired_cleanup()
-        self._clear_drag_visuals()
-        for widget in list(self._column_widgets.values()):
-            if widget.winfo_exists():
-                widget.destroy()
-        self._column_widgets.clear()
-        self._card_widgets.clear()
-        self._hidden_card_widgets.clear()
-        if self._empty_label is not None and self._empty_label.winfo_exists():
-            self._empty_label.destroy()
-            self._empty_label = None
-
-        if not self._columns_data:
-            self._empty_label = ctk.CTkLabel(
-                self.board_area,
-                text="No columns",
-                text_color=self.theme["overlay_text_color"],
-            )
-            self._empty_label.grid(row=0, column=0, padx=30, pady=30)
-            return
-
-        card_counts: dict[Any, int] = {column["id"]: 0 for column in self._columns_data}
-        for card_data in self._cards.values():
-            card_counts[card_data["column"]] += 1
-
-        for column_index, column_data in enumerate(self._columns_data):
-            column = self._create_column_widget(column_data, column_index)
-
-            ordered = self._ordered_cards_for_column(column_data["id"])
-            visible_count = 0
-            for card_data in ordered:
-                matches = self._card_matches_view(card_data)
-                if not matches and self.filter_mode == "hide":
-                    continue
-                card = self._create_card_widget(column, card_data)
-                if not matches and self.filter_mode == "dim":
-                    card.set_dimmed(True)
-                visible_count += 1
-            column.update_card_count(card_counts[column_data["id"]])
-            if visible_count == 0 and self.show_no_results:
-                column.show_no_results()
-        self._layout_column_widgets()
-
-    def _create_column_widget(self, column_data: Mapping[str, Any], index: int) -> CTkKanbanColumn:
-        """Create and position one column widget."""
-
-        if self._empty_label is not None and self._empty_label.winfo_exists():
-            self._empty_label.destroy()
-            self._empty_label = None
-        column = CTkKanbanColumn(
-            self.board_area,
-            dict(column_data),
-            self.theme,
-            width=self.column_width,
-            height=self.column_height,
-            enable_scroll=self.enable_column_scroll,
-            show_card_count=self.show_card_count,
-            show_add_button=self.show_column_add_button,
-            show_menu=self.show_column_menu,
-            on_add=self.open_add_card_form,
-            on_menu=self._show_column_menu,
-            on_drag_press=self._on_column_press,
-            on_drag_motion=self._on_column_motion,
-            on_drag_release=self._on_column_release,
-        )
-        column.grid(row=0, column=index, sticky="ns")
-        self._column_widgets[column_data["id"]] = column
-        return column
-
-    def _layout_column_widgets(self) -> None:
-        """Re-grid existing columns in data order without rebuilding them."""
-
-        last_index = len(self._columns_data) - 1
-        for index, column_data in enumerate(self._columns_data):
-            self._column_widgets[column_data["id"]].grid_configure(
-                row=0,
-                column=index,
-                sticky="ns",
-                padx=(0, self.column_gap if index < last_index else 0),
-            )
-
-    def _populate_column_widget(self, column_id: Any) -> None:
-        """Populate one new or rebuilt column from current card/view state."""
-
-        column = self._column_widgets[column_id]
-        for card_data in self._ordered_cards_for_column(column_id):
-            matches = self._card_matches_view(card_data)
-            if not matches and self.filter_mode == "hide":
-                continue
-            card = self._create_card_widget(column, card_data)
-            if not matches and self.filter_mode == "dim":
-                card.set_dimmed(True)
-        self._update_column_summary(column_id)
-
-    def _render_column_add(self, column_id: Any) -> None:
-        index = self._column_index(column_id)
-        self._create_column_widget(self._columns_data[index], index)
-        self._update_column_summary(column_id)
-        self._layout_column_widgets()
-
-    def _render_column_delete(self, column_id: Any) -> None:
-        widget = self._column_widgets.pop(column_id, None)
-        if widget is not None:
-            widget.destroy()
-        self._layout_column_widgets()
-        if not self._columns_data:
-            self._empty_label = ctk.CTkLabel(
-                self.board_area,
-                text="No columns",
-                text_color=self.theme["overlay_text_color"],
-            )
-            self._empty_label.grid(row=0, column=0, padx=30, pady=30)
-
-    def _render_column_update(self, old_column_id: Any, new_column_id: Any) -> None:
-        """Update column metadata in place while retaining every card widget."""
-
-        index = self._column_index(new_column_id)
-        widget = self._column_widgets.pop(old_column_id)
-        widget.update_column_data(dict(self._columns_data[index]))
-        self._column_widgets[new_column_id] = widget
-        if old_column_id != new_column_id:
-            refresh_card_content = self.card_renderer is not None or any(
-                field["key"] == "column" and field.get("show_on_card")
-                for field in self.fields
-            )
-            affected_card_ids: list[Any] = []
-            for card_id, card_data in self._cards.items():
-                if card_data["column"] != new_column_id:
-                    continue
-                affected_card_ids.append(card_id)
-                card_widget = self._card_widgets.get(card_id) or self._hidden_card_widgets.get(card_id)
-                if card_widget is not None and not refresh_card_content:
-                    card_widget.card_data["column"] = new_column_id
-            if refresh_card_content:
-                for card_id in affected_card_ids:
-                    self._discard_card_widget(card_id)
-                self._sync_card_view([new_column_id])
-        self._layout_column_widgets()
-
-    def _create_card_widget(
-        self,
-        column: CTkKanbanColumn,
-        card_data: Mapping[str, Any],
-    ) -> CTkKanbanCard:
-        """Create one visible card widget and register it with its column."""
-
-        card = CTkKanbanCard(
-            column.body,
-            clone(card_data),
-            self.fields,
-            self.theme,
-            card_mode=self.card_mode,
-            priority_colors=self.priority_colors,
-            tag_colors=self.tag_colors,
-            renderer=self.card_renderer,
-            on_press=self._on_card_press,
-            on_motion=self._on_card_motion,
-            on_release=self._on_card_release,
-            on_double_click=self._on_card_double_click,
-            on_right_click=self._on_card_right_click,
-            hover_enabled=self.enable_card_hover,
-        )
-        column.add_card_widget(card)
-        self._card_widgets[card_data["id"]] = card
-        if card_data["id"] == self._selected_card_id:
-            card.set_selected(True)
-        return card
-
-    def _render_card_move(self, card_id: Any, old_column: Any, new_column: Any) -> None:
-        """Update only the visual widgets affected by a successful card move."""
-
-        card_data = self._cards[card_id]
-        matches = self._card_matches_view(card_data)
-        should_render = matches or self.filter_mode == "dim"
-        old_column_widget = self._column_widgets[old_column]
-        new_column_widget = self._column_widgets[new_column]
-        card_widget = self._card_widgets.get(card_id)
-        hidden_widget = self._hidden_card_widgets.get(card_id)
-
-        if old_column != new_column and (card_widget is not None or hidden_widget is not None):
-            self._discard_card_widget(card_id)
-            card_widget = None
-            hidden_widget = None
-
-        if should_render:
-            if card_widget is None:
-                card_widget = self._hidden_card_widgets.pop(card_id, None)
-                if card_widget is None:
-                    card_widget = self._create_card_widget(new_column_widget, card_data)
-                else:
-                    self._card_widgets[card_id] = card_widget
-            else:
-                card_widget.card_data = clone(card_data)
-            card_widget.card_data = clone(card_data)
-            card_widget.set_dimmed(not matches and self.filter_mode == "dim")
-            desired_ids = self._visible_card_ids_for_column(new_column)
-            new_column_widget.place_card_widget(card_widget, desired_ids.index(card_id))
-        elif card_widget is not None:
-            old_column_widget.remove_card_widget(card_widget)
-            self._card_widgets.pop(card_id, None)
-            card_widget.card_data = clone(card_data)
-            self._hidden_card_widgets[card_id] = card_widget
-        elif hidden_widget is not None:
-            hidden_widget.card_data = clone(card_data)
-
-        for column_id in {old_column, new_column}:
-            self._update_column_summary(column_id)
-
-    def _render_card_add(self, card_id: Any) -> None:
-        """Render one newly created card without rebuilding existing widgets."""
-
-        card_data = self._cards[card_id]
-        column_id = card_data["column"]
-        column = self._column_widgets[column_id]
-        matches = self._card_matches_view(card_data)
-        if matches or self.filter_mode == "dim":
-            card_widget = self._create_card_widget(column, card_data)
-            card_widget.set_dimmed(not matches and self.filter_mode == "dim")
-            sort_key, reverse = self._column_sorts.get(column_id, self._global_sort)
-            if sort_key != "manual" or reverse:
-                desired_ids = self._visible_card_ids_for_column(column_id)
-                column.place_card_widget(card_widget, desired_ids.index(card_id))
-        self._update_column_summary(column_id)
-
-    def _render_card_update(
-        self,
-        old_card_id: Any,
-        old_column: Any,
-        new_card_id: Any,
-        new_column: Any,
-    ) -> None:
-        """Replace only the changed card widget after an accepted update."""
-
-        self._discard_card_widget(old_card_id)
-        self._render_card_add(new_card_id)
-        if old_column != new_column:
-            self._update_column_summary(old_column)
-
-    def _render_card_delete(self, card_id: Any, column_id: Any) -> None:
-        """Remove one card widget and refresh only its column summary."""
-
-        self._discard_card_widget(card_id)
-        self._update_column_summary(column_id)
-
-    def _visible_card_ids_for_column(self, column_id: Any) -> list[Any]:
-        """Return the IDs represented by widgets in one column's view order."""
-
-        return [
-            card["id"]
-            for card in self._ordered_cards_for_column(column_id)
-            if self._card_matches_view(card) or self.filter_mode == "dim"
-        ]
-
-    def _update_column_summary(self, column_id: Any) -> None:
-        """Update one column's count and no-results message."""
-
-        column = self._column_widgets[column_id]
-        total = sum(1 for card in self._cards.values() if card["column"] == column_id)
-        column.update_card_count(total)
-        if column.card_widgets:
-            column.clear_no_results()
-        elif self.show_no_results:
-            column.show_no_results()
-
-    def _discard_card_widget(self, card_id: Any) -> None:
-        """Destroy a visible or cached card widget and unregister it."""
-
-        widget = self._card_widgets.pop(card_id, None)
-        if widget is None:
-            widget = self._hidden_card_widgets.pop(card_id, None)
-        if widget is None:
-            return
-        for column in self._column_widgets.values():
-            if widget in column.card_widgets:
-                column.remove_card_widget(widget)
-                break
-        widget.destroy()
-
-    def _retire_card_widget(self, card_id: Any) -> None:
-        """Detach a card immediately and destroy it later in small batches."""
-
-        widget = self._card_widgets.pop(card_id, None)
-        if widget is None:
-            widget = self._hidden_card_widgets.pop(card_id, None)
-        if widget is None:
-            return
-        for column in self._column_widgets.values():
-            if widget in column.card_widgets:
-                column.remove_card_widget(widget)
-                break
-        widget.pack_forget()
-        self._retired_card_widgets.append(widget)
-        if self._retire_after_id is None:
-            self._retire_after_id = self.after(1, self._drain_retired_card_widgets)
-
-    def _drain_retired_card_widgets(self) -> None:
-        """Destroy retired cards incrementally to avoid blocking Tk's event loop."""
-
-        self._retire_after_id = None
-        deadline = monotonic() + self.cleanup_time_budget_ms / 1000
-        while self._retired_card_widgets:
-            widget = self._retired_card_widgets.pop()
-            try:
-                widget.destroy()
-            except tk.TclError:
-                pass
-            if monotonic() >= deadline:
-                break
-        if self._retired_card_widgets and self.winfo_exists():
-            self._retire_after_id = self.after(1, self._drain_retired_card_widgets)
-
-    def _sync_card_view(self, column_ids: Iterable[Any] | None = None) -> None:
-        """Synchronize visibility and order without reconstructing the board."""
-
-        target_ids = list(column_ids) if column_ids is not None else [column["id"] for column in self._columns_data]
-        for column_id in target_ids:
-            column = self._column_widgets[column_id]
-            ordered_cards = self._ordered_cards_for_column(column_id)
-            match_by_id = {card["id"]: self._card_matches_view(card) for card in ordered_cards}
-            desired_cards = [card for card in ordered_cards if match_by_id[card["id"]] or self.filter_mode == "dim"]
-            desired_ids = {card["id"] for card in desired_cards}
-
-            for widget in list(column.card_widgets):
-                if widget.card_id not in desired_ids:
-                    column.remove_card_widget(widget)
-                    self._card_widgets.pop(widget.card_id, None)
-                    self._hidden_card_widgets[widget.card_id] = widget
-
-            ordered_widgets: list[CTkKanbanCard] = []
-            for card_data in desired_cards:
-                card_id = card_data["id"]
-                widget = self._card_widgets.get(card_id)
-                if widget is None:
-                    widget = self._hidden_card_widgets.pop(card_id, None)
-                    if widget is None:
-                        widget = self._create_card_widget(column, card_data)
-                    else:
-                        self._card_widgets[card_id] = widget
-                widget.set_dimmed(not match_by_id[card_id] and self.filter_mode == "dim")
-                ordered_widgets.append(widget)
-            column.set_card_widget_order(ordered_widgets)
-            self._update_column_summary(column_id)
-
-    def _clear_card_widgets(self) -> None:
-        """Detach card widgets now and retire their resources incrementally."""
-
-        card_ids = list({*self._card_widgets, *self._hidden_card_widgets})
-        for card_id in card_ids:
-            self._retire_card_widget(card_id)
-        for column in self._column_widgets.values():
-            column.card_widgets.clear()
-            column.clear_drop_indicator()
-        for column_id in self._column_widgets:
-            self._update_column_summary(column_id)
-
-    def _replace_cards_incrementally(self, cards: list[dict[str, Any]], *, sync_view: bool = True) -> None:
-        """Replace card data while retaining widgets for byte-for-byte equal cards."""
-
-        replacement = {card["id"]: card for card in cards}
-        stale_ids = [
-            card_id
-            for card_id, old_card in self._cards.items()
-            if card_id not in replacement or replacement[card_id] != old_card
-        ]
-        for card_id in stale_ids:
-            self._retire_card_widget(card_id)
-        self._cards = replacement
-        if self._selected_card_id not in self._cards:
-            self._selected_card_id = None
-        if sync_view:
-            self._sync_card_view()
+            if self.auto_load:
+                self.after_idle(self.refresh_from_source)
+            if self.poll_interval_ms:
+                self._schedule_poll()
 
     # ------------------------------------------------------------------
     # Callback and error handling
     # ------------------------------------------------------------------
+    def _set_persistence_status(self, state: PersistenceState, message: str | None) -> None:
+        """Update storage status and make it visible to the host and toolbar."""
+
+        self._persistence_state = state
+        self._persistence_message = message
+        self._mutation_locked = self.disable_while_saving and state in {"saving", "retrying"}
+        if hasattr(self, "toolbar") and hasattr(self.toolbar, "set_persistence_status"):
+            self.toolbar.set_persistence_status(state, message)
+        if state == "loading" and not self._cards:
+            self._show_status_overlay(message or "Loading...", retry=False)
+        elif state in {"offline", "conflict", "error"} and not self._cards:
+            self._show_status_overlay(message or "Unable to load board", retry=True)
+        elif state in {"idle", "saved"}:
+            self._hide_status_overlay()
+        event = create_event(
+            "persistence_status",
+            source="persistence",
+            board_id=self.board_id,
+            state=state,
+            message=message,
+            queued_count=self._persistence.queued_count if self._persistence is not None else 0,
+        )
+        self._invoke_callback("on_persistence_status", event)
+
+    def _show_status_overlay(self, text: str, *, retry: bool) -> None:
+        if self._status_overlay is not None:
+            self._status_overlay.destroy()
+        frame = ctk.CTkFrame(self.board_area, fg_color=self.theme["column_fg_color"])
+        frame.grid(row=0, column=0, padx=30, pady=30)
+        ctk.CTkLabel(frame, text=text, wraplength=340).pack(padx=24, pady=(20, 8))
+        if retry:
+            ctk.CTkButton(frame, text="Retry", command=self.retry_last_save).pack(pady=(0, 20))
+        self._status_overlay = frame
+
+    def _hide_status_overlay(self) -> None:
+        if self._status_overlay is not None:
+            self._status_overlay.destroy()
+            self._status_overlay = None
+
+    def get_persistence_status(self) -> dict[str, Any]:
+        """Return current save state for custom status bars and diagnostics."""
+
+        return {
+            "state": self._persistence_state,
+            "message": self._persistence_message,
+            "board_revision": self._board_revision,
+            "queued_count": self._persistence.queued_count if self._persistence is not None else 0,
+        }
+
+    def retry_last_save(self) -> bool:
+        """Retry the most recent rejected or failed durable mutation."""
+
+        if self._persistence is None:
+            return False
+        if self._persistence.retry_last():
+            return True
+        return self.refresh_from_source()
+
+    def set_online(self, online: bool) -> None:
+        """Control offline queueing for applications that monitor connectivity."""
+
+        if self._persistence is not None:
+            self._persistence.set_online(bool(online))
+
+    def _ensure_mutation_allowed(self) -> None:
+        if self._mutation_locked:
+            raise KanbanPersistenceError("Please wait for the current save to finish")
+
+    def _operation_payload(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        excluded = {
+            "type",
+            "timestamp",
+            "source",
+            "event_id",
+            "transaction_id",
+            "board_id",
+            "actor_id",
+            "expected_revision",
+        }
+        return {key: clone(value) for key, value in event.items() if key not in excluded}
+
+    def _record_history(self, before: dict[str, Any] | None, after: dict[str, Any] | None = None) -> None:
+        if before is None or self._history_suspended or self.undo_limit == 0:
+            return
+        after = self.get_state() if after is None else clone(after)
+        if before == after:
+            return
+        self._history_undo.append((clone(before), after))
+        if len(self._history_undo) > self.undo_limit:
+            del self._history_undo[0 : len(self._history_undo) - self.undo_limit]
+        self._history_redo.clear()
+
+    def can_undo(self) -> bool:
+        return bool(self._history_undo)
+
+    def can_redo(self) -> bool:
+        return bool(self._history_redo)
+
+    def undo(self) -> bool:
+        """Restore the state before the latest accepted mutation."""
+
+        self._ensure_mutation_allowed()
+        if not self._history_undo:
+            return False
+        before, after = self._history_undo.pop()
+        self._history_suspended = True
+        try:
+            self.set_state(before)
+        finally:
+            self._history_suspended = False
+        self._history_redo.append((before, after))
+        self._persist_state_replacement("undo", rollback_state=after)
+        return True
+
+    def redo(self) -> bool:
+        """Reapply the latest undone mutation."""
+
+        self._ensure_mutation_allowed()
+        if not self._history_redo:
+            return False
+        before, after = self._history_redo.pop()
+        self._history_suspended = True
+        try:
+            self.set_state(after)
+        finally:
+            self._history_suspended = False
+        self._history_undo.append((before, after))
+        self._persist_state_replacement("redo", rollback_state=before)
+        return True
+
+    def _persist_state_replacement(self, source: str, rollback_state: dict[str, Any]) -> None:
+        event = create_event(
+            "board_replaced",
+            source=source,
+            columns=self.get_columns(),
+            cards=self.get_all_cards(),
+        )
+        self._invoke_data_changed(event, rollback_state=rollback_state, record_history=False)
+
     def _invoke_callback(self, name: str, event: dict[str, Any], *, cancellable: bool = False) -> str | None:
         callback = self._callbacks.get(name)
         if callback is None:
             return None
         try:
             result = callback(clone(event))
+            self._last_callback_result = coerce_mutation_result(result)
         except Exception as exc:  # Application callbacks are an integration boundary.
             self._emit_error(exc, event)
             if cancellable:
@@ -885,10 +731,99 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         self._invoke_callback("on_action_cancelled", event)
 
-    def _invoke_data_changed(self, action_event: dict[str, Any]) -> str | None:
-        """Emit a single full-snapshot persistence event for data mutations."""
+    def _invoke_data_changed(
+        self,
+        action_event: dict[str, Any],
+        *,
+        rollback_state: dict[str, Any] | None = None,
+        record_history: bool = True,
+    ) -> str | None:
+        """Persist one focused operation or emit the legacy snapshot callback."""
+
+        if self._batch_events is not None:
+            self._batch_events.append(
+                MutationEvent.from_mapping(
+                    {
+                        **action_event,
+                        "payload": self._operation_payload(action_event),
+                        "board_id": self.board_id,
+                        "actor_id": self.actor_id,
+                        "expected_revision": self._board_revision,
+                    }
+                )
+            )
+            return None
+
+        if self._persistence is not None:
+            event = MutationEvent.from_mapping(
+                {
+                    **action_event,
+                    "payload": self._operation_payload(action_event),
+                    "board_id": self.board_id,
+                    "actor_id": self.actor_id,
+                    "expected_revision": self._board_revision,
+                }
+            )
+            self.logger.info(
+                "Submitting Kanban mutation",
+                extra={
+                    "kanban_event_id": event.metadata.event_id,
+                    "kanban_transaction_id": event.metadata.transaction_id,
+                    "kanban_board_id": self.board_id,
+                    "kanban_operation": event.type,
+                    "kanban_expected_revision": self._board_revision,
+                },
+            )
+            self._set_persistence_status("saving", "Saving...")
+
+            def succeeded(result: MutationResult) -> None:
+                self._board_revision = result.board_revision or self._board_revision
+                self.logger.info(
+                    "Kanban mutation saved",
+                    extra={
+                        "kanban_event_id": event.metadata.event_id,
+                        "kanban_board_id": self.board_id,
+                        "kanban_operation": event.type,
+                        "kanban_revision": self._board_revision,
+                    },
+                )
+                self._apply_canonical_result(action_event, result)
+                if record_history:
+                    self._record_history(rollback_state)
+
+            def failed(error: Exception | MutationResult) -> None:
+                self.logger.error(
+                    "Kanban mutation rejected",
+                    extra={
+                        "kanban_event_id": event.metadata.event_id,
+                        "kanban_board_id": self.board_id,
+                        "kanban_operation": event.type,
+                    },
+                )
+                if isinstance(error, MutationResult) and error.conflict is not None:
+                    self._handle_conflict(event, error, rollback_state)
+                    return
+                if isinstance(error, (ConnectionError, TimeoutError, OSError)) and not self._persistence.online:
+                    self.logger.warning(
+                        "Kanban mutation queued offline",
+                        extra={"kanban_event_id": event.metadata.event_id, "kanban_board_id": self.board_id},
+                    )
+                    return
+                if rollback_state is not None:
+                    self._history_suspended = True
+                    try:
+                        self.set_state(rollback_state)
+                    finally:
+                        self._history_suspended = False
+                reason = error.reason if isinstance(error, MutationResult) else str(error)
+                self._action_cancelled(action_event, reason or "Save failed")
+
+            self._persistence.submit(event, on_success=succeeded, on_failure=failed)
+            return None
 
         if self._callbacks.get("on_data_changed") is None:
+            if record_history:
+                self._record_history(rollback_state)
             return None
         event = create_event(
             "data_changed",
@@ -898,7 +833,113 @@ class CTkKanbanBoard(ctk.CTkFrame):
             columns=self.get_columns(),
             cards=self.get_all_cards(),
         )
-        return self._invoke_callback("on_data_changed", event, cancellable=True)
+        reason = self._invoke_callback("on_data_changed", event, cancellable=True)
+        if reason is None:
+            self._apply_canonical_result(action_event, self._last_callback_result)
+        if reason is None and record_history:
+            self._record_history(rollback_state)
+        return reason
+
+    def _apply_canonical_result(self, action_event: Mapping[str, Any], result: MutationResult) -> None:
+        """Merge IDs, timestamps, versions, and defaults returned by storage."""
+
+        changed = False
+        for old_id, new_id in result.id_map.items():
+            if old_id in self._cards:
+                self.remap_card_id(old_id, new_id, persist=False)
+                changed = True
+        if result.card is not None:
+            old_id = action_event.get("old_card_id", action_event.get("card_id", result.card["id"]))
+            if old_id in self._cards and old_id != result.card["id"]:
+                self.remap_card_id(old_id, result.card["id"], persist=False)
+            if result.card["id"] in self._cards:
+                self._cards[result.card["id"]] = clone(result.card)
+                changed = True
+        for card in result.changed_cards:
+            if card.get("id") in self._cards:
+                self._cards[card["id"]] = clone(card)
+                changed = True
+        if result.column is not None:
+            for index, column in enumerate(self._columns_data):
+                if column["id"] in {action_event.get("old_column_id"), result.column["id"]}:
+                    self._columns_data[index] = clone(result.column)
+                    changed = True
+                    break
+        if changed:
+            if self.incremental_card_rendering:
+                self._replace_cards_incrementally(list(self._cards.values()))
+            else:
+                self.refresh()
+
+    def remap_card_id(self, old_id: Any, new_id: Any, *, persist: bool = False) -> dict[str, Any]:
+        """Replace a temporary card ID with its canonical database ID."""
+
+        if new_id in self._cards and new_id != old_id:
+            raise KanbanDuplicateIDError(f"Duplicate card ID: {new_id!r}")
+        card = self._require_card(old_id)
+        del self._cards[old_id]
+        card["id"] = new_id
+        self._cards[new_id] = card
+        if self._selected_card_id == old_id:
+            self._selected_card_id = new_id
+        widget = self._card_widgets.pop(old_id, None)
+        if widget is not None:
+            widget.card_id = new_id
+            widget.card_data["id"] = new_id
+            self._card_widgets[new_id] = widget
+        hidden = self._hidden_card_widgets.pop(old_id, None)
+        if hidden is not None:
+            hidden.card_id = new_id
+            hidden.card_data["id"] = new_id
+            self._hidden_card_widgets[new_id] = hidden
+        if persist:
+            self.update_card(new_id, {"id": new_id}, source="id_remap")
+        return clone(card)
+
+    def _handle_conflict(
+        self,
+        event: MutationEvent,
+        result: MutationResult,
+        rollback_state: dict[str, Any] | None,
+    ) -> None:
+        conflict = result.conflict
+        assert conflict is not None
+        decision = self.conflict_strategy
+        callback = self._callbacks.get("on_conflict")
+        if callback is not None:
+            callback_event = create_event(
+                "conflict",
+                source="persistence",
+                mutation=event.to_dict(),
+                conflict=conflict,
+            )
+            try:
+                callback_result = callback(callback_event)
+                if isinstance(callback_result, str) and callback_result in {"server_wins", "local_wins"}:
+                    decision = callback_result
+            except Exception as exc:
+                self._emit_error(exc, callback_event)
+        if decision == "local_wins" and self._persistence is not None:
+            event.metadata.expected_revision = conflict.actual_revision
+
+            def local_saved(accepted: MutationResult) -> None:
+                self._board_revision = accepted.board_revision or conflict.actual_revision
+                self._apply_canonical_result(event.payload, accepted)
+                self._record_history(rollback_state)
+
+            self._persistence.submit(
+                event,
+                on_success=local_saved,
+                on_failure=lambda error: self._action_cancelled(event.to_dict(), str(error)),
+            )
+            return
+        server_data = conflict.server_data
+        if server_data is not None:
+            self.set_data(server_data)
+            self._board_revision = conflict.actual_revision
+        elif rollback_state is not None:
+            self.set_state(rollback_state)
+        self._action_cancelled(event.to_dict(), conflict.message)
 
     # ------------------------------------------------------------------
     # Card data API
@@ -906,7 +947,23 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def add_card(self, card_data: Mapping[str, Any], *, source: str = "api") -> dict[str, Any] | None:
         """Validate, add, and emit ``on_card_created`` for a new card."""
 
-        card = validate_card(card_data, self._column_ids())
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
+        candidate = dict(card_data)
+        temporary_id = False
+        if candidate.get("id") in (None, ""):
+            if self.id_factory is not None:
+                candidate["id"] = self.id_factory()
+            elif self.data_source is not None and self.use_temporary_ids:
+                candidate["id"] = f"__tmp__:{uuid4()}"
+                temporary_id = True
+            else:
+                candidate["id"] = generate_card_id(self._cards)
+        now = datetime.now(self.timezone).isoformat()
+        candidate.setdefault("created_at", now)
+        candidate.setdefault("updated_at", now)
+        candidate.setdefault("version", 0)
+        card = validate_card(self._normalize_card_values(candidate), self._column_ids())
         validate_card_values(card, self.fields)
         if card["id"] in self._cards:
             raise KanbanDuplicateIDError(f"Duplicate card ID: {card['id']!r}")
@@ -921,10 +978,11 @@ class CTkKanbanBoard(ctk.CTkFrame):
             card_id=card["id"],
             card_data=clone(card),
             column_data=self.get_column(card["column"]),
+            temporary_id=temporary_id,
         )
         reason = self._invoke_callback("on_card_created", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             del self._cards[card["id"]]
             self._action_cancelled(event, reason)
@@ -944,17 +1002,24 @@ class CTkKanbanBoard(ctk.CTkFrame):
     ) -> dict[str, Any] | None:
         """Merge updates into a card and restore it if the callback cancels."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         if not isinstance(new_data, Mapping):
             raise KanbanValidationError("Card update data must be a mapping")
         old = clone(self._require_card(card_id))
         candidate = {**old, **new_data}
-        updated = validate_card(candidate, self._column_ids())
+        if self.immutable_card_ids and candidate.get("id") != card_id:
+            raise KanbanValidationError("Card IDs are immutable; use remap_card_id() for a database ID")
+        candidate["updated_at"] = datetime.now(self.timezone).isoformat()
+        updated = validate_card(self._normalize_card_values(candidate), self._column_ids())
         validate_card_values(updated, self.fields)
         new_id = updated["id"]
         if new_id != card_id and new_id in self._cards:
             raise KanbanDuplicateIDError(f"Duplicate card ID: {new_id!r}")
         if updated["column"] != old["column"]:
             self._check_column_accepts(updated["column"])
+            if "sort_order" not in new_data:
+                updated["sort_order"] = self._next_sort_order(updated["column"])
         affected_columns = {old["column"], updated["column"]}
         if updated["column"] == old["column"]:
             snapshot = {card_id: old}
@@ -966,9 +1031,6 @@ class CTkKanbanBoard(ctk.CTkFrame):
             }
         del self._cards[card_id]
         self._cards[new_id] = updated
-        if updated["column"] != old["column"]:
-            self._reindex_column(old["column"])
-            self._reindex_column(updated["column"])
 
         event = create_event(
             "card_updated",
@@ -983,7 +1045,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_card_updated", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             if updated["column"] == old["column"]:
                 self._cards.pop(new_id, None)
@@ -1008,6 +1070,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def delete_card(self, card_id: Any, *, source: str = "api") -> bool:
         """Delete a card, unless ``on_card_deleted`` rejects the operation."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         old = clone(self._require_card(card_id))
         column_id = old["column"]
         snapshot = {
@@ -1016,7 +1080,6 @@ class CTkKanbanBoard(ctk.CTkFrame):
             if current["column"] == column_id
         }
         del self._cards[card_id]
-        self._reindex_column(column_id)
         event = create_event(
             "card_deleted",
             source=source,
@@ -1028,7 +1091,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_card_deleted", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             for current_id, current in list(self._cards.items()):
                 if current["column"] == column_id:
@@ -1063,6 +1126,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     ) -> bool:
         """Move or reorder a card and persist sequential ``sort_order`` values."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         try:
             target_exists = target_column in self._column_ids()
         except TypeError as exc:
@@ -1097,13 +1162,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
         if target_column == old_column and insertion_index == old_index:
             return True
 
-        affected_cards = source_cards + ([card] if target_column == old_column else target_cards + [card])
+        affected_cards = [card]
         snapshot = {item["id"]: clone(item) for item in affected_cards}
         card["column"] = target_column
+        card["updated_at"] = datetime.now(self.timezone).isoformat()
         target_cards.insert(insertion_index, card)
-        self._apply_manual_order(old_column, source_cards if target_column != old_column else target_cards)
-        if target_column != old_column:
-            self._apply_manual_order(target_column, target_cards)
+        card["sort_order"] = self._rank_for_insertion(target_cards, insertion_index)
 
         event_type = "card_reordered" if old_column == target_column else "card_moved"
         callback_name = "on_card_reordered" if old_column == target_column else "on_card_moved"
@@ -1124,7 +1188,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback(callback_name, event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             for snapshot_id, snapshot_card in snapshot.items():
                 self._cards[snapshot_id] = snapshot_card
@@ -1140,6 +1204,92 @@ class CTkKanbanBoard(ctk.CTkFrame):
         """Reorder a card within its current column."""
 
         return self.move_card(card_id, self._require_card(card_id)["column"], target_index, source=source)
+
+    def apply_batch(self, operations: Iterable[Mapping[str, Any]], *, source: str = "batch") -> bool:
+        """Apply imports, bulk edits, and bulk moves as one durable transaction.
+
+        Supported operation names are ``add_card``, ``update_card``,
+        ``delete_card``, ``move_card``, and their column equivalents.
+        """
+
+        self._ensure_mutation_allowed()
+        if self._batch_events is not None:
+            raise KanbanValidationError("Nested batches are not supported")
+        before = self.get_state()
+        self._batch_events = []
+        dispatch: dict[str, Callable[..., Any]] = {
+            "add_card": self.add_card,
+            "update_card": self.update_card,
+            "delete_card": self.delete_card,
+            "move_card": self.move_card,
+            "add_column": self.add_column,
+            "update_column": self.update_column,
+            "delete_column": self.delete_column,
+            "move_column": self.move_column,
+        }
+        try:
+            for raw_operation in operations:
+                operation = dict(raw_operation)
+                name = str(operation.pop("operation", operation.pop("type", "")))
+                callback = dispatch.get(name)
+                if callback is None:
+                    raise KanbanValidationError(f"Unsupported batch operation: {name!r}")
+                operation.setdefault("source", source)
+                callback(**operation)
+            events = self._batch_events
+        except Exception:
+            self._history_suspended = True
+            try:
+                self.set_state(before)
+            finally:
+                self._history_suspended = False
+            raise
+        finally:
+            self._batch_events = None
+        if not events:
+            return True
+
+        if self._persistence is not None:
+            self._set_persistence_status("saving", "Saving batch...")
+
+            def succeeded(result: MutationResult) -> None:
+                self._board_revision = result.board_revision or self._board_revision
+                self._apply_canonical_result({}, result)
+                self._record_history(before)
+
+            def failed(error: Exception | MutationResult) -> None:
+                self._history_suspended = True
+                try:
+                    if isinstance(error, MutationResult) and error.conflict and error.conflict.server_data:
+                        self.set_data(error.conflict.server_data)
+                        self._board_revision = error.conflict.actual_revision
+                    else:
+                        self.set_state(before)
+                finally:
+                    self._history_suspended = False
+                reason = error.reason if isinstance(error, MutationResult) else str(error)
+                self._action_cancelled(
+                    create_event("batch_failed", source=source, operation_count=len(events)),
+                    reason or "Batch save failed",
+                )
+
+            self._persistence.submit_batch(events, on_success=succeeded, on_failure=failed)
+            return True
+
+        event = create_event(
+            "batch_changed",
+            source=source,
+            operations=[item.to_dict() for item in events],
+            columns=self.get_columns(),
+            cards=self.get_all_cards(),
+        )
+        reason = self._invoke_callback("on_data_changed", event, cancellable=True)
+        if reason:
+            self.set_state(before)
+            self._action_cancelled(event, reason)
+            return False
+        self._record_history(before)
+        return True
 
     def get_card(self, card_id: Any) -> dict[str, Any] | None:
         """Return a defensive card copy, or ``None`` when not found."""
@@ -1168,6 +1318,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def add_column(self, column_data: Mapping[str, Any], *, source: str = "api") -> dict[str, Any] | None:
         """Append a column and emit a cancellable creation event."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         column = validate_column(column_data)
         if column["id"] in self._column_ids():
             raise KanbanDuplicateIDError(f"Duplicate column ID: {column['id']!r}")
@@ -1181,7 +1333,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_column_created", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data.pop()
             self._action_cancelled(event, reason)
@@ -1201,11 +1353,15 @@ class CTkKanbanBoard(ctk.CTkFrame):
     ) -> dict[str, Any] | None:
         """Update a column, including atomically renaming its ID."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         if not isinstance(new_data, Mapping):
             raise KanbanValidationError("Column update data must be a mapping")
         index = self._column_index(column_id)
         old = clone(self._columns_data[index])
         updated = validate_column({**old, **new_data})
+        if self.immutable_column_ids and updated["id"] != column_id:
+            raise KanbanValidationError("Column IDs are immutable by default")
         new_id = updated["id"]
         if new_id != column_id and new_id in self._column_ids():
             raise KanbanDuplicateIDError(f"Duplicate column ID: {new_id!r}")
@@ -1230,7 +1386,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_column_updated", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data[index] = old
             for affected_card_id in affected_card_ids:
@@ -1250,6 +1406,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def delete_column(self, column_id: Any, *, source: str = "api") -> bool:
         """Delete an empty column. Cards must be moved or deleted first."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         index = self._column_index(column_id)
         if any(card["column"] == column_id for card in self._cards.values()):
             raise KanbanValidationError("Cannot delete a column while it still contains cards")
@@ -1263,7 +1421,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_column_deleted", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data.insert(index, column)
             self._action_cancelled(event, reason)
@@ -1278,6 +1436,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def move_column(self, column_id: Any, target_index: int, *, source: str = "api") -> bool:
         """Move a column in the board's ordered column list."""
 
+        self._ensure_mutation_allowed()
+        rollback_state = self.get_state()
         old_index = self._column_index(column_id)
         new_index = max(
             0,
@@ -1301,7 +1461,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_column_reordered", event, cancellable=True)
         if reason is None:
-            reason = self._invoke_data_changed(event)
+            reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data.pop(new_index)
             self._columns_data.insert(old_index, column)
@@ -1347,6 +1507,105 @@ class CTkKanbanBoard(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Bulk data and state API
     # ------------------------------------------------------------------
+    def refresh_from_source(self) -> bool:
+        """Load the board asynchronously from the configured data source."""
+
+        if self._persistence is None:
+            return False
+        query = CardQuery(
+            search=self._search_query if self.server_side_query else "",
+            filters=clone(self._filters) if self.server_side_query else {},
+            sort_key=self._global_sort[0] if self.server_side_query else "manual",
+            reverse=self._global_sort[1] if self.server_side_query else False,
+            limit=self.page_size,
+            completion_field=self.completion_field,
+            completed_columns=tuple(self.completed_columns),
+            timezone_name=self.timezone_name,
+        )
+
+        def loaded(result: Any) -> None:
+            self._board_revision = result.board_revision
+            self._column_totals = clone(result.column_totals)
+            self._has_more = bool(result.has_more)
+            self._loaded_offsets = {column["id"]: 0 for column in result.columns}
+            self.set_data({"columns": result.columns, "cards": result.cards})
+
+        def failed(exc: Exception) -> None:
+            self._emit_error(exc, create_event("board_load_failed", source="data_source"))
+
+        self._persistence.load(self.board_id, query, on_success=loaded, on_failure=failed)
+        return True
+
+    def query_source(self, query: CardQuery, *, append: bool = False) -> bool:
+        """Run a server-side card query and update the visible page."""
+
+        if self._persistence is None:
+            return False
+
+        def loaded(page: Any) -> None:
+            self._board_revision = page.board_revision or self._board_revision
+            self._column_totals = clone(page.column_totals)
+            self._has_more = bool(page.has_more)
+            if append:
+                merged = {card["id"]: card for card in self.get_all_cards()}
+                merged.update({card["id"]: card for card in page.cards})
+                self.set_cards(merged.values())
+            else:
+                self.set_cards(page.cards)
+            if query.column_id is not None:
+                self._loaded_offsets[query.column_id] = query.offset + len(page.cards)
+
+        def failed(exc: Exception) -> None:
+            self._emit_error(exc, create_event("card_query_failed", source="data_source"))
+
+        self._persistence.query(self.board_id, query, on_success=loaded, on_failure=failed)
+        return True
+
+    def load_next_page(self, column_id: Any | None = None) -> bool:
+        """Append the next lazy page, optionally for one column."""
+
+        offset = self._loaded_offsets.get(column_id, len(self._cards))
+        query = CardQuery(
+            column_id=column_id,
+            search=self._search_query,
+            filters=clone(self._filters),
+            sort_key=(self._column_sorts.get(column_id, self._global_sort))[0],
+            reverse=(self._column_sorts.get(column_id, self._global_sort))[1],
+            offset=offset,
+            limit=self.page_size,
+            completion_field=self.completion_field,
+            completed_columns=tuple(self.completed_columns),
+            timezone_name=self.timezone_name,
+        )
+        return self.query_source(query, append=True)
+
+    def _schedule_poll(self) -> None:
+        if self.poll_interval_ms <= 0 or self._persistence is None:
+            return
+        self._poll_after_id = self.after(self.poll_interval_ms, self._poll_changes)
+
+    def _poll_changes(self) -> None:
+        self._poll_after_id = None
+        if self._persistence is None:
+            return
+
+        def received(page: Any) -> None:
+            if page.events:
+                self.refresh_from_source()
+            self._board_revision = page.board_revision or self._board_revision
+            self._schedule_poll()
+
+        def failed(exc: Exception) -> None:
+            self.logger.warning("Kanban change poll failed: %s", exc)
+            self._schedule_poll()
+
+        self._persistence.changes(
+            self.board_id,
+            self._board_revision,
+            on_success=received,
+            on_failure=failed,
+        )
+
     def load_data(self, data: Mapping[str, Any]) -> None:
         """Alias for :meth:`set_data`, useful for database-backed loading."""
 
@@ -1490,6 +1749,20 @@ class CTkKanbanBoard(ctk.CTkFrame):
             if hasattr(self, "toolbar"):
                 self.toolbar.set_search_query(old_query)
             return False
+        if self.server_side_query and self._persistence is not None:
+            self.query_source(
+                CardQuery(
+                    search=self._search_query,
+                    filters=clone(self._filters),
+                    sort_key=self._global_sort[0],
+                    reverse=self._global_sort[1],
+                    limit=self.page_size,
+                    completion_field=self.completion_field,
+                    completed_columns=tuple(self.completed_columns),
+                    timezone_name=self.timezone_name,
+                )
+            )
+            return True
         if self.incremental_card_rendering:
             self._sync_card_view()
         else:
@@ -1523,7 +1796,22 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self._action_cancelled(event, reason)
             return False
         if hasattr(self, "toolbar"):
-            self.toolbar.set_filter_active(bool(self._filters))
+            self.toolbar.set_filter_active(bool(self._filters), len(self._filters))
+            self.toolbar.set_filter_chips(self._filters)
+        if self.server_side_query and self._persistence is not None:
+            self.query_source(
+                CardQuery(
+                    search=self._search_query,
+                    filters=clone(self._filters),
+                    sort_key=self._global_sort[0],
+                    reverse=self._global_sort[1],
+                    limit=self.page_size,
+                    completion_field=self.completion_field,
+                    completed_columns=tuple(self.completed_columns),
+                    timezone_name=self.timezone_name,
+                )
+            )
+            return True
         if self.incremental_card_rendering:
             self._sync_card_view()
         else:
@@ -1559,6 +1847,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self._global_sort = new_sort
         else:
             self._column_sorts[column_id] = new_sort
+        if hasattr(self, "toolbar") and column_id is None:
+            self.toolbar.set_sort(sort_key, reverse)
         event = create_event(
             "sort_changed",
             source="toolbar",
@@ -1577,6 +1867,21 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 self._column_sorts[column_id] = old_sort
             self._action_cancelled(event, reason)
             return False
+        if self.server_side_query and self._persistence is not None:
+            self.query_source(
+                CardQuery(
+                    column_id=column_id,
+                    search=self._search_query,
+                    filters=clone(self._filters),
+                    sort_key=sort_key,
+                    reverse=reverse,
+                    limit=self.page_size,
+                    completion_field=self.completion_field,
+                    completed_columns=tuple(self.completed_columns),
+                    timezone_name=self.timezone_name,
+                )
+            )
+            return True
         if self.incremental_card_rendering:
             self._sync_card_view([column_id] if column_id is not None else None)
         else:
@@ -1635,6 +1940,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 initial_data=initial_data,
                 on_submit=on_submit,
                 on_close=lambda: self._card_form_dialog_closed(dialog),
+                confirm_discard=self.confirm_discard_changes,
             )
             self._card_form_dialog = dialog
             return
@@ -1647,6 +1953,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
             initial_data=initial_data,
             on_submit=on_submit,
             on_close=self._close_card_form,
+            confirm_discard=self.confirm_discard_changes,
             width=400,
             fg_color=self.theme["panel_fg_color"],
             border_color=self.theme["panel_border_color"],
@@ -1709,8 +2016,14 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
         def submit(data: dict[str, Any]) -> bool:
             data["column"] = column_id
-            data.setdefault("id", generate_card_id(self._cards))
-            return self.add_card(data, source="form") is not None
+            if self.data_source is None or not self.use_temporary_ids:
+                data.setdefault("id", self.id_factory() if self.id_factory else generate_card_id(self._cards))
+            result = self.add_card(data, source="form")
+            if result is not None:
+                return True
+            if self._last_cancellation_reason == "Action cancelled by callback":
+                return False
+            return self._last_cancellation_reason or "The action was cancelled"
 
         self._open_card_form(
             title=f"Add card to {self.get_column(column_id)['title']}",
@@ -1728,7 +2041,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return
 
         def submit(data: dict[str, Any]) -> bool:
-            return self.update_card(card_id, data, source="form") is not None
+            result = self.update_card(card_id, data, source="form")
+            if result is not None:
+                return True
+            if self._last_cancellation_reason == "Action cancelled by callback":
+                return False
+            return self._last_cancellation_reason or "The action was cancelled"
 
         self._open_card_form(
             title="Edit card",
@@ -1824,6 +2142,11 @@ class CTkKanbanBoard(ctk.CTkFrame):
         menu.add_command(label="Add card", command=lambda: self.open_add_card_form(column_id))
         if self.enable_sorting and self.allow_column_sorting:
             menu.add_command(label="Sort column...", command=lambda: self._show_sort_menu(button, column_id))
+        width_menu = self._create_menu(menu)
+        width_menu.add_command(label="Narrow", command=lambda: self.set_column_width(self.min_column_width, column_id))
+        width_menu.add_command(label="Default", command=lambda: self.set_column_width(self.column_width, column_id))
+        width_menu.add_command(label="Wide", command=lambda: self.set_column_width(self.max_column_width, column_id))
+        menu.add_cascade(label="Column width", menu=width_menu)
         self._popup_widget_menu(menu, button)
 
     def _show_card_context_menu(self, card_id: Any, event: Any) -> None:
@@ -1944,391 +2267,6 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self.clear_filters()
 
     # ------------------------------------------------------------------
-    # Card pointer handling and drag/drop
-    # ------------------------------------------------------------------
-    def _on_card_press(self, card_widget: CTkKanbanCard, event: Any) -> None:
-        self._cancel_pending_drag_motion(self._drag_state)
-        self._drag_state = {
-            "kind": "card",
-            "id": card_widget.card_id,
-            "start_x": event.x_root,
-            "start_y": event.y_root,
-            "active": False,
-            "target_column": None,
-            "target_index": None,
-            "pending_position": None,
-            "motion_after_id": None,
-            "last_update_at": 0.0,
-            "last_autoscroll_at": 0.0,
-        }
-
-    def _on_card_motion(self, card_widget: CTkKanbanCard, event: Any) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "card" or state.get("id") != card_widget.card_id:
-            return
-        distance = abs(event.x_root - state["start_x"]) + abs(event.y_root - state["start_y"])
-        if not state["active"] and distance < 8:
-            return
-        if not self.enable_card_drag:
-            return
-        if not state["active"]:
-            state["active"] = True
-            card_widget.set_dragging(True)
-            self.update_idletasks()
-            self._prepare_card_drag_geometry(state)
-            self._create_drag_preview(str(self._cards[card_widget.card_id]["title"]), event.x_root, event.y_root)
-        self._queue_card_drag_update(card_widget.card_id, event.x_root, event.y_root)
-
-    def _queue_card_drag_update(self, card_id: Any, root_x: int, root_y: int) -> None:
-        """Coalesce raw mouse motion into at most one visual update per frame."""
-
-        state = self._drag_state
-        if not state or state.get("kind") != "card" or state.get("id") != card_id or not state.get("active"):
-            return
-        state["pending_position"] = (root_x, root_y)
-        interval = self.drag_update_interval_ms / 1000
-        elapsed = monotonic() - state["last_update_at"]
-        if interval == 0 or elapsed >= interval:
-            self._cancel_pending_drag_motion(state)
-            self._process_card_drag_update(card_id, root_x, root_y)
-            return
-        if state.get("motion_after_id") is None:
-            delay_ms = max(1, int((interval - elapsed) * 1000))
-            state["motion_after_id"] = self.after(delay_ms, self._flush_card_drag_update, card_id)
-
-    def _flush_card_drag_update(self, card_id: Any) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "card" or state.get("id") != card_id:
-            return
-        state["motion_after_id"] = None
-        position = state.get("pending_position")
-        if position is not None:
-            self._process_card_drag_update(card_id, position[0], position[1])
-
-    def _process_card_drag_update(self, card_id: Any, root_x: int, root_y: int) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "card" or state.get("id") != card_id or not state.get("active"):
-            return
-        state["last_update_at"] = monotonic()
-        state["pending_position"] = (root_x, root_y)
-        self._move_drag_preview(root_x, root_y)
-        target = self._column_at(root_x, root_y)
-        if target is None:
-            state["target_column"] = None
-            state["target_index"] = None
-            self._set_drop_indicator(None, None)
-            return
-        source_column = self._cards[card_id]["column"]
-        if target.column_id == source_column and not self.enable_card_reorder:
-            target_index = self._card_index(card_id)
-        else:
-            target_index = target.card_index_at(root_y, excluding_id=card_id)
-        state["target_column"] = target.column_id
-        state["target_index"] = target_index
-        if self.show_drop_indicator:
-            self._set_drop_indicator(target, target_index)
-
-        interval = self.autoscroll_interval_ms / 1000
-        now = monotonic()
-        if interval == 0 or now - state["last_autoscroll_at"] >= interval:
-            vertical_scrolled = self.enable_vertical_autoscroll and target.autoscroll(root_y)
-            horizontal_scrolled = self._horizontal_autoscroll(root_x)
-            if vertical_scrolled or horizontal_scrolled:
-                state["last_autoscroll_at"] = now
-                self.update_idletasks()
-                if vertical_scrolled:
-                    target.prepare_drag_geometry(excluding_id=card_id)
-                if horizontal_scrolled:
-                    self._prepare_column_drag_geometry(state)
-
-    def _on_card_release(self, card_widget: CTkKanbanCard, event: Any) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "card" or state.get("id") != card_widget.card_id:
-            return
-        self._cancel_pending_drag_motion(state)
-        if state.get("active"):
-            self._process_card_drag_update(card_widget.card_id, event.x_root, event.y_root)
-        active = bool(state.get("active"))
-        target_column = state.get("target_column")
-        target_index = state.get("target_index")
-        card_widget.set_dragging(False)
-        self._clear_drag_visuals()
-        self._drag_state = None
-        if active:
-            if target_column is not None:
-                try:
-                    self.move_card(card_widget.card_id, target_column, target_index, source="drag")
-                except KanbanValidationError as exc:
-                    self._emit_error(exc, create_event("card_move_failed", source="drag", card_id=card_widget.card_id))
-            return
-        self._handle_card_click(card_widget.card_id, event)
-
-    def _on_card_double_click(self, card_widget: CTkKanbanCard, event: Any) -> None:
-        if not self.enable_card_double_click:
-            return
-        event_data = create_event(
-            "card_double_clicked",
-            source="mouse",
-            card_id=card_widget.card_id,
-            card_data=self.get_card(card_widget.card_id),
-            x_root=event.x_root,
-            y_root=event.y_root,
-        )
-        if self._callbacks.get("on_card_double_clicked") is not None:
-            self._invoke_callback("on_card_double_clicked", event_data)
-        else:
-            self.open_edit_card_form(card_widget.card_id)
-
-    def _on_card_right_click(self, card_widget: CTkKanbanCard, event: Any) -> None:
-        if self.enable_card_selection:
-            self.select_card(card_widget.card_id)
-        event_data = create_event(
-            "card_right_clicked",
-            source="mouse",
-            card_id=card_widget.card_id,
-            card_data=self.get_card(card_widget.card_id),
-            x_root=event.x_root,
-            y_root=event.y_root,
-        )
-        self._invoke_callback("on_card_right_clicked", event_data)
-        if self.enable_card_context_menu:
-            self._show_card_context_menu(card_widget.card_id, event)
-
-    def _handle_card_click(self, card_id: Any, event: Any) -> None:
-        if self.enable_card_selection:
-            self.select_card(card_id)
-        self._invoke_callback(
-            "on_card_clicked",
-            create_event(
-                "card_clicked",
-                source="mouse",
-                card_id=card_id,
-                card_data=self.get_card(card_id),
-                x_root=event.x_root,
-                y_root=event.y_root,
-            ),
-        )
-
-    def _open_card(self, card_id: Any) -> None:
-        callback = self._callbacks.get("on_card_double_clicked")
-        if callback:
-            self._invoke_callback(
-                "on_card_double_clicked",
-                create_event(
-                    "card_double_clicked",
-                    source="context_menu",
-                    card_id=card_id,
-                    card_data=self.get_card(card_id),
-                ),
-            )
-        else:
-            self.open_edit_card_form(card_id)
-
-    # ------------------------------------------------------------------
-    # Column drag handling
-    # ------------------------------------------------------------------
-    def _on_column_press(self, column_widget: CTkKanbanColumn, event: Any) -> None:
-        if not self.enable_column_drag:
-            return
-        self._drag_state = {
-            "kind": "column",
-            "id": column_widget.column_id,
-            "start_x": event.x_root,
-            "start_y": event.y_root,
-            "active": False,
-            "target_index": self._column_index(column_widget.column_id),
-        }
-
-    def _on_column_motion(self, column_widget: CTkKanbanColumn, event: Any) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "column" or state.get("id") != column_widget.column_id:
-            return
-        distance = abs(event.x_root - state["start_x"]) + abs(event.y_root - state["start_y"])
-        if not state["active"] and distance < 8:
-            return
-        if not state["active"]:
-            state["active"] = True
-            self._create_drag_preview(str(column_widget.column_data["title"]), event.x_root, event.y_root)
-        self._move_drag_preview(event.x_root, event.y_root)
-        index = len(self._columns_data) - 1
-        for candidate_index, column in enumerate(self._columns_data):
-            widget = self._column_widgets[column["id"]]
-            if event.x_root < widget.winfo_rootx() + widget.winfo_width() // 2:
-                index = candidate_index
-                break
-        state["target_index"] = index
-        self._highlight_column(self._column_widgets[self._columns_data[index]["id"]])
-        self._horizontal_autoscroll(event.x_root)
-
-    def _on_column_release(self, column_widget: CTkKanbanColumn, _event: Any) -> None:
-        state = self._drag_state
-        if not state or state.get("kind") != "column" or state.get("id") != column_widget.column_id:
-            return
-        active = bool(state.get("active"))
-        target_index = int(state.get("target_index", self._column_index(column_widget.column_id)))
-        self._clear_drag_visuals()
-        self._drag_state = None
-        if active:
-            self.move_column(column_widget.column_id, target_index, source="drag")
-
-    # ------------------------------------------------------------------
-    # Drag helpers
-    # ------------------------------------------------------------------
-    def _prepare_card_drag_geometry(self, state: dict[str, Any]) -> None:
-        """Cache geometry once when card dragging begins."""
-
-        card_id = state["id"]
-        for column in self._column_widgets.values():
-            column.prepare_drag_geometry(excluding_id=card_id)
-        self._prepare_column_drag_geometry(state)
-
-    def _prepare_column_drag_geometry(self, state: dict[str, Any]) -> None:
-        """Cache column and board bounds used by pointer hit testing."""
-
-        state["column_rects"] = [
-            (
-                column.winfo_rootx(),
-                column.winfo_rootx() + column.winfo_width(),
-                column.winfo_rooty(),
-                column.winfo_rooty() + column.winfo_height(),
-                column,
-            )
-            for column in self._column_widgets.values()
-        ]
-        if self.enable_horizontal_scroll and hasattr(self.board_area, "_parent_canvas"):
-            canvas = self.board_area._parent_canvas
-            left = canvas.winfo_rootx()
-            state["board_horizontal_bounds"] = (left, left + canvas.winfo_width())
-
-    def _cancel_pending_drag_motion(self, state: dict[str, Any] | None) -> None:
-        if not state:
-            return
-        after_id = state.get("motion_after_id")
-        if after_id is not None:
-            try:
-                self.after_cancel(after_id)
-            except (tk.TclError, ValueError):
-                pass
-            state["motion_after_id"] = None
-
-    def _set_drop_indicator(
-        self,
-        column: CTkKanbanColumn | None,
-        index: int | None,
-    ) -> None:
-        """Move the indicator only when its column or index changes."""
-
-        if self._indicator_column is not None and self._indicator_column is not column:
-            self._indicator_column.clear_drop_indicator()
-        self._indicator_column = column
-        if column is not None and index is not None:
-            column.show_drop_indicator(index)
-
-    def _create_drag_preview(self, text: str, root_x: int, root_y: int) -> None:
-        if not self.enable_drag_preview:
-            return
-        preview = tk.Toplevel(self.winfo_toplevel())
-        preview.overrideredirect(True)
-        try:
-            if self.drag_preview_opacity < 1.0:
-                preview.attributes("-alpha", self.drag_preview_opacity)
-            preview.attributes("-topmost", True)
-        except tk.TclError:
-            pass
-        color = self._appearance_color(self.theme["drag_preview_fg_color"])
-        label = tk.Label(
-            preview,
-            text=text,
-            bg=color,
-            fg=self._appearance_color(self.theme["drag_preview_text_color"]),
-            padx=14,
-            pady=9,
-            relief="solid",
-            borderwidth=1,
-        )
-        label.pack()
-        self._drag_preview = preview
-        self._drag_preview_position = None
-        self._move_drag_preview(root_x, root_y)
-
-    def _move_drag_preview(self, root_x: int, root_y: int) -> None:
-        position = (root_x + 14, root_y + 14)
-        if self._drag_preview is None or self._drag_preview_position == position:
-            return
-        try:
-            self._drag_preview.geometry(f"+{position[0]}+{position[1]}")
-            self._drag_preview_position = position
-        except tk.TclError:
-            self._drag_preview = None
-            self._drag_preview_position = None
-
-    def _clear_drag_visuals(self) -> None:
-        self._cancel_pending_drag_motion(self._drag_state)
-        if self._drag_preview is not None:
-            try:
-                self._drag_preview.destroy()
-            except tk.TclError:
-                pass
-            self._drag_preview = None
-            self._drag_preview_position = None
-        self._clear_column_drop_indicators()
-        self._highlight_column(None)
-        for column in self._column_widgets.values():
-            column.clear_drag_geometry()
-
-    def _clear_column_drop_indicators(self) -> None:
-        if self._indicator_column is not None:
-            self._indicator_column.clear_drop_indicator()
-            self._indicator_column = None
-
-    def _highlight_column(self, column: CTkKanbanColumn | None) -> None:
-        if self._highlighted_column is not None and self._highlighted_column.winfo_exists():
-            self._highlighted_column.configure(border_color=self.theme["column_border_color"])
-        self._highlighted_column = column
-        if column is not None:
-            column.configure(border_color=self.theme["drop_indicator_color"])
-
-    def _horizontal_autoscroll(self, root_x: int, margin: int = 48) -> bool:
-        if not self.enable_horizontal_autoscroll or not self.enable_horizontal_scroll:
-            return False
-        if not hasattr(self.board_area, "_parent_canvas"):
-            return False
-        canvas = self.board_area._parent_canvas
-        state = self._drag_state or {}
-        bounds = state.get("board_horizontal_bounds")
-        if bounds is None:
-            left = canvas.winfo_rootx()
-            right = left + canvas.winfo_width()
-        else:
-            left, right = bounds
-        if root_x < left + margin:
-            canvas.xview_scroll(-1, "units")
-            return True
-        elif root_x > right - margin:
-            canvas.xview_scroll(1, "units")
-            return True
-        return False
-
-    def _column_at(self, root_x: int, root_y: int) -> CTkKanbanColumn | None:
-        state = self._drag_state or {}
-        cached_rects = state.get("column_rects")
-        if cached_rects is not None:
-            for left, right, top, bottom, column in cached_rects:
-                if left <= root_x <= right and top <= root_y <= bottom:
-                    return column
-            return None
-        for column in self._column_widgets.values():
-            if column.contains_point(root_x, root_y):
-                return column
-        return None
-
-    def _appearance_color(self, color: Any) -> str:
-        if isinstance(color, (tuple, list)):
-            mode = ctk.get_appearance_mode().lower()
-            return str(color[1] if mode == "dark" else color[0])
-        return str(color)
-
-    # ------------------------------------------------------------------
     # Internal data helpers
     # ------------------------------------------------------------------
     def _allowed_sort_keys(self) -> set[str]:
@@ -2356,6 +2294,16 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
     def _column_ids(self) -> set[Any]:
         return {column["id"] for column in self._columns_data}
+
+    def _normalize_card_values(self, card: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = dict(card)
+        if not self.normalize_empty_values:
+            return normalized
+        for field in self.fields:
+            key = field["key"]
+            if key in normalized and normalized[key] == "" and not field.get("required"):
+                normalized[key] = clone(field.get("empty_value"))
+        return normalized
 
     def _column_index(self, column_id: Any) -> int:
         for index, column in enumerate(self._columns_data):
@@ -2392,6 +2340,22 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 highest = max(highest, sort_order)
         return highest + 1
 
+    @staticmethod
+    def _rank_for_insertion(ordered: list[dict[str, Any]], index: int) -> float:
+        """Return a sparse rank between adjacent cards without renumbering siblings."""
+
+        previous = ordered[index - 1].get("sort_order") if index > 0 else None
+        following = ordered[index + 1].get("sort_order") if index + 1 < len(ordered) else None
+        previous_rank = float(previous) if isinstance(previous, (int, float)) else None
+        following_rank = float(following) if isinstance(following, (int, float)) else None
+        if previous_rank is None and following_rank is None:
+            return 1024.0
+        if previous_rank is None:
+            return following_rank - 1024.0
+        if following_rank is None:
+            return previous_rank + 1024.0
+        return previous_rank + (following_rank - previous_rank) / 2.0
+
     def _ordered_cards_for_column(self, column_id: Any) -> list[dict[str, Any]]:
         cards = self._manual_cards_for_column(column_id)
         sort_key, reverse = self._column_sorts.get(column_id, self._global_sort)
@@ -2399,12 +2363,15 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return list(reversed(cards)) if reverse else cards
         if sort_key == "priority":
             ranking = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-            key: Callable[[dict[str, Any]], Any] = lambda card: (
-                ranking.get(str(card.get("priority", "")).casefold(), 99),
-                searchable_text(card.get("priority")),
-            )
+
+            def key(card: dict[str, Any]) -> Any:
+                return (
+                    ranking.get(str(card.get("priority", "")).casefold(), 99),
+                    searchable_text(card.get("priority")),
+                )
         else:
-            key = lambda card: comparable_value(card.get(sort_key))
+            def key(card: dict[str, Any]) -> Any:
+                return comparable_value(card.get(sort_key))
         return sorted(cards, key=key, reverse=reverse)
 
     def _card_index(self, card_id: Any) -> int:
@@ -2453,21 +2420,35 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 self._action_cancelled(event, f"Column {column['title']!r} has reached its card limit")
                 raise KanbanValidationError(f"Column {column['title']!r} has reached its card limit")
 
+    def _column_accepts_drop(self, column_id: Any, card_id: Any | None = None) -> bool:
+        column = self.get_column(column_id)
+        if column is None or column.get("locked"):
+            return False
+        maximum = column.get("max_cards")
+        if not self.enforce_column_limits or maximum is None:
+            return True
+        current_column = self._cards.get(card_id, {}).get("column") if card_id is not None else None
+        if current_column == column_id:
+            return True
+        total = self._column_totals.get(
+            column_id,
+            sum(1 for card in self._cards.values() if card["column"] == column_id),
+        )
+        return total < maximum
+
     def _card_matches_view(self, card: dict[str, Any]) -> bool:
         if self._search_query:
             query = self._search_query.casefold()
             if not any(query in searchable_text(card.get(key)) for key in self._searchable_field_keys):
                 return False
+        ordinary_filters: dict[str, Any] = {}
         for key, expected in self._filters.items():
             if key == "overdue_only":
                 if expected and not self._is_overdue(card):
                     return False
                 continue
-            if key in {"column", "status"}:
-                actual = card.get("column")
-            else:
-                actual = card.get(key)
             if callable(expected):
+                actual = card.get("column") if key in {"column", "status"} else card.get(key)
                 try:
                     matches = bool(expected(actual, clone(card)))
                 except Exception as exc:
@@ -2483,33 +2464,30 @@ class CTkKanbanBoard(ctk.CTkFrame):
                     return False
                 if not matches:
                     return False
-            elif isinstance(actual, (list, tuple, set)):
-                if isinstance(expected, (list, tuple, set)):
-                    if not any(item in actual for item in expected):
-                        return False
-                elif expected not in actual:
-                    return False
-            elif isinstance(expected, (list, tuple, set)):
-                if actual not in expected:
-                    return False
-            elif actual != expected:
-                return False
-        return True
+            else:
+                ordinary_filters[key] = expected
+        try:
+            return card_matches_filters(card, ordinary_filters)
+        except Exception as exc:
+            self._emit_error(exc, create_event("filter_failed", source="filter", card_id=card.get("id")))
+            return False
 
-    @staticmethod
-    def _is_overdue(card: dict[str, Any]) -> bool:
+    def _is_overdue(self, card: dict[str, Any]) -> bool:
+        completed = bool(card.get(self.completion_field)) or card.get("column") in self.completed_columns
+        if completed:
+            return False
         raw_due = card.get("due_date")
         if isinstance(raw_due, date) and not isinstance(raw_due, datetime):
-            return raw_due < date.today() and not bool(card.get("completed"))
+            return raw_due < datetime.now(self.timezone).date()
         if isinstance(raw_due, str) and len(raw_due.strip()) == 10:
             try:
                 due_date = date.fromisoformat(raw_due.strip())
             except ValueError:
                 pass
             else:
-                return due_date < date.today() and not bool(card.get("completed"))
+                return due_date < datetime.now(self.timezone).date()
         due = parse_temporal(raw_due)
         if due is None:
             return False
-        now = datetime.now(timezone.utc)
-        return due < now and not bool(card.get("completed"))
+        now = datetime.now(self.timezone)
+        return due.astimezone(self.timezone) < now

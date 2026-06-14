@@ -1,0 +1,18 @@
+changelog:
+  exclude:
+    labels: [skip-changelog]
+    authors: [dependabot]
+  categories:
+    - title: Breaking changes
+      labels: [breaking-change]
+    - title: New features
+      labels: [enhancement]
+    - title: Fixes
+      labels: [bug, fix]
+    - title: Documentation
+      labels: [documentation]
+    - title: Maintenance
+      labels: [dependencies, github-actions, maintenance]
+    - title: Other changes
+      labels: ["*"]
+

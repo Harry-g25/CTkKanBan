@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from ctk_kanban import CTkKanbanBoard
 from gui_test_app import TEST_APP
+
+from ctk_kanban import CTkKanbanBoard
 
 
 class CardCreationOptimizationTests(unittest.TestCase):

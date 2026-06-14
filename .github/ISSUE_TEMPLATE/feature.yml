@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a user-facing enhancement
+title: "[Feature]: "
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the workflow or usability problem, not only the proposed API.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include example code or interaction details where useful.
+    validations:
+      required: true
+  - type: textarea
+    id: database
+    attributes:
+      label: Database considerations
+      description: Explain expected query, transaction, conflict, paging, or migration behavior.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+

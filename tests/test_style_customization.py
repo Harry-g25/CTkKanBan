@@ -5,9 +5,9 @@ from __future__ import annotations
 import unittest
 
 import customtkinter as ctk
-
-from ctk_kanban import CTkKanbanBoard, DEFAULT_STYLE
 from gui_test_app import TEST_APP
+
+from ctk_kanban import DEFAULT_STYLE, CTkKanbanBoard
 
 
 def normalized(value: object) -> object:
@@ -27,13 +27,15 @@ class StyleCustomizationTests(unittest.TestCase):
                 pass
         self.app.update_idletasks()
 
-    def test_default_style_matches_customtkinter_blue_palette(self) -> None:
-        self.assertEqual(DEFAULT_STYLE["board_fg_color"], ("gray92", "gray14"))
-        self.assertEqual(DEFAULT_STYLE["button_fg_color"], ("#3B8ED0", "#1F6AA5"))
-        self.assertEqual(DEFAULT_STYLE["button_hover_color"], ("#36719F", "#144870"))
-        self.assertEqual(DEFAULT_STYLE["input_fg_color"], ("#F9F9FA", "#343638"))
-        self.assertEqual(DEFAULT_STYLE["optionmenu_dropdown_fg_color"], ("gray90", "gray20"))
-        self.assertEqual(DEFAULT_STYLE["corner_radius"], 6)
+    def test_default_style_uses_modern_layered_palette(self) -> None:
+        self.assertEqual(DEFAULT_STYLE["board_fg_color"], ("#F3F6FA", "#0A0F1C"))
+        self.assertEqual(DEFAULT_STYLE["button_fg_color"], ("#2563EB", "#3B82F6"))
+        self.assertEqual(DEFAULT_STYLE["button_hover_color"], ("#1D4ED8", "#2563EB"))
+        self.assertEqual(DEFAULT_STYLE["card_fg_color"], ("#FFFFFF", "#182235"))
+        self.assertEqual(DEFAULT_STYLE["column_corner_radius"], 14)
+        self.assertEqual(DEFAULT_STYLE["card_corner_radius"], 12)
+        self.assertEqual(DEFAULT_STYLE["toolbar_border_width"], 1)
+        self.assertEqual(DEFAULT_STYLE["card_accent_width"], 4)
 
     def test_style_alias_merges_nested_maps_and_overrides_theme(self) -> None:
         toolbar_font = ctk.CTkFont(size=17)
@@ -99,6 +101,48 @@ class StyleCustomizationTests(unittest.TestCase):
         self.assertEqual(str(menu.cget("activeforeground")), "khaki")
         self.assertEqual(str(menu.cget("disabledforeground")), "#666666")
         menu.destroy()
+
+    def test_modern_card_and_toolbar_states_are_rendered(self) -> None:
+        board = CTkKanbanBoard(
+            self.app,
+            columns=[{"id": "todo", "title": "To Do", "color": "#8B5CF6", "max_cards": 1}],
+            cards=[
+                {
+                    "id": 1,
+                    "column": "todo",
+                    "title": "Polished card",
+                    "description": "A concise description for visual hierarchy.",
+                    "priority": "High",
+                    "assignee": "Maya",
+                    "tags": ["Design", "Review"],
+                }
+            ],
+            fields=[
+                {"key": "title", "label": "Title", "show_on_card": True},
+                {"key": "description", "label": "Description", "type": "textarea", "show_on_card": True},
+                {"key": "priority", "label": "Priority", "show_on_card": True},
+                {"key": "assignee", "label": "Assignee", "show_on_card": True},
+                {"key": "tags", "label": "Tags", "type": "tags", "show_on_card": True},
+            ],
+        )
+        board.pack(fill="both", expand=True)
+        self.app.update_idletasks()
+
+        column = board._column_widgets["todo"]
+        card = board._card_widgets[1]
+        self.assertEqual(normalized(column.accent_bar.cget("fg_color")), "#8B5CF6")
+        self.assertEqual(normalized(card.accent_bar.cget("fg_color")), "#F97316")
+        self.assertEqual(card.priority_badge.cget("text"), "HIGH")
+        self.assertEqual(normalized(column.count_label.cget("fg_color")), ("#FEE2E2", "#4C1D25"))
+
+        board.toolbar.set_search_query("polished")
+        self.app.update_idletasks()
+        self.assertEqual(board.toolbar.clear_button.winfo_manager(), "grid")
+        board.toolbar.set_persistence_status("saved")
+        self.assertEqual(
+            normalized(board.toolbar.persistence_label.cget("fg_color")),
+            ("#ECFDF3", "#153726"),
+        )
 
     def test_form_controls_read_single_style_object(self) -> None:
         fields = [
