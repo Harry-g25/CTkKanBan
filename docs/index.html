@@ -1,0 +1,2436 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CTkKanBan Documentation</title>
+    <meta
+      name="description"
+      content="Developer-facing documentation for CTkKanBan, a configurable Kanban board widget for CustomTkinter."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+    <link rel="stylesheet" href="styles.css" />
+
+    <link rel="icon" href="/docs/assests/favicon/favicon-32x32.png" sizes="32x32" type="image/x-icon">
+    <link rel="apple-touch-icon" href="/docs/assests/favicon/apple-touch-icon.png">
+    <link rel="manifest" href="/docs/assests/favicon/site.webmanifest">
+  </head>
+  <body>
+    <div class="overlay" id="overlay"></div>
+
+    <nav class="topnav">
+      <a class="nav-title" href="#hero">CTkKanBan</a>
+      <span class="nav-version">v0.1.0 Docs</span>
+      <div class="nav-spacer"></div>
+      <a class="nav-link" href="#installation">Installation</a>
+      <button class="hamburger" id="hamburger" type="button" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+    </nav>
+
+    <div class="layout">
+      <aside class="sidebar" id="sidebar">
+        <nav class="sidebar-nav" aria-label="Section navigation">
+          <div class="nav-group">
+            <p class="nav-group__title">Overview</p>
+            <ul>
+              <li><a href="#hero">Introduction</a></li>
+              <li><a href="#installation">Installation</a></li>
+              <li><a href="#quick-start">Quick Start</a></li>
+              <li><a href="#board-model">Board Model</a></li>
+            </ul>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group__title">Tutorials</p>
+            <ul>
+              <li><a href="#tutorial-first-board">Build Your First Board</a></li>
+              <li><a href="#tutorial-forms">Built-in Card Forms</a></li>
+              <li><a href="#tutorial-search-filter-sort">Search, Filter, and Sort</a></li>
+              <li><a href="#tutorial-persistence">Persistence Hooks</a></li>
+              <li><a href="#tutorial-rendering">Custom Rendering and Theme</a></li>
+            </ul>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group__title">Features</p>
+            <ul>
+              <li><a href="#feature-drag">Drag and Reorder</a></li>
+              <li><a href="#feature-selection">Selection, Menus, and Forms</a></li>
+              <li><a href="#feature-state">State Snapshots and Bulk Loading</a></li>
+              <li><a href="#feature-style">Styling Surface</a></li>
+            </ul>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group__title">API Reference</p>
+            <ul>
+              <li><a href="#api-constructor">Constructor</a></li>
+              <li><a href="#api-board-methods">Board Methods</a></li>
+              <li><a href="#api-data-types">Data Types</a></li>
+              <li><a href="#api-callbacks">Callback Reference</a></li>
+              <li><a href="#api-theme">Theme and Style Reference</a></li>
+              <li><a href="#api-widgets">Lower-Level Widgets</a></li>
+              <li><a href="#api-helpers">Helper Modules</a></li>
+              <li><a href="#api-exceptions">Exceptions</a></li>
+            </ul>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-group__title">Help</p>
+            <ul>
+              <li><a href="#faq">FAQ and Troubleshooting</a></li>
+              <li><a href="#limitations">Notes and Limitations</a></li>
+            </ul>
+          </div>
+        </nav>
+      </aside>
+
+      <main class="content">
+          <header class="hero" id="hero">
+            <div class="hero-eyebrow">&#10022; CustomTkinter Widget</div>
+            <h1>CTkKanBan</h1>
+            <p class="hero-sub">
+              A configurable, database-independent Kanban board for CustomTkinter. Build desktop workflows with
+              draggable cards, generated forms, search, filters, sorting, and cancellable persistence callbacks.
+            </p>
+            <div class="hero-install">
+              <span class="prompt">$</span>
+              <span id="install-command">python -m pip install -e .</span>
+              <button class="hero-copy-button" id="install-copy" type="button">Copy</button>
+            </div>
+            <div class="pill-row">
+              <span class="pill pill-blue">Drag and Drop</span>
+              <span class="pill pill-green">Built-in Forms</span>
+              <span class="pill pill-purple">CustomTkinter</span>
+              <span class="pill pill-amber">Python 3.10+</span>
+            </div>
+          </header>
+
+          <section class="doc-section" id="introduction">
+            <div class="section-rule"></div>
+            <h2>Introduction</h2>
+            <p>
+              The package is built around one primary widget: <code>CTkKanbanBoard</code>. You give it an ordered set
+              of columns, an optional initial set of cards, and an optional field schema. From there, the board handles
+              rendering, selection, drag-and-drop movement, search, filters, sorting, built-in edit dialogs, and
+              context menus.
+            </p>
+            <p>
+              Two design choices define the project:
+            </p>
+            <ul class="lead-list">
+              <li>
+                The board owns defensive copies of your column and card dictionaries. It never asks you to mutate UI
+                state in place.
+              </li>
+              <li>
+                Persistence is callback-driven. You can save to SQLite, PostgreSQL, a REST API, a file, or nothing at
+                all. The widget does not force a storage model.
+              </li>
+            </ul>
+
+            <div class="mini-grid">
+              <article class="info-card">
+                <h4>What CTkKanBan gives you</h4>
+                <p>
+                  A reusable board widget, default card rendering, built-in add/edit forms, per-card and per-column
+                  operations, and a large style surface.
+                </p>
+              </article>
+              <article class="info-card">
+                <h4>What CTkKanBan leaves to you</h4>
+                <p>
+                  Persistence, application-level validation rules beyond field validators, deployment, and any
+                  higher-level workflow rules specific to your project.
+                </p>
+              </article>
+            </div>
+
+            <div class="callout callout--success">
+              <strong>Good fit:</strong> desktop apps that already use CustomTkinter and need a flexible board widget
+              without tying the UI to a database, ORM, or opinionated schema.
+            </div>
+          </section>
+
+          <section class="doc-section" id="installation">
+            <div class="section-rule"></div>
+            <h2>Installation</h2>
+            <p>
+              The package metadata in <code>pyproject.toml</code> declares:
+            </p>
+            <ul>
+              <li><code>requires-python = "&gt;=3.10"</code></li>
+              <li><code>dependencies = ["customtkinter&gt;=5.2.2"]</code></li>
+            </ul>
+
+            <h3>1. Create a virtual environment</h3>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>bash</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>python -m venv .venv</code></pre>
+            </div>
+
+            <h3>2. Activate it</h3>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>bash</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code># Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source .venv/bin/activate</code></pre>
+            </div>
+
+            <h3>3. Install the project</h3>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>bash</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>python -m pip install --upgrade pip
+python -m pip install -e .</code></pre>
+            </div>
+
+            <h3>4. Run the bundled feature demo</h3>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>bash</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>python example_all_features.py</code></pre>
+            </div>
+
+            <p>
+              The demo exercises custom fields, built-in forms, callbacks, styling, drag-and-drop, search, filtering,
+              sorting, and a custom card renderer. It is the best single file to inspect if you want a tour of the
+              intended application-level usage.
+            </p>
+
+            <div class="callout callout--warn">
+              <strong>Important:</strong> this repository documents source installation only. No release workflow,
+              wheel distribution, or published-package documentation is included in the project files, so those steps
+              are intentionally not described here.
+            </div>
+          </section>
+
+          <section class="doc-section" id="quick-start">
+            <div class="section-rule"></div>
+            <h2>Quick Start</h2>
+            <p>
+              A minimal board needs three things:
+            </p>
+            <ol>
+              <li>An ordered list of columns.</li>
+              <li>An optional list of cards.</li>
+              <li>A <code>CTk</code> window that gives the board room to expand.</li>
+            </ol>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>import customtkinter as ctk
+
+from ctk_kanban import CTkKanbanBoard
+
+
+columns = [
+    {"id": "todo", "title": "To Do", "color": "#3B82F6"},
+    {"id": "doing", "title": "Doing", "color": "#F59E0B"},
+    {"id": "done", "title": "Done", "color": "#10B981"},
+]
+
+cards = [
+    {"id": 1, "column": "todo", "title": "Write docs", "sort_order": 1},
+    {"id": 2, "column": "doing", "title": "Review callbacks", "sort_order": 1},
+]
+
+app = ctk.CTk()
+app.title("CTkKanBan Quick Start")
+app.geometry("1100x700")
+app.grid_rowconfigure(0, weight=1)
+app.grid_columnconfigure(0, weight=1)
+
+board = CTkKanbanBoard(app, columns=columns, cards=cards)
+board.grid(row=0, column=0, sticky="nsew")
+
+app.mainloop()</code></pre>
+            </div>
+
+            <div class="callout">
+              <strong>Key rule:</strong> every card must include <code>id</code>, <code>column</code>, and
+              <code>title</code>. The value of <code>card["column"]</code> must exactly match an existing
+              <code>column["id"]</code>.
+            </div>
+
+            <div class="callout">
+              <strong>Mutation rule:</strong> after the widget is created, use methods such as
+              <code>add_card()</code>, <code>update_card()</code>, <code>move_card()</code>, and
+              <code>set_state()</code> instead of mutating the original input lists. The board stores deep copies.
+            </div>
+          </section>
+
+          <section class="doc-section" id="board-model">
+            <div class="section-rule"></div>
+            <h2>Board Model</h2>
+            <p>
+              The board works with plain mappings rather than custom ORM or dataclass types. The typed definitions in
+              <code>ctk_kanban.models</code> document the expected shapes, but at runtime the widget accepts
+              dictionary-like mappings and normalizes them.
+            </p>
+
+            <h3>Columns</h3>
+            <p>
+              A column is an ordered board lane. The required keys are <code>id</code> and <code>title</code>. Column
+              IDs must be hashable and unique. Optional keys let you control appearance and behavior per column:
+            </p>
+            <div class="chip-row">
+              <span class="chip">color</span>
+              <span class="chip">max_cards</span>
+              <span class="chip">locked</span>
+              <span class="chip">show_count</span>
+              <span class="chip">show_add_button</span>
+              <span class="chip">show_menu</span>
+            </div>
+
+            <h3>Cards</h3>
+            <p>
+              A card must include <code>id</code>, <code>column</code>, and <code>title</code>. Any additional keys
+              are preserved. The board uses <code>sort_order</code> only for manual ordering; all other values are
+              application-defined card data.
+            </p>
+
+            <h3>Fields</h3>
+            <p>
+              Fields describe how card keys should behave in the default renderer, built-in form, search, filtering,
+              and sorting. If you do not provide a field list, the package uses a default schema containing
+              <code>title</code>, <code>description</code>, <code>priority</code>, <code>assignee</code>,
+              <code>due_date</code>, and <code>tags</code>.
+            </p>
+            <p>
+              If you provide a custom field list and omit <code>title</code>, the validator inserts a default
+              <code>title</code> field at the front because the board always requires it.
+            </p>
+
+            <h3>Data state vs. view state</h3>
+            <p>
+              <code>get_data()</code> returns only mutable board data: columns and cards. <code>get_state()</code>
+              goes further and includes the current search query, active filters, sort settings, per-column sorts, and
+              the selected card ID. Use <code>set_data()</code> when reloading from storage, and <code>set_state()</code>
+              when you want to restore both data and the current board view.
+            </p>
+          </section>
+
+          <section class="doc-section" id="tutorial-first-board">
+            <div class="section-rule"></div>
+            <h2>Build Your First Board</h2>
+            <p>
+              The simplest practical workflow is to build a board from local data, then mutate it through the public
+              API. This lets you prototype UI behavior before introducing persistence.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>import customtkinter as ctk
+
+from ctk_kanban import CTkKanbanBoard
+
+
+app = ctk.CTk()
+app.geometry("1200x760")
+app.grid_rowconfigure(0, weight=1)
+app.grid_columnconfigure(0, weight=1)
+
+board = CTkKanbanBoard(
+    app,
+    columns=[
+        {"id": "backlog", "title": "Backlog"},
+        {"id": "todo", "title": "To Do"},
+        {"id": "done", "title": "Done"},
+    ],
+    cards=[
+        {"id": 1, "column": "backlog", "title": "Audit dark theme", "sort_order": 1},
+        {"id": 2, "column": "todo", "title": "Write tutorial", "sort_order": 1},
+    ],
+)
+board.grid(row=0, column=0, sticky="nsew")
+
+# Programmatic updates
+board.add_card({"id": 3, "column": "todo", "title": "Review API docs"})
+board.move_card(1, "todo", 0)
+board.update_card(2, {"title": "Write getting started guide"})
+
+app.mainloop()</code></pre>
+            </div>
+
+            <p>
+              A few behavior details are worth knowing immediately:
+            </p>
+            <ul>
+              <li>
+                <code>add_card()</code> appends a new card to the end of its column when <code>sort_order</code> is
+                omitted.
+              </li>
+              <li>
+                <code>move_card()</code> and <code>reorder_card()</code> rewrite manual <code>sort_order</code>
+                values so the column remains sequential.
+              </li>
+              <li>
+                <code>get_cards_by_column()</code> returns the current display order, not the raw insertion order of
+                the internal card mapping.
+              </li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="tutorial-forms">
+            <div class="section-rule"></div>
+            <h2>Built-in Card Forms</h2>
+            <p>
+              The built-in form system is driven entirely by field definitions. If
+              <code>enable_builtin_card_form=True</code>, the board can open add and edit forms automatically from the
+              toolbar, per-column add buttons, double-click, or the card context menu.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>fields = [
+    {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": True,
+        "show_on_card": True,
+        "show_in_form": True,
+        "searchable": True,
+        "sortable": True,
+    },
+    {
+        "key": "priority",
+        "label": "Priority",
+        "type": "select",
+        "options": ["Low", "Medium", "High"],
+        "default": "Medium",
+        "show_on_card": True,
+        "show_in_form": True,
+        "filterable": True,
+        "sortable": True,
+    },
+    {
+        "key": "description",
+        "label": "Description",
+        "type": "textarea",
+        "show_on_card": True,
+        "show_in_form": True,
+        "searchable": True,
+    },
+]
+
+board = CTkKanbanBoard(
+    app,
+    columns=[{"id": "todo", "title": "To Do"}],
+    cards=[],
+    fields=fields,
+    card_form_mode="sidepanel",  # or "popup"
+    enable_builtin_card_form=True,
+)
+
+board.open_add_card_form("todo")</code></pre>
+            </div>
+
+            <div class="mini-grid">
+              <article class="info-card">
+                <h4><code>card_form_mode="popup"</code></h4>
+                <p>Uses <code>CardFormDialog</code>, a modal <code>CTkToplevel</code> wrapper around the form.</p>
+              </article>
+              <article class="info-card">
+                <h4><code>card_form_mode="sidepanel"</code></h4>
+                <p>Embeds the same form content in a panel beside the board instead of opening a top-level window.</p>
+              </article>
+            </div>
+
+            <div class="callout">
+              <strong>External form flow:</strong> if <code>enable_builtin_card_form=False</code>, the board does not
+              create its own form. Instead it emits <code>on_add_card_requested</code> and
+              <code>on_edit_card_requested</code> so your application can open its own editor UI.
+            </div>
+
+            <div class="callout callout--warn">
+              <strong>Field control limitation:</strong> the built-in form gives dedicated widgets to
+              <code>textarea</code>, <code>checkbox</code>, and <code>select</code>. Other field types, including
+              <code>date</code>, <code>datetime</code>, <code>tag</code>, <code>badge</code>, and
+              <code>multiselect</code>, are edited through text entry controls. For <code>tags</code> and
+              <code>multiselect</code>, comma-separated input is normalized to <code>list[str]</code>.
+            </div>
+          </section>
+
+          <section class="doc-section" id="tutorial-search-filter-sort">
+            <div class="section-rule"></div>
+            <h2>Search, Filter, and Sort</h2>
+            <p>
+              Search, filter, and sort behavior is field-aware. The board only exposes fields in the built-in UI if the
+              field definitions opt into that behavior.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>fields = [
+    {"key": "title", "label": "Title", "type": "text", "required": True, "searchable": True, "sortable": True},
+    {"key": "assignee", "label": "Assignee", "type": "select", "options": ["Maya", "Owen"], "filterable": True, "searchable": True},
+    {"key": "priority", "label": "Priority", "type": "select", "options": ["Low", "Medium", "High"], "filterable": True, "sortable": True},
+    {"key": "due_date", "label": "Due date", "type": "date", "filterable": True, "sortable": True},
+]
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    fields=fields,
+    filter_mode="dim",  # or "hide"
+)
+
+board.search("Maya")
+board.apply_filters({"priority": "High", "overdue_only": True})
+board.sort_cards("due_date")
+board.sort_cards("manual", reverse=True, column_id="review")</code></pre>
+            </div>
+
+            <h3>Search rules</h3>
+            <ul>
+              <li>The query is case-insensitive.</li>
+              <li>The board searches only fields marked <code>searchable=True</code>.</li>
+              <li>
+                If no fields are marked searchable, the board falls back to searching <code>title</code> and
+                <code>description</code>.
+              </li>
+            </ul>
+
+            <h3>Filter rules</h3>
+            <ul>
+              <li>The built-in filter dialog generates exact-match filters from fields marked <code>filterable=True</code>.</li>
+              <li><code>apply_filters()</code> also accepts list/set filters and callable predicates.</li>
+              <li><code>filter_mode="hide"</code> removes non-matching cards from view.</li>
+              <li><code>filter_mode="dim"</code> keeps non-matching cards visible but visually de-emphasized.</li>
+            </ul>
+
+            <h3>Sort rules</h3>
+            <ul>
+              <li>
+                Allowed keys are <code>manual</code>, <code>priority</code>, <code>due_date</code>,
+                <code>created_date</code>, <code>updated_date</code>, <code>title</code>, and any field marked
+                <code>sortable=True</code>.
+              </li>
+              <li><code>manual</code> uses <code>sort_order</code>.</li>
+              <li>
+                <code>priority</code> has a fixed ranking of <code>Critical</code>, <code>High</code>,
+                <code>Medium</code>, then <code>Low</code>.
+              </li>
+              <li>
+                Per-column sorting is available through <code>sort_cards(..., column_id=...)</code> when
+                <code>allow_column_sorting=True</code>.
+              </li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="tutorial-persistence">
+            <div class="section-rule"></div>
+            <h2>Persistence Hooks</h2>
+            <p>
+              CTkKanBan does not write to storage on its own. Instead, it emits events before or after mutations and
+              lets you decide how to persist them. For most applications, <code>on_data_changed</code> is the simplest
+              place to integrate with your database or file format because it receives one full board snapshot after
+              each accepted mutation.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>def save_board_data(event: dict[str, object]) -> bool | dict[str, object]:
+    action = event["action_event"]
+    print("Persist this snapshot:", action["type"], len(event["cards"]), "cards")
+
+    if action["type"] == "card_moved" and action["card_id"] == 4 and action["new_column"] == "done":
+        return {"cancel": True, "reason": "Database rejected the move"}
+
+    return True
+
+
+def log_cancelled_action(event: dict[str, object]) -> None:
+    print("Restored previous state:", event["reason"])
+
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    on_data_changed=save_board_data,
+    on_action_cancelled=log_cancelled_action,
+)</code></pre>
+            </div>
+
+            <p>
+              Cancellation is part of the public contract:
+            </p>
+            <ul>
+              <li>Return <code>False</code> to cancel with a default reason.</li>
+              <li>Return <code>{"cancel": True, "reason": "..."}</code> to cancel with an explicit reason.</li>
+              <li>
+                When a cancellable callback rejects an action, the board restores the previous state and emits
+                <code>on_action_cancelled</code>.
+              </li>
+            </ul>
+
+            <div class="callout">
+              <strong>Bulk reload rule:</strong> <code>set_data()</code>, <code>set_cards()</code>,
+              <code>set_columns()</code>, and <code>set_state()</code> replace board state without firing persistence
+              callbacks. They are intended for application-driven reloads rather than end-user mutations.
+            </div>
+          </section>
+
+          <section class="doc-section" id="tutorial-rendering">
+            <div class="section-rule"></div>
+            <h2>Custom Rendering and Theme</h2>
+            <p>
+              The default card renderer is field-driven, but you can fully replace card content with a custom
+              renderer while still using the built-in search, form, filter, and callback infrastructure.
+            </p>
+
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>import customtkinter as ctk
+
+
+def render_card(card_frame, card_data, fields, theme):
+    card_frame.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(
+        card_frame,
+        text=card_data["title"],
+        anchor="w",
+        font=ctk.CTkFont(size=14, weight="bold"),
+        text_color=theme["text_color"],
+    ).grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
+
+    if card_data.get("description"):
+        ctk.CTkLabel(
+            card_frame,
+            text=str(card_data["description"]),
+            anchor="w",
+            justify="left",
+            wraplength=230,
+            text_color=theme["muted_text_color"],
+        ).grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
+
+
+style = {
+    "board_fg_color": ("#EEF2F7", "#09111F"),
+    "column_fg_color": ("#E2E8F0", "#152033"),
+    "card_fg_color": ("#FFFFFF", "#101827"),
+    "card_hover_color": ("#F8FAFC", "#17233A"),
+    "card_selected_color": ("#DBEAFE", "#1E3A5F"),
+    "drop_indicator_color": "#38BDF8",
+}
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    fields=fields,
+    style=style,
+    priority_colors={"Critical": "#B91C1C"},
+    tag_colors={"API": "#1D4ED8"},
+    card_renderer=render_card,
+)</code></pre>
+            </div>
+
+            <p>
+              The renderer signature is:
+            </p>
+            <div class="callout">
+              <code>CardRenderer = Callable[[Any, dict[str, Any], list[dict[str, Any]], dict[str, Any]], None]</code>
+            </div>
+
+            <p>
+              The first argument is the card frame that you populate. The board does not add default content when a
+              custom renderer is supplied.
+            </p>
+
+            <div class="callout callout--warn">
+              <strong>Important:</strong> a custom renderer changes only the card visuals. Built-in forms, search,
+              filtering, sorting, and validation still use the board's field definitions and card dictionaries.
+            </div>
+          </section>
+
+          <section class="doc-section" id="feature-drag">
+            <div class="section-rule"></div>
+            <h2>Drag and Reorder</h2>
+            <p>
+              The board supports both card dragging and column dragging. These features are enabled by default and are
+              controlled by constructor flags rather than a separate drag manager.
+            </p>
+
+            <ul>
+              <li><code>enable_card_drag</code> toggles card movement.</li>
+              <li><code>enable_card_reorder</code> allows reordering inside a column.</li>
+              <li><code>enable_column_drag</code> allows dragging column headers.</li>
+              <li><code>enable_drag_preview</code> shows a drag preview window during movement.</li>
+              <li><code>show_drop_indicator</code> displays insertion markers.</li>
+              <li>
+                <code>enable_horizontal_autoscroll</code> and <code>enable_vertical_autoscroll</code> keep drag targets
+                reachable near the edges.
+              </li>
+            </ul>
+
+            <p>
+              Two column-level rules affect dragging:
+            </p>
+            <ul>
+              <li>A <code>locked</code> column cannot receive moved cards.</li>
+              <li>
+                If <code>enforce_column_limits=True</code>, a column with <code>max_cards</code> set refuses
+                additional cards once the limit is reached.
+              </li>
+            </ul>
+          </section>
+
+          <section class="doc-section" id="feature-selection">
+            <div class="section-rule"></div>
+            <h2>Selection, Menus, and Forms</h2>
+            <p>
+              CTkKanBan keeps a single selected card ID. Programmatic selection is exposed through
+              <code>select_card()</code>, <code>clear_selection()</code>, and <code>get_selected_card()</code>.
+            </p>
+
+            <p>
+              The built-in card context menu includes:
+            </p>
+            <ul>
+              <li><strong>Open</strong>: opens the edit flow.</li>
+              <li><strong>Edit</strong>: opens the edit flow directly.</li>
+              <li><strong>Delete</strong>: optionally confirms, then deletes.</li>
+              <li><strong>Duplicate</strong>: copies the card and appends <code>(copy)</code> to the title.</li>
+              <li><strong>Move to</strong>: lists eligible target columns.</li>
+            </ul>
+
+            <p>
+              You can append your own actions with <code>card_context_menu_items</code>. Each custom menu item can be
+              always enabled, always disabled, or conditionally enabled with a callable.
+            </p>
+          </section>
+
+          <section class="doc-section" id="feature-state">
+            <div class="section-rule"></div>
+            <h2>State Snapshots and Bulk Loading</h2>
+            <p>
+              The board exposes a small but useful state API for serialization, persistence, and undo-like workflows.
+            </p>
+
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>What it captures or restores</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>get_data()</code></td>
+                    <td>Columns and cards only.</td>
+                  </tr>
+                  <tr>
+                    <td><code>set_data(data)</code></td>
+                    <td>Replaces columns and cards without touching persistence callbacks.</td>
+                  </tr>
+                  <tr>
+                    <td><code>get_state()</code></td>
+                    <td>Columns, cards, search query, filters, sort, per-column sorts, and selected card.</td>
+                  </tr>
+                  <tr>
+                    <td><code>set_state(state)</code></td>
+                    <td>Restores a snapshot previously returned by <code>get_state()</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>set_cards(cards)</code></td>
+                    <td>Replaces only the card collection.</td>
+                  </tr>
+                  <tr>
+                    <td><code>set_columns(columns)</code></td>
+                    <td>Replaces only the column collection after validating that existing cards still fit.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p>
+              This split is deliberate. Use <code>get_data()</code> for persistence formats that should not include UI
+              search/filter state. Use <code>get_state()</code> for restoring the board as the user left it.
+            </p>
+          </section>
+
+          <section class="doc-section" id="feature-style">
+            <div class="section-rule"></div>
+            <h2>Styling Surface</h2>
+            <p>
+              The board has a broad, flat style dictionary. Colors can be passed directly through
+              <code>theme</code> or <code>style</code>, and the constructor merges nested
+              <code>priority_colors</code>, <code>tag_colors</code>, and <code>font_config</code> overrides from the
+              <code>style</code> mapping.
+            </p>
+            <p>
+              In practice:
+            </p>
+            <ul>
+              <li><code>style</code> overrides <code>theme</code> when both set the same style key.</li>
+              <li>
+                A <code>font_config</code> entry such as <code>{"toolbar": font}</code> becomes
+                <code>toolbar_font</code> internally.
+              </li>
+              <li><code>get_style()</code> returns the full merged style snapshot.</li>
+            </ul>
+
+            <div class="callout">
+              <strong>Performance note:</strong> the default incremental rendering path reuses existing widgets for most
+              add, update, move, delete, filter, and sort operations. The board also batches drag motion work and
+              deferred widget cleanup through <code>drag_update_interval_ms</code> and
+              <code>cleanup_time_budget_ms</code>.
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-constructor">
+            <div class="section-rule"></div>
+            <h2>Constructor</h2>
+            <p>
+              Primary entry point:
+            </p>
+            <div class="callout">
+              <span class="signature">
+                CTkKanbanBoard(master, columns, cards=None, fields=None, *, ...)</span>
+            </div>
+
+            <h3>Core data and layout parameters</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Type / default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>master</code></td>
+                    <td>Any parent widget</td>
+                    <td>Parent passed to the underlying <code>CTkFrame</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>columns</code></td>
+                    <td>required iterable</td>
+                    <td>Ordered column definitions. Each column needs <code>id</code> and <code>title</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>cards</code></td>
+                    <td><code>None</code></td>
+                    <td>Initial card definitions. Cards must reference existing column IDs.</td>
+                  </tr>
+                  <tr>
+                    <td><code>fields</code></td>
+                    <td><code>None</code></td>
+                    <td>Field schema for rendering, forms, search, filter, and sort. Defaults are used when omitted.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_horizontal_scroll</code></td>
+                    <td><code>True</code></td>
+                    <td>Wraps the board area in a horizontal <code>CTkScrollableFrame</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_column_scroll</code></td>
+                    <td><code>True</code></td>
+                    <td>Wraps each column body in a vertical <code>CTkScrollableFrame</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>column_width</code></td>
+                    <td><code>280</code></td>
+                    <td>Column width in pixels. Validation requires at least <code>160</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>column_height</code></td>
+                    <td><code>600</code></td>
+                    <td>Column height in pixels. Validation requires at least <code>180</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>column_gap</code></td>
+                    <td><code>12</code></td>
+                    <td>Horizontal spacing between columns. Must be non-negative.</td>
+                  </tr>
+                  <tr>
+                    <td><code>board_padding</code></td>
+                    <td><code>None</code></td>
+                    <td>Outer padding. When omitted, the theme's <code>board_padding</code> value is used.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Toolbar parameters</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>show_toolbar</code></td>
+                    <td><code>True</code></td>
+                    <td>Creates the built-in toolbar row above the board.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_search</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the search box when <code>enable_search=True</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_filter_button</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the filter button when <code>enable_filters=True</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_sort_button</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the sort button when <code>enable_sorting=True</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_add_card_button</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the toolbar-level add-card button.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_clear_filters_button</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the toolbar clear button.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Column, card, and drag parameters</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>show_card_count</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows per-column card counts unless a column overrides with <code>show_count</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_column_add_button</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows per-column add buttons unless a column overrides with <code>show_add_button</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_column_menu</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows each column's menu button unless a column overrides with <code>show_menu</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enforce_column_limits</code></td>
+                    <td><code>True</code></td>
+                    <td>Honors <code>max_cards</code> limits during add and move operations.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_column_drag</code></td>
+                    <td><code>True</code></td>
+                    <td>Allows dragging columns by their headers.</td>
+                  </tr>
+                  <tr>
+                    <td><code>card_mode</code></td>
+                    <td><code>"detailed"</code></td>
+                    <td><code>"compact"</code> truncates visible content; <code>"detailed"</code> shows more fields.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_hover</code></td>
+                    <td><code>True</code></td>
+                    <td>Applies hover colors to cards.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_selection</code></td>
+                    <td><code>True</code></td>
+                    <td>Selects cards on click and updates selection visuals.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_context_menu</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the built-in right-click menu.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_double_click</code></td>
+                    <td><code>True</code></td>
+                    <td>Double-click opens the edit flow unless you override it with a callback.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_builtin_card_form</code></td>
+                    <td><code>True</code></td>
+                    <td>Controls whether the board creates its own add/edit forms.</td>
+                  </tr>
+                  <tr>
+                    <td><code>card_form_mode</code></td>
+                    <td><code>"popup"</code></td>
+                    <td>Switches between a modal dialog and a side panel.</td>
+                  </tr>
+                  <tr>
+                    <td><code>confirm_delete</code></td>
+                    <td><code>True</code></td>
+                    <td>Asks for confirmation before <code>request_delete_card()</code> deletes a card.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_drag</code></td>
+                    <td><code>True</code></td>
+                    <td>Allows dragging cards.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_card_reorder</code></td>
+                    <td><code>True</code></td>
+                    <td>Allows reordering within a column.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_drag_preview</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows a preview window while dragging cards.</td>
+                  </tr>
+                  <tr>
+                    <td><code>drag_preview_opacity</code></td>
+                    <td><code>1.0</code></td>
+                    <td>Clamped to the supported range <code>0.1</code> to <code>1.0</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_drop_indicator</code></td>
+                    <td><code>True</code></td>
+                    <td>Displays an insertion marker during drag operations.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_horizontal_autoscroll</code></td>
+                    <td><code>True</code></td>
+                    <td>Autoscrolls the board horizontally during card drags.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_vertical_autoscroll</code></td>
+                    <td><code>True</code></td>
+                    <td>Autoscrolls individual columns vertically during card drags.</td>
+                  </tr>
+                  <tr>
+                    <td><code>incremental_card_rendering</code></td>
+                    <td><code>True</code></td>
+                    <td>Reuses widgets for most card-level mutations instead of forcing a full refresh.</td>
+                  </tr>
+                  <tr>
+                    <td><code>incremental_column_rendering</code></td>
+                    <td><code>True</code></td>
+                    <td>Reuses widgets for many column-level mutations.</td>
+                  </tr>
+                  <tr>
+                    <td><code>drag_update_interval_ms</code></td>
+                    <td><code>16</code></td>
+                    <td>Coalesces high-frequency drag motion updates.</td>
+                  </tr>
+                  <tr>
+                    <td><code>autoscroll_interval_ms</code></td>
+                    <td><code>45</code></td>
+                    <td>Minimum interval between autoscroll updates.</td>
+                  </tr>
+                  <tr>
+                    <td><code>cleanup_time_budget_ms</code></td>
+                    <td><code>8</code></td>
+                    <td>Time budget for deferred widget cleanup batches. Must be at least <code>1</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Search, filter, sort, and extension parameters</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>enable_search</code></td>
+                    <td><code>True</code></td>
+                    <td>Enables search APIs and toolbar search UI.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_filters</code></td>
+                    <td><code>True</code></td>
+                    <td>Enables filter APIs and built-in filter dialog.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_sorting</code></td>
+                    <td><code>True</code></td>
+                    <td>Enables sorting APIs and built-in sort menus.</td>
+                  </tr>
+                  <tr>
+                    <td><code>allow_column_sorting</code></td>
+                    <td><code>True</code></td>
+                    <td>Allows <code>sort_cards(..., column_id=...)</code> and the "Sort column..." menu entry.</td>
+                  </tr>
+                  <tr>
+                    <td><code>default_sort</code></td>
+                    <td><code>"manual"</code></td>
+                    <td>Initial global sort key. Must be an allowed sort key.</td>
+                  </tr>
+                  <tr>
+                    <td><code>filter_mode</code></td>
+                    <td><code>"hide"</code></td>
+                    <td>Either remove or dim cards that do not match the current view.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_no_results</code></td>
+                    <td><code>True</code></td>
+                    <td>Displays an empty-result message in columns with no visible cards.</td>
+                  </tr>
+                  <tr>
+                    <td><code>theme</code></td>
+                    <td><code>None</code></td>
+                    <td>Style override mapping merged into the default theme.</td>
+                  </tr>
+                  <tr>
+                    <td><code>style</code></td>
+                    <td><code>None</code></td>
+                    <td>Alias for theme-style overrides. Wins over <code>theme</code> on overlapping keys.</td>
+                  </tr>
+                  <tr>
+                    <td><code>priority_colors</code></td>
+                    <td><code>None</code></td>
+                    <td>Per-priority chip color overrides merged over <code>DEFAULT_PRIORITY_COLORS</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>tag_colors</code></td>
+                    <td><code>None</code></td>
+                    <td>Per-tag chip color overrides.</td>
+                  </tr>
+                  <tr>
+                    <td><code>font_config</code></td>
+                    <td><code>None</code></td>
+                    <td>Mapping of font slots such as <code>toolbar</code> or <code>card_title</code> to font objects.</td>
+                  </tr>
+                  <tr>
+                    <td><code>card_renderer</code></td>
+                    <td><code>None</code></td>
+                    <td>Custom card rendering callback. Replaces the default card body builder.</td>
+                  </tr>
+                  <tr>
+                    <td><code>card_context_menu_items</code></td>
+                    <td><code>None</code></td>
+                    <td>Extra context-menu actions appended after the built-in items.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Callback parameters</h3>
+            <p>
+              The constructor accepts the following callback hooks:
+            </p>
+            <div class="chip-row">
+              <span class="chip">on_card_clicked</span>
+              <span class="chip">on_card_double_clicked</span>
+              <span class="chip">on_card_right_clicked</span>
+              <span class="chip">on_card_moved</span>
+              <span class="chip">on_card_reordered</span>
+              <span class="chip">on_card_created</span>
+              <span class="chip">on_card_updated</span>
+              <span class="chip">on_card_deleted</span>
+              <span class="chip">on_column_created</span>
+              <span class="chip">on_column_updated</span>
+              <span class="chip">on_column_deleted</span>
+              <span class="chip">on_column_reordered</span>
+              <span class="chip">on_data_changed</span>
+              <span class="chip">on_filter_changed</span>
+              <span class="chip">on_search_changed</span>
+              <span class="chip">on_sort_changed</span>
+              <span class="chip">on_action_cancelled</span>
+              <span class="chip">on_error</span>
+              <span class="chip">on_add_card_requested</span>
+              <span class="chip">on_edit_card_requested</span>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-board-methods">
+            <div class="section-rule"></div>
+            <h2>Board Methods</h2>
+
+            <h3>Mutation methods</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Returns</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">add_card(card_data, *, source="api")</span></td>
+                    <td>Card copy or <code>None</code></td>
+                    <td>Validates, assigns a new trailing <code>sort_order</code> when needed, and can be cancelled.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">update_card(card_id, new_data, *, source="api")</span></td>
+                    <td>Card copy or <code>None</code></td>
+                    <td>Merges new data into the current card, revalidates it, and can rename the card ID.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">delete_card(card_id, *, source="api")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Deletes and reindexes manual order in the source column. Returns <code>False</code> on cancellation.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">duplicate_card(card_id, *, source="api")</span></td>
+                    <td>Card copy or <code>None</code></td>
+                    <td>Copies the card, generates a new ID, appends <code>(copy)</code> to the title, and adds it.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">move_card(card_id, target_column, target_index=None, *, source="api")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Moves or reorders a card and rewrites manual <code>sort_order</code> values.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">reorder_card(card_id, target_index, *, source="api")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Convenience wrapper for same-column reordering.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">add_column(column_data, *, source="api")</span></td>
+                    <td>Column copy or <code>None</code></td>
+                    <td>Appends a column to the end of the board order and can be cancelled.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">update_column(column_id, new_data, *, source="api")</span></td>
+                    <td>Column copy or <code>None</code></td>
+                    <td>Updates metadata and can atomically rename the column ID across existing cards.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">delete_column(column_id, *, source="api")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Deletes only empty columns. Raises if any card still belongs to the column.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">move_column(column_id, target_index, *, source="api")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Moves a column in the ordered column list.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Query and bulk-state methods</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Returns</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">get_card(card_id)</span></td>
+                    <td>Card copy or <code>None</code></td>
+                    <td>Raises if the ID is unhashable, but returns <code>None</code> for a missing hashable ID.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_all_cards()</span></td>
+                    <td><code>list[dict[str, Any]]</code></td>
+                    <td>Returns the owned insertion order of the internal card mapping.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_cards_by_column(column_id)</span></td>
+                    <td><code>list[dict[str, Any]]</code></td>
+                    <td>Returns the current display order for that column, including active sorting.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_column(column_id)</span></td>
+                    <td>Column copy or <code>None</code></td>
+                    <td>Returns one column by ID.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_columns()</span></td>
+                    <td><code>list[dict[str, Any]]</code></td>
+                    <td>Returns the current board column order.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_style()</span></td>
+                    <td><code>dict[str, Any]</code></td>
+                    <td>Returns the merged theme plus <code>priority_colors</code>, <code>tag_colors</code>, and <code>font_config</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_data()</span></td>
+                    <td><code>BoardData</code></td>
+                    <td>Returns only columns and cards.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">load_data(data)</span></td>
+                    <td><code>None</code></td>
+                    <td>Alias for <code>set_data()</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_data(data)</span></td>
+                    <td><code>None</code></td>
+                    <td>Replaces columns and cards while preserving current view state unless you overwrite it.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">load_cards(cards)</span></td>
+                    <td><code>None</code></td>
+                    <td>Alias for <code>set_cards()</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_cards(cards)</span></td>
+                    <td><code>None</code></td>
+                    <td>Replaces the complete card collection without firing persistence callbacks.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_columns(columns)</span></td>
+                    <td><code>None</code></td>
+                    <td>Replaces columns after checking that existing cards do not reference removed columns.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">clear_board()</span></td>
+                    <td><code>None</code></td>
+                    <td>Removes all cards while preserving columns and clearing selection.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_state()</span></td>
+                    <td><code>dict[str, Any]</code></td>
+                    <td>Returns data plus search, filters, global sort, per-column sorts, and selected card ID.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_state(state)</span></td>
+                    <td><code>None</code></td>
+                    <td>Restores a previously captured board state snapshot.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>View and UI methods</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Returns</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">refresh()</span></td>
+                    <td><code>None</code></td>
+                    <td>Fully rebuilds the visible board from the owned data and current view state.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">search(query)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Updates the current query and can be cancelled by <code>on_search_changed</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">clear_search()</span></td>
+                    <td><code>None</code></td>
+                    <td>Convenience wrapper that resets the query to an empty string.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">apply_filters(filters)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Replaces the active filter mapping and can be cancelled by <code>on_filter_changed</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">clear_filters()</span></td>
+                    <td><code>None</code></td>
+                    <td>Equivalent to <code>apply_filters({})</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">sort_cards(sort_key, reverse=False, column_id=None)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Applies a global or per-column display sort without mutating card content except manual move order APIs.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">select_card(card_id)</span></td>
+                    <td>Card copy</td>
+                    <td>Updates the single-card selection state and card visuals.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">clear_selection()</span></td>
+                    <td><code>None</code></td>
+                    <td>Clears the current selection.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_selected_card()</span></td>
+                    <td>Card copy or <code>None</code></td>
+                    <td>Returns the selected card if one is currently selected.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">open_add_card_form(column_id=None)</span></td>
+                    <td><code>None</code></td>
+                    <td>Opens the add flow for a column or the first unlocked column when omitted.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">open_edit_card_form(card_id)</span></td>
+                    <td><code>None</code></td>
+                    <td>Opens the edit flow for the target card.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">request_delete_card(card_id)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Runs the configured confirmation flow, then deletes through the normal delete API.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-data-types">
+            <div class="section-rule"></div>
+            <h2>Data Types</h2>
+
+            <h3><code>ColumnDefinition</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Required</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>id</code></td>
+                    <td>Yes</td>
+                    <td>Hashable, non-empty identifier used by cards and public APIs.</td>
+                  </tr>
+                  <tr>
+                    <td><code>title</code></td>
+                    <td>Yes</td>
+                    <td>Display name shown in the column header.</td>
+                  </tr>
+                  <tr>
+                    <td><code>color</code></td>
+                    <td>No</td>
+                    <td>Header accent color for the column's vertical color bar.</td>
+                  </tr>
+                  <tr>
+                    <td><code>max_cards</code></td>
+                    <td>No</td>
+                    <td>Non-negative card limit. Enforced only when <code>enforce_column_limits=True</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>locked</code></td>
+                    <td>No</td>
+                    <td>Blocks card additions and moves into the column.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_count</code></td>
+                    <td>No</td>
+                    <td>Per-column override for the count badge.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_add_button</code></td>
+                    <td>No</td>
+                    <td>Per-column override for the header add button.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_menu</code></td>
+                    <td>No</td>
+                    <td>Per-column override for the header menu button.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>CardDefinition</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Required</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>id</code></td>
+                    <td>Yes</td>
+                    <td>Hashable, non-empty card identifier.</td>
+                  </tr>
+                  <tr>
+                    <td><code>column</code></td>
+                    <td>Yes</td>
+                    <td>The column ID that currently owns the card.</td>
+                  </tr>
+                  <tr>
+                    <td><code>title</code></td>
+                    <td>Yes</td>
+                    <td>Card title. Cannot be empty.</td>
+                  </tr>
+                  <tr>
+                    <td><code>sort_order</code></td>
+                    <td>No</td>
+                    <td>Numeric manual order value used by the <code>manual</code> sort mode.</td>
+                  </tr>
+                  <tr>
+                    <td>Any other key</td>
+                    <td>No</td>
+                    <td>Preserved as card data for rendering, searching, filtering, sorting, and callbacks.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>FieldDefinition</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>key</code></td>
+                    <td>Unique field name stored in card dictionaries.</td>
+                  </tr>
+                  <tr>
+                    <td><code>label</code></td>
+                    <td>User-facing label used on cards, forms, and dialogs.</td>
+                  </tr>
+                  <tr>
+                    <td><code>type</code></td>
+                    <td>
+                      One of <code>text</code>, <code>textarea</code>, <code>number</code>, <code>select</code>,
+                      <code>multiselect</code>, <code>date</code>, <code>datetime</code>, <code>checkbox</code>,
+                      <code>tag</code>, <code>tags</code>, <code>badge</code>, or <code>hidden</code>.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>required</code></td>
+                    <td>Marks the field as required during validation. <code>title</code> is always required.</td>
+                  </tr>
+                  <tr>
+                    <td><code>default</code></td>
+                    <td>Default value used by the built-in add form.</td>
+                  </tr>
+                  <tr>
+                    <td><code>placeholder</code></td>
+                    <td>Entry placeholder text for the built-in form.</td>
+                  </tr>
+                  <tr>
+                    <td><code>options</code></td>
+                    <td>Allowed options for <code>select</code> and <code>multiselect</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_on_card</code></td>
+                    <td>Includes the field in the default card renderer.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_in_form</code></td>
+                    <td>Includes the field in the built-in form.</td>
+                  </tr>
+                  <tr>
+                    <td><code>searchable</code></td>
+                    <td>Includes the field in board search.</td>
+                  </tr>
+                  <tr>
+                    <td><code>filterable</code></td>
+                    <td>Includes the field in the built-in filter dialog.</td>
+                  </tr>
+                  <tr>
+                    <td><code>sortable</code></td>
+                    <td>Allows the field key to be used as a sort key.</td>
+                  </tr>
+                  <tr>
+                    <td><code>read_only</code></td>
+                    <td>Disables editing in the built-in form while preserving the value.</td>
+                  </tr>
+                  <tr>
+                    <td><code>validator</code></td>
+                    <td>Custom callable <code>(value, card_copy) -&gt; bool | str | None</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Built-in field behavior by type</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Field type</th>
+                    <th>Built-in form control</th>
+                    <th>Default card rendering behavior</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>text</code></td>
+                    <td>Single-line entry</td>
+                    <td><code>Label: value</code> text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>textarea</code></td>
+                    <td>Textbox</td>
+                    <td>Wrapped body text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>number</code></td>
+                    <td>Single-line entry, converted to <code>int</code> or <code>float</code></td>
+                    <td><code>Label: value</code> text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>select</code></td>
+                    <td>Option menu</td>
+                    <td><code>Label: value</code> text unless the field key is <code>priority</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>multiselect</code></td>
+                    <td>Comma-separated entry parsed to <code>list[str]</code></td>
+                    <td><code>Label: value</code> text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>date</code> / <code>datetime</code></td>
+                    <td>Single-line entry</td>
+                    <td><code>Label: value</code> text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>checkbox</code></td>
+                    <td>Checkbox</td>
+                    <td><code>Yes</code> / <code>No</code> text.</td>
+                  </tr>
+                  <tr>
+                    <td><code>tag</code>, <code>tags</code>, <code>badge</code></td>
+                    <td>Single-line entry, except <code>tags</code> parses comma-separated values</td>
+                    <td>Rendered as chips.</td>
+                  </tr>
+                  <tr>
+                    <td><code>hidden</code></td>
+                    <td>Not shown by default</td>
+                    <td>Not shown by default.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>ContextMenuItem</code> and related aliases</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Definition</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>ContextMenuItem</code></td>
+                    <td>
+                      Requires <code>label</code> and <code>callback</code>. Optional
+                      <code>enabled</code> accepts a boolean or callable, and <code>separator_before</code> inserts a
+                      menu separator.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>BoardData</code></td>
+                    <td><code>{"columns": [...], "cards": [...]}</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanEvent</code></td>
+                    <td><code>dict[str, Any]</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanCallback</code></td>
+                    <td><code>Callable[[KanbanEvent], Any]</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>CardRenderer</code></td>
+                    <td><code>Callable[[Any, dict[str, Any], list[dict[str, Any]], dict[str, Any]], None]</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-callbacks">
+            <div class="section-rule"></div>
+            <h2>Callback Reference</h2>
+            <p>
+              Every event dictionary created by the board includes <code>type</code>, <code>timestamp</code>, and
+              <code>source</code>. The rest of the payload depends on the callback.
+            </p>
+
+            <h3>Cancellation contract</h3>
+            <p>
+              Cancellable callbacks may reject an operation by returning <code>False</code> or a mapping with
+              <code>{"cancel": True}</code>. Non-cancellable callbacks are purely observational.
+            </p>
+
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Callback</th>
+                    <th>Event type</th>
+                    <th>Cancellable</th>
+                    <th>Key payload fields</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>on_card_clicked</code></td>
+                    <td><code>card_clicked</code></td>
+                    <td>No</td>
+                    <td><code>card_id</code>, <code>card_data</code>, <code>x_root</code>, <code>y_root</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_double_clicked</code></td>
+                    <td><code>card_double_clicked</code></td>
+                    <td>No</td>
+                    <td><code>card_id</code>, <code>card_data</code>, pointer coordinates when triggered by mouse</td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_right_clicked</code></td>
+                    <td><code>card_right_clicked</code></td>
+                    <td>No</td>
+                    <td><code>card_id</code>, <code>card_data</code>, pointer coordinates</td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_created</code></td>
+                    <td><code>card_created</code></td>
+                    <td>Yes</td>
+                    <td><code>card_id</code>, <code>card_data</code>, <code>column_data</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_updated</code></td>
+                    <td><code>card_updated</code></td>
+                    <td>Yes</td>
+                    <td>
+                      <code>card_id</code>, <code>old_card_id</code>, <code>card_data</code>,
+                      <code>old_card_data</code>, <code>changed_fields</code>, <code>changed_cards</code>,
+                      <code>column_data</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_deleted</code></td>
+                    <td><code>card_deleted</code></td>
+                    <td>Yes</td>
+                    <td><code>card_id</code>, <code>card_data</code>, <code>old_card_data</code>, <code>changed_cards</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_moved</code></td>
+                    <td><code>card_moved</code></td>
+                    <td>Yes</td>
+                    <td>
+                      <code>card_id</code>, <code>old_column</code>, <code>new_column</code>, <code>old_index</code>,
+                      <code>new_index</code>, <code>old_sort_order</code>, <code>new_sort_order</code>,
+                      <code>changed_cards</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>on_card_reordered</code></td>
+                    <td><code>card_reordered</code></td>
+                    <td>Yes</td>
+                    <td>Same payload shape as <code>on_card_moved</code> for same-column order changes.</td>
+                  </tr>
+                  <tr>
+                    <td><code>on_column_created</code></td>
+                    <td><code>column_created</code></td>
+                    <td>Yes</td>
+                    <td><code>column_id</code>, <code>column_data</code>, <code>index</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_column_updated</code></td>
+                    <td><code>column_updated</code></td>
+                    <td>Yes</td>
+                    <td>
+                      <code>column_id</code>, <code>old_column_id</code>, <code>column_data</code>,
+                      <code>old_column_data</code>, <code>changed_fields</code>, <code>affected_cards</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>on_column_deleted</code></td>
+                    <td><code>column_deleted</code></td>
+                    <td>Yes</td>
+                    <td><code>column_id</code>, <code>column_data</code>, <code>old_index</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_column_reordered</code></td>
+                    <td><code>column_reordered</code></td>
+                    <td>Yes</td>
+                    <td><code>column_id</code>, <code>old_index</code>, <code>new_index</code>, <code>columns</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_data_changed</code></td>
+                    <td><code>data_changed</code></td>
+                    <td>Yes</td>
+                    <td><code>action_type</code>, <code>action_event</code>, <code>columns</code>, <code>cards</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_filter_changed</code></td>
+                    <td><code>filter_changed</code></td>
+                    <td>Yes</td>
+                    <td><code>filters</code>, <code>old_filters</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_search_changed</code></td>
+                    <td><code>search_changed</code></td>
+                    <td>Yes</td>
+                    <td><code>query</code>, <code>old_query</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_sort_changed</code></td>
+                    <td><code>sort_changed</code></td>
+                    <td>Yes</td>
+                    <td><code>sort_key</code>, <code>reverse</code>, <code>column_id</code>, <code>old_sort</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_action_cancelled</code></td>
+                    <td><code>action_cancelled</code></td>
+                    <td>No</td>
+                    <td><code>action_type</code>, <code>reason</code>, <code>action_event</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_error</code></td>
+                    <td><code>error</code></td>
+                    <td>No</td>
+                    <td><code>error</code>, <code>message</code>, optional <code>action_event</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_add_card_requested</code></td>
+                    <td><code>add_card_requested</code></td>
+                    <td>No</td>
+                    <td><code>column_id</code>, <code>column_data</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_edit_card_requested</code></td>
+                    <td><code>edit_card_requested</code></td>
+                    <td>No</td>
+                    <td><code>card_id</code>, <code>card_data</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Custom context menu callbacks</h3>
+            <p>
+              A <code>ContextMenuItem.callback</code> receives a single event with
+              <code>type="card_context_action"</code>, <code>source="context_menu"</code>, <code>card_id</code>, and
+              <code>card_data</code>.
+            </p>
+          </section>
+
+          <section class="doc-section" id="api-theme">
+            <div class="section-rule"></div>
+            <h2>Theme and Style Reference</h2>
+            <p>
+              The package exports <code>DEFAULT_THEME</code>, <code>DEFAULT_STYLE</code>,
+              <code>DEFAULT_PRIORITY_COLORS</code>, <code>merge_theme()</code>, and <code>merge_style()</code>. The
+              following keys exist in <code>DEFAULT_THEME</code>.
+            </p>
+
+            <h3>Board, toolbar, and column keys</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Keys</th>
+                    <th>Used by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <code>board_fg_color</code>, <code>board_corner_radius</code>, <code>board_padding</code>
+                    </td>
+                    <td>Board container background, shape, and outer padding.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>toolbar_fg_color</code>, <code>toolbar_border_color</code>,
+                      <code>toolbar_border_width</code>, <code>toolbar_corner_radius</code>,
+                      <code>toolbar_text_color</code>, <code>toolbar_button_text_color</code>,
+                      <code>toolbar_primary_button_text_color</code>
+                    </td>
+                    <td>Toolbar surface and button text styling.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>column_fg_color</code>, <code>column_header_fg_color</code>,
+                      <code>column_border_color</code>, <code>column_border_width</code>,
+                      <code>column_corner_radius</code>, <code>column_header_corner_radius</code>,
+                      <code>column_title_text_color</code>, <code>column_count_fg_color</code>,
+                      <code>column_count_text_color</code>, <code>column_control_hover_color</code>,
+                      <code>column_no_results_text_color</code>
+                    </td>
+                    <td>Column frame, header, count badge, controls, and no-results text.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Card and badge keys</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Keys</th>
+                    <th>Used by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <code>card_fg_color</code>, <code>card_hover_color</code>, <code>card_selected_color</code>,
+                      <code>card_border_color</code>, <code>card_selected_border_color</code>,
+                      <code>card_border_width</code>, <code>card_corner_radius</code>,
+                      <code>card_title_text_color</code>, <code>card_body_text_color</code>,
+                      <code>card_metadata_text_color</code>, <code>card_min_height</code>, <code>card_gap</code>
+                    </td>
+                    <td>Default card background, border, typography, and spacing.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>tag_fg_color</code>, <code>tag_text_color</code>, <code>badge_text_color</code>,
+                      <code>priority_colors</code>, <code>tag_colors</code>
+                    </td>
+                    <td>Chip rendering for <code>tag</code>, <code>tags</code>, <code>badge</code>, and priority values.</td>
+                  </tr>
+                  <tr>
+                    <td><code>drop_indicator_color</code>, <code>drag_preview_fg_color</code>, <code>drag_preview_text_color</code></td>
+                    <td>Drag indicator and drag preview window styling.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Buttons, inputs, dialogs, menus, and utility keys</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Keys</th>
+                    <th>Used by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <code>button_fg_color</code>, <code>button_hover_color</code>, <code>button_text_color</code>,
+                      <code>button_text_color_disabled</code>, <code>button_corner_radius</code>,
+                      <code>button_border_width</code>
+                    </td>
+                    <td>Primary action buttons, including the toolbar add button and form save button.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>secondary_button_fg_color</code>, <code>secondary_button_hover_color</code>,
+                      <code>secondary_button_text_color</code>, <code>secondary_button_text_color_disabled</code>,
+                      <code>secondary_button_corner_radius</code>, <code>secondary_button_border_width</code>
+                    </td>
+                    <td>Secondary action buttons such as toolbar filter/sort/clear and form cancel.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>search_fg_color</code>, <code>search_border_color</code>, <code>search_text_color</code>,
+                      <code>search_placeholder_text_color</code>
+                    </td>
+                    <td>Toolbar search entry.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>input_fg_color</code>, <code>input_border_color</code>, <code>input_text_color</code>,
+                      <code>input_placeholder_text_color</code>, <code>input_corner_radius</code>,
+                      <code>input_border_width</code>
+                    </td>
+                    <td>Single-line form controls.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>textbox_fg_color</code>, <code>textbox_border_color</code>, <code>textbox_text_color</code>,
+                      <code>textbox_corner_radius</code>, <code>textbox_border_width</code>
+                    </td>
+                    <td>Textarea controls in forms.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>checkbox_fg_color</code>, <code>checkbox_hover_color</code>,
+                      <code>checkbox_border_color</code>, <code>checkbox_checkmark_color</code>,
+                      <code>checkbox_text_color</code>, <code>checkbox_text_color_disabled</code>,
+                      <code>checkbox_corner_radius</code>, <code>checkbox_border_width</code>
+                    </td>
+                    <td>Checkbox form controls and filter dialog checkbox.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>optionmenu_fg_color</code>, <code>optionmenu_button_color</code>,
+                      <code>optionmenu_button_hover_color</code>, <code>optionmenu_text_color</code>,
+                      <code>optionmenu_text_color_disabled</code>, <code>optionmenu_dropdown_fg_color</code>,
+                      <code>optionmenu_dropdown_hover_color</code>, <code>optionmenu_dropdown_text_color</code>,
+                      <code>optionmenu_corner_radius</code>
+                    </td>
+                    <td>Select controls and filter dialog option menus.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>dialog_fg_color</code>, <code>dialog_border_color</code>,
+                      <code>dialog_border_width</code>, <code>dialog_corner_radius</code>,
+                      <code>dialog_title_text_color</code>, <code>dialog_text_color</code>
+                    </td>
+                    <td>Popup dialogs.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>panel_fg_color</code>, <code>panel_border_color</code>, <code>panel_border_width</code>,
+                      <code>panel_corner_radius</code>, <code>panel_title_text_color</code>
+                    </td>
+                    <td>Side-panel form mode.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>menu_fg_color</code>, <code>menu_hover_color</code>, <code>menu_text_color</code>,
+                      <code>menu_hover_text_color</code>, <code>menu_disabled_text_color</code>,
+                      <code>menu_border_width</code>
+                    </td>
+                    <td>Tk menus created for sort, move, and card actions.</td>
+                  </tr>
+                  <tr>
+                    <td><code>scrollbar_button_color</code>, <code>scrollbar_button_hover_color</code></td>
+                    <td>Scrollable column bodies and dialogs.</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <code>danger_color</code>, <code>muted_text_color</code>, <code>text_color</code>,
+                      <code>overlay_text_color</code>, <code>corner_radius</code>, <code>border_width</code>
+                    </td>
+                    <td>Shared text, alert, and fallback geometry values across the widget tree.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Font slots</h3>
+            <p>
+              The constructor accepts a <code>font_config</code> mapping. Each entry is stored internally as
+              <code>{name}_font</code>. The current widgets read these font slots:
+            </p>
+            <div class="chip-row">
+              <span class="chip">toolbar_font</span>
+              <span class="chip">input_font</span>
+              <span class="chip">optionmenu_font</span>
+              <span class="chip">menu_font</span>
+              <span class="chip">button_font</span>
+              <span class="chip">secondary_button_font</span>
+              <span class="chip">checkbox_font</span>
+              <span class="chip">column_title_font</span>
+              <span class="chip">column_count_font</span>
+              <span class="chip">column_button_font</span>
+              <span class="chip">card_title_font</span>
+              <span class="chip">card_body_font</span>
+              <span class="chip">card_metadata_font</span>
+              <span class="chip">badge_font</span>
+              <span class="chip">form_title_font</span>
+              <span class="chip">form_label_font</span>
+              <span class="chip">filter_title_font</span>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-widgets">
+            <div class="section-rule"></div>
+            <h2>Lower-Level Widgets</h2>
+            <p>
+              Most applications only instantiate <code>CTkKanbanBoard</code>. The package also exports lower-level
+              widgets that the board itself uses. These are most useful when you want to extend or embed parts of the
+              board behavior in a custom composition.
+            </p>
+
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Class</th>
+                    <th>Primary purpose</th>
+                    <th>Public methods</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>CTkKanbanCard</code></td>
+                    <td>Renders one card and forwards pointer gestures to the board.</td>
+                    <td><code>set_selected()</code>, <code>set_dimmed()</code>, <code>set_dragging()</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>CTkKanbanColumn</code></td>
+                    <td>Owns a column header, scrollable card layout, no-results label, and drop indicator.</td>
+                    <td>
+                      <code>update_column_data()</code>, <code>add_card_widget()</code>,
+                      <code>place_card_widget()</code>, <code>set_card_widget_order()</code>,
+                      <code>remove_card_widget()</code>, <code>update_card_count()</code>,
+                      <code>show_drop_indicator()</code>, <code>clear_drop_indicator()</code>,
+                      <code>prepare_drag_geometry()</code>, <code>clear_drag_geometry()</code>,
+                      <code>card_index_at()</code>, <code>contains_point()</code>, <code>autoscroll()</code>,
+                      <code>show_no_results()</code>, <code>clear_no_results()</code>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><code>CTkKanbanToolbar</code></td>
+                    <td>Optional toolbar used by the board.</td>
+                    <td><code>set_search_query()</code>, <code>set_filter_active()</code>, <code>destroy()</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Advanced dialog classes</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Class</th>
+                    <th>Signature</th>
+                    <th>Use case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>ctk_kanban.dialogs.CardFormFrame</code></td>
+                    <td><span class="signature">CardFormFrame(master, fields, theme, *, title, initial_data=None, on_submit, on_close=None, **kwargs)</span></td>
+                    <td>Reusable embedded form widget. Exposes <code>focus_first_control()</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>ctk_kanban.dialogs.CardFormDialog</code></td>
+                    <td><span class="signature">CardFormDialog(master, fields, theme, *, title, initial_data=None, on_submit, on_close=None)</span></td>
+                    <td>Modal popup wrapper around <code>CardFormFrame</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>ctk_kanban.dialogs.FilterDialog</code></td>
+                    <td><span class="signature">FilterDialog(master, fields, cards, theme, *, current_filters=None, on_apply)</span></td>
+                    <td>Exact-match filter editor generated from <code>filterable</code> fields.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-helpers">
+            <div class="section-rule"></div>
+            <h2>Helper Modules</h2>
+            <p>
+              These functions are available from submodules and are useful when you want to integrate more tightly with
+              the package's data model or UI helpers.
+            </p>
+
+            <h3><code>ctk_kanban.themes</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Function or constant</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>DEFAULT_THEME</code> / <code>DEFAULT_STYLE</code></td>
+                    <td>Default style dictionary.</td>
+                  </tr>
+                  <tr>
+                    <td><code>DEFAULT_PRIORITY_COLORS</code></td>
+                    <td>Default priority chip colors for <code>Critical</code>, <code>High</code>, <code>Medium</code>, and <code>Low</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">merge_theme(theme=None)</span></td>
+                    <td>Returns a defensive copy of the default theme updated by the supplied mapping.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">merge_style(style=None)</span></td>
+                    <td>Alias for <code>merge_theme()</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>ctk_kanban.events</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Function</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">create_event(event_type, source="api", **payload)</span></td>
+                    <td>Creates a standard event dictionary with a UTC ISO timestamp and source tag.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">cancellation_reason(result)</span></td>
+                    <td>Interprets the return value of a callback and extracts a cancellation reason when present.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>ctk_kanban.validators</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Function</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">validate_column(column)</span></td>
+                    <td>Validates and normalizes one column definition.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_columns(columns)</span></td>
+                    <td>Validates an ordered column collection and rejects duplicate IDs.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_card(card, column_ids)</span></td>
+                    <td>Validates one card while preserving custom fields.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_cards(cards, column_ids)</span></td>
+                    <td>Validates a card collection and rejects duplicate IDs.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_field(field)</span></td>
+                    <td>Validates one field definition and fills default values.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_fields(fields)</span></td>
+                    <td>Validates the field list or returns the package defaults when <code>None</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_card_values(card, fields)</span></td>
+                    <td>Applies required, option, type, and custom validation rules to card values.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">validate_context_menu_items(items)</span></td>
+                    <td>Validates custom context-menu action definitions.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>ctk_kanban.utils</code></h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Function</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">clone(value)</span></td>
+                    <td>Deep-copies public data before storing it or returning it.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">display_value(value)</span></td>
+                    <td>Converts values into concise text for default rendering and form population.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">searchable_text(value)</span></td>
+                    <td>Creates case-folded search text from a value.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">parse_temporal(value)</span></td>
+                    <td>Best-effort conversion of dates and ISO strings into timezone-aware <code>datetime</code> values.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">comparable_value(value)</span></td>
+                    <td>Builds a stable sort value across temporal, numeric, string, boolean, and other types.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">parse_list_value(value)</span></td>
+                    <td>Normalizes comma-separated or iterable list-like form input to <code>list[str]</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">generate_card_id(existing_ids)</span></td>
+                    <td>Generates the next integer ID when all current IDs are integers, otherwise a UUID string.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">iter_widget_tree(widget)</span></td>
+                    <td>Yields a widget and all descendants.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-exceptions">
+            <div class="section-rule"></div>
+            <h2>Exceptions</h2>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Exception</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>KanbanError</code></td>
+                    <td>Base class for all package-specific exceptions.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanValidationError</code></td>
+                    <td>Raised when board options or public data shapes are invalid.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanDuplicateIDError</code></td>
+                    <td>Raised when a card ID, column ID, or field key is duplicated.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanUnknownColumnError</code></td>
+                    <td>Raised when a card references a missing column or a column API targets an unknown ID.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanMoveCancelledError</code></td>
+                    <td>Exported for callers that want to treat a cancelled move as an error condition.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="faq">
+            <div class="section-rule"></div>
+            <h2>FAQ and Troubleshooting</h2>
+
+            <h3>Why is a card not visible even though it exists?</h3>
+            <p>
+              Check the current search query, active filters, and <code>filter_mode</code>. In
+              <code>"hide"</code> mode, non-matching cards are removed from the visible column contents. In
+              <code>"dim"</code> mode they remain visible but muted.
+            </p>
+
+            <h3>Why did <code>add_card()</code> or <code>update_card()</code> return <code>None</code>?</h3>
+            <p>
+              A cancellable callback rejected the change. Check <code>on_card_created</code>,
+              <code>on_card_updated</code>, or <code>on_data_changed</code>, and listen to
+              <code>on_action_cancelled</code> for the reason.
+            </p>
+
+            <h3>Why did <code>delete_card()</code>, <code>move_card()</code>, or <code>move_column()</code> return <code>False</code>?</h3>
+            <p>
+              The operation was cancelled by a callback or, for delete, the user rejected a confirmation prompt.
+            </p>
+
+            <h3>Why can't I delete a column?</h3>
+            <p>
+              The public API only allows deleting empty columns. Move or delete the column's cards first.
+            </p>
+
+            <h3>Why does the overdue filter not match anything?</h3>
+            <p>
+              The built-in overdue check reads the <code>due_date</code> field and expects an ISO date or datetime
+              value. A truthy <code>completed</code> card key suppresses the overdue match.
+            </p>
+
+            <h3>How do I add my own database layer?</h3>
+            <p>
+              Use <code>on_data_changed</code> for a full-snapshot persistence hook, or combine the granular mutation
+              callbacks if you prefer operation-specific writes.
+            </p>
+          </section>
+
+          <section class="doc-section" id="limitations">
+            <div class="section-rule"></div>
+            <h2>Notes and Limitations</h2>
+            <ul>
+              <li>
+                The repository includes no built-in database adapters. Persistence is entirely callback-based.
+              </li>
+              <li>
+                The built-in UI does not provide a column creation, edit, or delete dialog. Column structure changes are
+                available through the API, not a dedicated editor.
+              </li>
+              <li>
+                The built-in form does not provide a dedicated multi-select widget. <code>multiselect</code> values are
+                entered as text and normalized to <code>list[str]</code>.
+              </li>
+              <li>
+                The allowed sort keys include <code>created_date</code> and <code>updated_date</code>, but the board
+                does not populate those keys automatically. They only matter if your card data includes them.
+              </li>
+              <li>
+                The internal filter matcher accepts both <code>column</code> and <code>status</code> as aliases for the
+                card's current column ID, but the built-in filter UI generates only the fields marked
+                <code>filterable=True</code> plus <code>overdue_only</code>.
+              </li>
+              <li>
+                Card and column IDs must be hashable. Floating-point IDs must also be finite.
+              </li>
+            </ul>
+
+            <div class="footer-note">
+              <p class="subtle">
+                Documentation scope: this page is derived strictly from the repository contents in
+                <code>ctk_kanban/</code>, <code>example_all_features.py</code>, and the test suite. Where the codebase
+                does not define a workflow, the docs intentionally stop short instead of guessing.
+              </p>
+            </div>
+          </section>
+      </main>
+    </div>
+
+    <a class="back-to-top" id="back-to-top" href="#hero">Back to top</a>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
