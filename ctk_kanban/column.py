@@ -61,42 +61,36 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.control_size = control_size
 
         color = column_data.get("color") or theme["button_fg_color"]
-        self.accent_bar = ctk.CTkFrame(
-            self,
-            height=4,
-            corner_radius=3,
-            fg_color=color,
-        )
-        self.accent_bar.pack(fill="x", padx=12, pady=(10, 0))
-
         self.header = ctk.CTkFrame(
             self,
-            height=52,
+            height=48,
             corner_radius=theme.get("column_header_corner_radius", theme["corner_radius"]),
             fg_color=theme["column_header_fg_color"],
         )
-        self.header.pack(fill="x", padx=8, pady=(4, 2))
+        self.header.pack(fill="x", padx=10, pady=(8, 4))
         self.header.grid_columnconfigure(2, weight=1)
 
-        self.color_bar = ctk.CTkFrame(self.header, width=6, height=6, corner_radius=3, fg_color=color)
         self.drag_handle = ctk.CTkLabel(
             self.header,
             text="::",
-            width=14,
+            width=12,
             text_color=theme.get("muted_text_color", theme["text_color"]),
             cursor="fleur",
-            font=ctk.CTkFont(size=9, weight="bold"),
+            font=ctk.CTkFont(size=8, weight="bold"),
         )
         if show_drag_handle:
-            self.drag_handle.grid(row=0, column=1, padx=(1, 4))
+            self.drag_handle.grid(row=0, column=0, padx=(0, 4))
             Tooltip(self.drag_handle, "Drag to reorder column")
+        self.accent_bar = ctk.CTkFrame(self.header, width=8, height=8, corner_radius=4, fg_color=color)
+        self.accent_bar.grid(row=0, column=1, padx=(0, 7))
+        self.color_bar = self.accent_bar
         self.title_label = ctk.CTkLabel(
             self.header,
             text=str(column_data["title"]),
             anchor="w",
             justify="left",
-            wraplength=max(80, width - 148),
-            font=theme.get("column_title_font") or ctk.CTkFont(size=14, weight="bold"),
+            wraplength=max(80, width - 126),
+            font=theme.get("column_title_font") or ctk.CTkFont(size=13, weight="bold"),
             text_color=theme.get("column_title_text_color", theme["text_color"]),
         )
         self.title_label.grid(row=0, column=2, sticky="ew")
@@ -118,26 +112,26 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.count_label = ctk.CTkLabel(
             self.header,
             text="0",
-            width=28,
-            height=24,
-            corner_radius=8,
+            width=26,
+            height=22,
+            corner_radius=7,
             fg_color=theme.get("column_count_fg_color", theme["secondary_button_fg_color"]),
             text_color=theme.get("column_count_text_color", theme["secondary_button_text_color"]),
             font=theme.get("column_count_font") or ctk.CTkFont(size=11, weight="bold"),
         )
         if effective_count:
-            self.count_label.grid(row=0, column=4, padx=4)
+            self.count_label.grid(row=0, column=4, padx=(5, 3))
 
         self.add_button = ctk.CTkButton(
             self.header,
             text="+",
-            width=max(30, control_size),
-            height=max(30, control_size),
-            fg_color=theme.get("column_control_fg_color", "transparent"),
+            width=max(28, control_size - 4),
+            height=max(28, control_size - 4),
+            fg_color="transparent",
             hover_color=theme.get("column_control_hover_color", theme["secondary_button_hover_color"]),
             text_color=theme.get("toolbar_button_text_color", theme["text_color"]),
-            corner_radius=9,
-            font=theme.get("column_button_font") or ctk.CTkFont(size=18),
+            corner_radius=8,
+            font=theme.get("column_button_font") or ctk.CTkFont(size=16),
             command=lambda: self._on_add(self.column_id) if self._on_add else None,
         )
         if column_data.get("show_add_button", show_add_button):
@@ -147,13 +141,13 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.menu_button = ctk.CTkButton(
             self.header,
             text="...",
-            width=max(30, control_size),
-            height=max(30, control_size),
+            width=max(28, control_size - 4),
+            height=max(28, control_size - 4),
             fg_color="transparent",
             hover_color=theme.get("column_control_hover_color", theme["secondary_button_hover_color"]),
             text_color=theme.get("toolbar_button_text_color", theme["text_color"]),
-            corner_radius=9,
-            font=theme.get("column_button_font") or ctk.CTkFont(size=14, weight="bold"),
+            corner_radius=8,
+            font=theme.get("column_button_font") or ctk.CTkFont(size=13, weight="bold"),
             command=lambda: self._on_menu(self.column_id, self.menu_button) if self._on_menu else None,
         )
         if column_data.get("show_menu", show_menu):
@@ -170,9 +164,11 @@ class CTkKanbanColumn(ctk.CTkFrame):
                 scrollbar_button_color=theme["scrollbar_button_color"],
                 scrollbar_button_hover_color=theme["scrollbar_button_hover_color"],
             )
+            if hasattr(self.body, "_scrollbar"):
+                self.body._scrollbar.configure(width=7)
         else:
             self.body = ctk.CTkFrame(self, fg_color="transparent")
-        self.body.pack(fill="both", expand=True, padx=6, pady=(2, 8))
+        self.body.pack(fill="both", expand=True, padx=7, pady=(2, 8))
 
         self.drop_indicator = ctk.CTkFrame(
             self.body,
@@ -243,7 +239,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
         self.clear_no_results()
         self.card_widgets.append(card_widget)
-        card_widget.pack(fill="x", padx=3, pady=(0, self.theme["card_gap"]))
+        card_widget.pack(fill="x", padx=2, pady=(0, self.theme["card_gap"]))
 
     def place_card_widget(self, card_widget: CTkKanbanCard, index: int) -> bool:
         """Place one card at *index* without repacking unaffected cards.
@@ -263,7 +259,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
                 return False
         self.card_widgets.insert(bounded_index, card_widget)
         card_widget.pack_forget()
-        options = {"fill": "x", "padx": 3, "pady": (0, self.theme["card_gap"])}
+        options = {"fill": "x", "padx": 2, "pady": (0, self.theme["card_gap"])}
         if bounded_index + 1 < len(self.card_widgets):
             card_widget.pack(before=self.card_widgets[bounded_index + 1], **options)
         else:
@@ -282,7 +278,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             widget.pack_forget()
         self.card_widgets = list(ordered_widgets)
         for widget in self.card_widgets:
-            widget.pack(fill="x", padx=3, pady=(0, self.theme["card_gap"]))
+            widget.pack(fill="x", padx=2, pady=(0, self.theme["card_gap"]))
         if self.card_widgets:
             self.clear_no_results()
         return True
@@ -447,7 +443,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
     def set_width(self, width: int) -> None:
         self.configure(width=width)
-        self.title_label.configure(wraplength=max(80, width - 148))
+        self.title_label.configure(wraplength=max(80, width - 126))
         if hasattr(self.body, "configure"):
             try:
                 self.body.configure(width=max(120, width - 16))

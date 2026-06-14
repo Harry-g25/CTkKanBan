@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import os
 import re
 import tarfile
 import zipfile
@@ -93,12 +92,16 @@ def write_checksums(paths: list[Path], destination: Path) -> None:
     destination.write_text("\n".join(lines) + "\n", encoding="ascii")
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dist", type=Path, default=ROOT / "dist")
-    parser.add_argument("--tag", default=os.environ.get("GITHUB_REF_NAME"))
+    parser.add_argument("--tag")
     parser.add_argument("--write-checksums", action="store_true")
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def main() -> None:
+    args = parse_args()
 
     version = project_version()
     validate_release_identity(version, args.tag)

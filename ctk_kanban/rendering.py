@@ -110,6 +110,8 @@ class RenderingMixin:
                 scrollbar_button_color=self.theme["scrollbar_button_color"],
                 scrollbar_button_hover_color=self.theme["scrollbar_button_hover_color"],
             )
+            if hasattr(self.board_area, "_scrollbar"):
+                self.board_area._scrollbar.configure(height=7)
         else:
             self.board_area = ctk.CTkFrame(self, fg_color="transparent")
         self.board_area.grid(
@@ -434,7 +436,11 @@ class RenderingMixin:
         available = int(getattr(event, "width", self.board_area.winfo_width()))
         gaps = self.column_gap * max(0, len(self._column_widgets) - 1)
         target = (available - gaps) // max(1, len(self._column_widgets))
-        target = max(self.min_column_width, min(self.max_column_width, target))
+        preferred_minimum = max(
+            self.min_column_width,
+            int(self.theme.get("responsive_preferred_min_column_width", self.min_column_width)),
+        )
+        target = max(preferred_minimum, min(self.max_column_width, target))
         for column in self._column_widgets.values():
             column.set_width(target)
             for card in column.card_widgets:

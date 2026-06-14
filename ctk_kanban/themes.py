@@ -43,8 +43,9 @@ DEFAULT_THEME: dict[str, Any] = {
     "card_title_text_color": ("#172033", "#F1F5F9"),
     "card_body_text_color": ("#475569", "#B6C2D2"),
     "card_metadata_text_color": ("#475569", "#B6C2D2"),
-    "card_metadata_label_text_color": ("#8290A3", "#7F91A8"),
+    "card_metadata_label_text_color": ("#64748B", "#93A4BA"),
     "card_metadata_fg_color": ("#F5F7FA", "#121B2A"),
+    "card_priority_fg_color": ("#F1F5F9", "#263247"),
     "card_drag_handle_color": ("#A3AFBF", "#66778F"),
     "card_accent_default_color": ("#CBD5E1", "#475569"),
     "card_accent_width": 4,
@@ -133,6 +134,7 @@ DEFAULT_THEME: dict[str, Any] = {
     "corner_radius": 10,
     "border_width": 0,
     "board_padding": 16,
+    "responsive_preferred_min_column_width": 260,
     "card_gap": 10,
     "card_min_height": 72,
 }

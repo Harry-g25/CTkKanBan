@@ -30,7 +30,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
         on_retry: Callable[[], None] | None = None,
         **kwargs: Any,
     ) -> None:
-        kwargs.setdefault("height", 86)
+        kwargs.setdefault("height", 72)
         kwargs.setdefault("fg_color", theme["toolbar_fg_color"])
         kwargs.setdefault("border_color", theme["toolbar_border_color"])
         kwargs.setdefault("border_width", theme.get("toolbar_border_width", theme["border_width"]))
@@ -47,8 +47,8 @@ class CTkKanbanToolbar(ctk.CTkFrame):
         if show_search:
             self.search_entry = ctk.CTkEntry(
                 self,
-                placeholder_text="Search title, tag, assignee...",
-                height=40,
+                placeholder_text="Search cards...",
+                height=38,
                 fg_color=theme["search_fg_color"],
                 border_color=theme["search_border_color"],
                 text_color=theme.get("search_text_color", theme["text_color"]),
@@ -60,7 +60,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 border_width=theme.get("input_border_width", theme["border_width"]),
                 font=theme.get("toolbar_font") or theme.get("input_font"),
             )
-            self.search_entry.grid(row=0, column=0, sticky="ew", padx=10, pady=9)
+            self.search_entry.grid(row=0, column=0, sticky="ew", padx=10, pady=8)
             self.search_entry.bind("<KeyRelease>", self._queue_search)
             self.search_entry.bind("<FocusIn>", lambda _event: self._set_search_focus(True), add="+")
             self.search_entry.bind("<FocusOut>", lambda _event: self._set_search_focus(False), add="+")
@@ -76,7 +76,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 font=ctk.CTkFont(size=13, weight="bold"),
                 command=on_clear_search,
             )
-            self.search_clear_button.grid(row=0, column=action_column, padx=(0, 3), pady=9)
+            self.search_clear_button.grid(row=0, column=action_column, padx=(0, 3), pady=8)
             self.search_clear_button.grid_remove()
             action_column += 1
         else:
@@ -84,7 +84,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
             self.spacer.grid(row=0, column=0, sticky="ew")
 
         button_options = {
-            "height": 36,
+            "height": 34,
             "fg_color": theme["secondary_button_fg_color"],
             "hover_color": theme["secondary_button_hover_color"],
             "text_color": theme.get("toolbar_button_text_color", theme["secondary_button_text_color"]),
@@ -99,12 +99,12 @@ class CTkKanbanToolbar(ctk.CTkFrame):
         if show_filter_button:
             self.filter_button = ctk.CTkButton(
                 self,
-                text="Filters",
-                width=82,
+                text="Filter",
+                width=74,
                 command=lambda: on_filter(self.filter_button) if on_filter else None,
                 **button_options,
             )
-            self.filter_button.grid(row=0, column=action_column, padx=3, pady=9)
+            self.filter_button.grid(row=0, column=action_column, padx=3, pady=8)
             action_column += 1
         if show_sort_button:
             self.sort_button = ctk.CTkButton(
@@ -114,7 +114,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 command=lambda: on_sort(self.sort_button) if on_sort else None,
                 **button_options,
             )
-            self.sort_button.grid(row=0, column=action_column, padx=3, pady=9)
+            self.sort_button.grid(row=0, column=action_column, padx=3, pady=8)
             action_column += 1
         if show_clear_filters_button:
             self.clear_button = ctk.CTkButton(
@@ -124,7 +124,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 command=on_clear,
                 **button_options,
             )
-            self.clear_button.grid(row=0, column=action_column, padx=3, pady=9)
+            self.clear_button.grid(row=0, column=action_column, padx=3, pady=8)
             self.clear_button.grid_remove()
             action_column += 1
         if show_add_card_button:
@@ -132,7 +132,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 self,
                 text="+ Add card",
                 width=104,
-                height=38,
+                height=36,
                 fg_color=theme["button_fg_color"],
                 hover_color=theme["button_hover_color"],
                 text_color=theme.get("toolbar_primary_button_text_color", theme["button_text_color"]),
@@ -142,17 +142,17 @@ class CTkKanbanToolbar(ctk.CTkFrame):
                 border_width=theme.get("button_border_width", theme["border_width"]),
                 command=lambda: on_add(self.add_button) if on_add else None,
             )
-            self.add_button.grid(row=0, column=action_column, padx=(5, 10), pady=9)
+            self.add_button.grid(row=0, column=action_column, padx=(5, 10), pady=8)
 
-        self.summary_frame = ctk.CTkFrame(self, height=24, fg_color="transparent")
-        self.summary_frame.grid(row=1, column=0, columnspan=action_column + 1, sticky="ew", padx=12, pady=(0, 9))
-        self.summary_frame.grid_columnconfigure(3, weight=1)
+        self.summary_frame = ctk.CTkFrame(self, height=20, fg_color="transparent")
+        self.summary_frame.grid(row=1, column=0, columnspan=action_column + 1, sticky="ew", padx=12, pady=(0, 7))
+        self.summary_frame.grid_columnconfigure(2, weight=1)
         self.result_label = ctk.CTkLabel(
             self.summary_frame,
             text="",
             text_color=theme.get("toolbar_text_color", theme["text_color"]),
             anchor="w",
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=10, weight="bold"),
         )
         self.result_label.grid(row=0, column=0, sticky="w")
         self.filter_summary_label = ctk.CTkLabel(
@@ -160,15 +160,13 @@ class CTkKanbanToolbar(ctk.CTkFrame):
             text="",
             text_color=theme.get("toolbar_summary_text_color", theme["muted_text_color"]),
         )
-        self.filter_summary_label.grid(row=0, column=1, padx=12)
         self.filter_chip_frame = ctk.CTkFrame(self.summary_frame, height=24, fg_color="transparent")
-        self.filter_chip_frame.grid(row=0, column=2, sticky="w")
+        self.filter_chip_frame.grid(row=0, column=1, sticky="w", padx=(10, 0))
         self.sort_summary_label = ctk.CTkLabel(
             self.summary_frame,
             text="Manual order",
             text_color=theme.get("toolbar_summary_text_color", theme["muted_text_color"]),
         )
-        self.sort_summary_label.grid(row=0, column=3, sticky="w", padx=(8, 0))
         self.persistence_label = ctk.CTkLabel(
             self.summary_frame,
             text="",
@@ -176,7 +174,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
             height=22,
             corner_radius=7,
         )
-        self.persistence_label.grid(row=0, column=4, padx=(8, 0))
+        self.persistence_label.grid(row=0, column=3, padx=(8, 0))
         self.retry_button = ctk.CTkButton(
             self.summary_frame,
             text="Retry",
@@ -187,7 +185,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
             text_color=theme.get("secondary_button_text_color", theme["text_color"]),
             command=on_retry,
         )
-        self.retry_button.grid(row=0, column=5, padx=(6, 0))
+        self.retry_button.grid(row=0, column=4, padx=(6, 0))
         self.retry_button.grid_remove()
 
     def _set_search_focus(self, focused: bool) -> None:
@@ -247,7 +245,7 @@ class CTkKanbanToolbar(ctk.CTkFrame):
         if hasattr(self, "filter_button"):
             effective_count = count if count is not None else (1 if active else 0)
             self.filter_button.configure(
-                text=f"Filters ({effective_count})" if active else "Filters",
+                text=f"Filter ({effective_count})" if active else "Filter",
                 fg_color=(
                     self.theme.get("filter_chip_fg_color", self.theme["secondary_button_fg_color"])
                     if active
@@ -280,11 +278,11 @@ class CTkKanbanToolbar(ctk.CTkFrame):
             ctk.CTkLabel(
                 self.filter_chip_frame,
                 text=text,
-                height=22,
-                corner_radius=7,
+                height=20,
+                corner_radius=6,
                 fg_color=self.theme.get("filter_chip_fg_color", self.theme["secondary_button_fg_color"]),
                 text_color=self.theme.get("filter_chip_text_color", self.theme["secondary_button_text_color"]),
-                font=ctk.CTkFont(size=10, weight="bold"),
+                font=ctk.CTkFont(size=9, weight="bold"),
             ).pack(side="left", padx=2)
 
     def set_sort(self, key: str, reverse: bool = False) -> None:
