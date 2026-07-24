@@ -101,9 +101,14 @@ def card_matches_filters(
 
 
 def sort_cards(cards: Iterable[dict[str, Any]], sort_key: str, reverse: bool = False) -> list[dict[str, Any]]:
+    sort_key = {
+        "created_date": "created_at",
+        "updated_date": "updated_at",
+    }.get(sort_key, sort_key)
     result = list(cards)
     key: Callable[[dict[str, Any]], Any]
     if sort_key == "manual":
+
         def key(card: dict[str, Any]) -> Any:
             return comparable_value(card.get("sort_order"))
     elif sort_key == "priority":
@@ -115,6 +120,13 @@ def sort_cards(cards: Iterable[dict[str, Any]], sort_key: str, reverse: bool = F
                 searchable_text(card.get("priority")),
             )
     else:
+
         def key(card: dict[str, Any]) -> Any:
-            return comparable_value(card.get(sort_key))
+            value = card.get(sort_key)
+            if sort_key == "created_at" and "created_at" not in card:
+                value = card.get("created_date")
+            elif sort_key == "updated_at" and "updated_at" not in card:
+                value = card.get("updated_date")
+            return comparable_value(value)
+
     return sorted(result, key=key, reverse=reverse)

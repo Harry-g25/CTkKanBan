@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: pages-${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:

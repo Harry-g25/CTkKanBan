@@ -165,7 +165,7 @@ class RenderingMixin:
             if visible_count == 0 and self.show_no_results:
                 total = card_counts[column_data["id"]]
                 column.show_no_results(
-                    "This column is empty" if total == 0 else "No cards match the current view",
+                    "No cards yet" if total == 0 else "No cards match this view",
                     allow_add=total == 0,
                 )
         self._layout_column_widgets()
@@ -184,10 +184,20 @@ class RenderingMixin:
         empty_panel.grid(row=0, column=0, padx=30, pady=30)
         ctk.CTkLabel(
             empty_panel,
+            text="▥",
+            width=42,
+            height=42,
+            corner_radius=12,
+            fg_color=self.theme["secondary_button_fg_color"],
+            text_color=self.theme["muted_text_color"],
+            font=ctk.CTkFont(size=19),
+        ).pack(padx=56, pady=(28, 8))
+        ctk.CTkLabel(
+            empty_panel,
             text="No columns yet",
             text_color=self.theme["text_color"],
             font=ctk.CTkFont(size=18, weight="bold"),
-        ).pack(padx=56, pady=(30, 4))
+        ).pack(padx=56, pady=(0, 4))
         ctk.CTkLabel(
             empty_panel,
             text="Create your first workflow column to get started.",
@@ -424,7 +434,7 @@ class RenderingMixin:
             column.clear_no_results()
         elif self.show_no_results:
             column.show_no_results(
-                "This column is empty" if total == 0 else "No cards match the current view",
+                "No cards yet" if total == 0 else "No cards match this view",
                 allow_add=total == 0,
             )
 

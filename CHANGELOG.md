@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Hardened SQLite mutation replay, schema migration, conflict snapshots, batch rollback, identifier validation, and offline queue ordering.
+- Fixed paged-board totals, offsets, undo/redo persistence, column rename handling, timestamp sorting, dirty-form replacement, and style snapshots.
+- Expanded supported CustomTkinter releases through 6.x and strengthened source/wheel validation, compatibility testing, documentation checks, and release smoke tests.
 - Added cross-platform CI for Python 3.10 through 3.14, branch coverage, dependency auditing, installed-wheel smoke tests, and package validation.
 - Added CodeQL scanning, Dependabot, workflow security linting, GitHub Pages deployment, and repository contribution templates.
 - Added trusted TestPyPI and PyPI publishing with protected environments, artifact attestations, checksums, and automated GitHub releases.

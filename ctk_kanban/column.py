@@ -61,52 +61,58 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.control_size = control_size
 
         color = column_data.get("color") or theme["button_fg_color"]
+        self.accent_bar = ctk.CTkFrame(
+            self,
+            height=int(theme.get("column_accent_height", 3)),
+            corner_radius=3,
+            fg_color=color,
+        )
+        self.accent_bar.pack(fill="x", padx=13, pady=(10, 1))
+        self.color_bar = self.accent_bar
         self.header = ctk.CTkFrame(
             self,
-            height=48,
+            height=int(theme.get("column_header_height", 46)),
             corner_radius=theme.get("column_header_corner_radius", theme["corner_radius"]),
             fg_color=theme["column_header_fg_color"],
         )
-        self.header.pack(fill="x", padx=10, pady=(8, 4))
-        self.header.grid_columnconfigure(2, weight=1)
+        self.header.pack(fill="x", padx=10, pady=(0, 4))
+        self.header.grid_columnconfigure(1, weight=1)
 
         self.drag_handle = ctk.CTkLabel(
             self.header,
-            text="::",
-            width=12,
+            text="⠿",
+            width=16,
             text_color=theme.get("muted_text_color", theme["text_color"]),
             cursor="fleur",
-            font=ctk.CTkFont(size=8, weight="bold"),
+            font=ctk.CTkFont(size=12, weight="bold"),
         )
         if show_drag_handle:
-            self.drag_handle.grid(row=0, column=0, padx=(0, 4))
-            Tooltip(self.drag_handle, "Drag to reorder column")
-        self.accent_bar = ctk.CTkFrame(self.header, width=8, height=8, corner_radius=4, fg_color=color)
-        self.accent_bar.grid(row=0, column=1, padx=(0, 7))
-        self.color_bar = self.accent_bar
+            self.drag_handle.grid(row=0, column=0, padx=(0, 5))
+            Tooltip(self.drag_handle, "Drag to reorder column", theme=self.theme)
         self.title_label = ctk.CTkLabel(
             self.header,
             text=str(column_data["title"]),
+            height=24,
             anchor="w",
             justify="left",
-            wraplength=max(80, width - 126),
-            font=theme.get("column_title_font") or ctk.CTkFont(size=13, weight="bold"),
+            wraplength=max(80, width - 140),
+            font=theme.get("column_title_font") or ctk.CTkFont(size=14, weight="bold"),
             text_color=theme.get("column_title_text_color", theme["text_color"]),
         )
-        self.title_label.grid(row=0, column=2, sticky="ew")
+        self.title_label.grid(row=0, column=1, sticky="ew")
 
         self.lock_label = ctk.CTkLabel(
             self.header,
-            text="LOCKED",
-            width=52,
-            height=22,
-            corner_radius=7,
+            text="Locked",
+            width=48,
+            height=20,
+            corner_radius=6,
             fg_color=theme.get("column_lock_fg_color", theme["secondary_button_fg_color"]),
             text_color=theme.get("column_lock_text_color", theme["muted_text_color"]),
             font=ctk.CTkFont(size=9, weight="bold"),
         )
         if column_data.get("locked"):
-            self.lock_label.grid(row=0, column=3, padx=3)
+            self.lock_label.grid(row=0, column=2, padx=3)
 
         effective_count = bool(column_data.get("show_count", show_card_count))
         self.count_label = ctk.CTkLabel(
@@ -120,41 +126,41 @@ class CTkKanbanColumn(ctk.CTkFrame):
             font=theme.get("column_count_font") or ctk.CTkFont(size=11, weight="bold"),
         )
         if effective_count:
-            self.count_label.grid(row=0, column=4, padx=(5, 3))
+            self.count_label.grid(row=0, column=3, padx=(5, 3))
 
         self.add_button = ctk.CTkButton(
             self.header,
-            text="+",
+            text="＋",
             width=max(28, control_size - 4),
             height=max(28, control_size - 4),
-            fg_color="transparent",
+            fg_color=theme.get("column_control_fg_color", "transparent"),
             hover_color=theme.get("column_control_hover_color", theme["secondary_button_hover_color"]),
             text_color=theme.get("toolbar_button_text_color", theme["text_color"]),
             corner_radius=8,
-            font=theme.get("column_button_font") or ctk.CTkFont(size=16),
+            font=theme.get("column_button_font") or ctk.CTkFont(size=15),
             command=lambda: self._on_add(self.column_id) if self._on_add else None,
         )
         if column_data.get("show_add_button", show_add_button):
-            self.add_button.grid(row=0, column=5, padx=2)
-        Tooltip(self.add_button, "Add a card")
+            self.add_button.grid(row=0, column=4, padx=2)
+        Tooltip(self.add_button, "Add a card", theme=self.theme)
 
         self.menu_button = ctk.CTkButton(
             self.header,
-            text="...",
+            text="⋯",
             width=max(28, control_size - 4),
             height=max(28, control_size - 4),
-            fg_color="transparent",
+            fg_color=theme.get("column_control_fg_color", "transparent"),
             hover_color=theme.get("column_control_hover_color", theme["secondary_button_hover_color"]),
             text_color=theme.get("toolbar_button_text_color", theme["text_color"]),
             corner_radius=8,
-            font=theme.get("column_button_font") or ctk.CTkFont(size=13, weight="bold"),
+            font=theme.get("column_button_font") or ctk.CTkFont(size=16, weight="bold"),
             command=lambda: self._on_menu(self.column_id, self.menu_button) if self._on_menu else None,
         )
         if column_data.get("show_menu", show_menu):
-            self.menu_button.grid(row=0, column=6, padx=(0, 3))
-        Tooltip(self.menu_button, "Column actions")
+            self.menu_button.grid(row=0, column=5, padx=(0, 3))
+        Tooltip(self.menu_button, "Column actions", theme=self.theme)
 
-        body_height = max(100, height - 76)
+        body_height = max(100, height - 78)
         if enable_scroll:
             self.body: Any = ctk.CTkScrollableFrame(
                 self,
@@ -168,7 +174,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
                 self.body._scrollbar.configure(width=7)
         else:
             self.body = ctk.CTkFrame(self, fg_color="transparent")
-        self.body.pack(fill="both", expand=True, padx=7, pady=(2, 8))
+        self.body.pack(fill="both", expand=True, padx=8, pady=(1, 9))
 
         self.drop_indicator = ctk.CTkFrame(
             self.body,
@@ -178,6 +184,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
         )
         self.no_results_label: ctk.CTkLabel | None = None
         self.empty_action: ctk.CTkButton | None = None
+        self.empty_state: ctk.CTkFrame | None = None
+        self.empty_icon: ctk.CTkLabel | None = None
         self._drop_indicator_index: int | None = None
         self._drag_card_midpoints: list[int] = []
         self._drag_body_bounds: tuple[int, int] | None = None
@@ -212,20 +220,20 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.color_bar.configure(fg_color=color)
         self.accent_bar.configure(fg_color=color)
         if column_data.get("locked"):
-            self.lock_label.grid(row=0, column=3, padx=3)
+            self.lock_label.grid(row=0, column=2, padx=3)
         else:
             self.lock_label.grid_remove()
 
         if column_data.get("show_count", self._default_show_card_count):
-            self.count_label.grid(row=0, column=4, padx=4)
+            self.count_label.grid(row=0, column=3, padx=4)
         else:
             self.count_label.grid_remove()
         if column_data.get("show_add_button", self._default_show_add_button):
-            self.add_button.grid(row=0, column=5, padx=2)
+            self.add_button.grid(row=0, column=4, padx=2)
         else:
             self.add_button.grid_remove()
         if column_data.get("show_menu", self._default_show_menu):
-            self.menu_button.grid(row=0, column=6, padx=(0, 3))
+            self.menu_button.grid(row=0, column=5, padx=(0, 3))
         else:
             self.menu_button.grid_remove()
 
@@ -239,7 +247,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
         self.clear_no_results()
         self.card_widgets.append(card_widget)
-        card_widget.pack(fill="x", padx=2, pady=(0, self.theme["card_gap"]))
+        card_widget.pack(fill="x", padx=1, pady=(0, self.theme["card_gap"]))
 
     def place_card_widget(self, card_widget: CTkKanbanCard, index: int) -> bool:
         """Place one card at *index* without repacking unaffected cards.
@@ -259,7 +267,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
                 return False
         self.card_widgets.insert(bounded_index, card_widget)
         card_widget.pack_forget()
-        options = {"fill": "x", "padx": 2, "pady": (0, self.theme["card_gap"])}
+        options = {"fill": "x", "padx": 1, "pady": (0, self.theme["card_gap"])}
         if bounded_index + 1 < len(self.card_widgets):
             card_widget.pack(before=self.card_widgets[bounded_index + 1], **options)
         else:
@@ -278,7 +286,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             widget.pack_forget()
         self.card_widgets = list(ordered_widgets)
         for widget in self.card_widgets:
-            widget.pack(fill="x", padx=2, pady=(0, self.theme["card_gap"]))
+            widget.pack(fill="x", padx=1, pady=(0, self.theme["card_gap"]))
         if self.card_widgets:
             self.clear_no_results()
         return True
@@ -394,39 +402,68 @@ class CTkKanbanColumn(ctk.CTkFrame):
             return True
         return False
 
-    def show_no_results(self, text: str = "No cards match the current view", *, allow_add: bool = False) -> None:
+    def show_no_results(self, text: str = "No cards match this view", *, allow_add: bool = False) -> None:
         """Display an empty-result message inside the column."""
 
-        if self.no_results_label is None:
-            self.no_results_label = ctk.CTkLabel(
+        if self.empty_state is None:
+            self.empty_state = ctk.CTkFrame(
                 self.body,
+                fg_color=self.theme.get("column_empty_fg_color", "transparent"),
+                border_color=self.theme.get(
+                    "column_empty_border_color",
+                    self.theme["column_border_color"],
+                ),
+                border_width=1,
+                corner_radius=11,
+            )
+            self.empty_icon = ctk.CTkLabel(
+                self.empty_state,
+                text="＋",
+                width=34,
+                height=34,
+                corner_radius=17,
+                fg_color=self.theme.get(
+                    "column_control_fg_color",
+                    self.theme["secondary_button_fg_color"],
+                ),
+                text_color=self.theme.get("muted_text_color", self.theme["text_color"]),
+                font=ctk.CTkFont(size=16),
+            )
+            self.empty_icon.pack(pady=(18, 7))
+            self.no_results_label = ctk.CTkLabel(
+                self.empty_state,
                 text=text,
                 justify="center",
                 wraplength=210,
                 text_color=self.theme.get("column_no_results_text_color", self.theme["overlay_text_color"]),
                 font=self.theme.get("card_metadata_font") or ctk.CTkFont(size=12),
             )
-        self.no_results_label.pack(padx=18, pady=(36, 14))
+            self.no_results_label.pack(padx=18, pady=(0, 11))
+        self.no_results_label.configure(text=text)
+        if self.empty_icon is not None:
+            self.empty_icon.configure(text="＋" if allow_add else "⌕")
+        self.empty_state.pack(fill="x", padx=8, pady=(22, 0))
         if allow_add and not self.column_data.get("locked"):
             if self.empty_action is None:
                 self.empty_action = ctk.CTkButton(
-                    self.body,
-                    text="Add first card",
-                    width=130,
-                    height=34,
-                    corner_radius=self.theme.get("button_corner_radius", 10),
-                    fg_color=self.theme["button_fg_color"],
-                    hover_color=self.theme["button_hover_color"],
-                    text_color=self.theme["button_text_color"],
+                    self.empty_state,
+                    text="Add a card",
+                    width=116,
+                    height=31,
+                    corner_radius=self.theme.get("secondary_button_corner_radius", 10),
+                    fg_color=self.theme["secondary_button_fg_color"],
+                    hover_color=self.theme["secondary_button_hover_color"],
+                    text_color=self.theme["secondary_button_text_color"],
+                    font=self.theme.get("secondary_button_font"),
                     command=lambda: self._on_add(self.column_id) if self._on_add else None,
                 )
-            self.empty_action.pack(pady=(0, 18))
+            self.empty_action.pack(pady=(0, 17))
+        elif self.empty_action is not None:
+            self.empty_action.pack_forget()
 
     def clear_no_results(self) -> None:
-        if self.no_results_label is not None:
-            self.no_results_label.pack_forget()
-        if self.empty_action is not None:
-            self.empty_action.pack_forget()
+        if self.empty_state is not None:
+            self.empty_state.pack_forget()
 
     def set_drop_valid(self, valid: bool | None) -> None:
         """Highlight valid and invalid drag targets before the pointer is released."""
@@ -443,7 +480,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
     def set_width(self, width: int) -> None:
         self.configure(width=width)
-        self.title_label.configure(wraplength=max(80, width - 126))
+        self.title_label.configure(wraplength=max(80, width - 140))
         if hasattr(self.body, "configure"):
             try:
                 self.body.configure(width=max(120, width - 16))

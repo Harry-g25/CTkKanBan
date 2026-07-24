@@ -15,3 +15,5 @@ coverage.xml
 htmlcov/
 reports/
 *.egg
+.codex
+.agents

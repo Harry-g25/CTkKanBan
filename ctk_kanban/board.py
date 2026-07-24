@@ -42,6 +42,31 @@ from .validators import (
     validate_fields,
 )
 
+_SORT_KEY_ALIASES = {
+    "created_date": "created_at",
+    "updated_date": "updated_at",
+}
+
+_HistoryEntry = tuple[dict[str, Any], dict[str, Any]]
+_HistorySnapshot = tuple[list[_HistoryEntry], list[_HistoryEntry]]
+
+
+def _canonical_sort_key(sort_key: str) -> str:
+    """Return the persisted timestamp field for legacy date sort aliases."""
+
+    return _SORT_KEY_ALIASES.get(sort_key, sort_key)
+
+
+def _card_sort_value(card: Mapping[str, Any], sort_key: str) -> Any:
+    """Read canonical timestamps while retaining legacy-record compatibility."""
+
+    value = card.get(sort_key)
+    if value is None and sort_key == "created_at":
+        return card.get("created_date")
+    if value is None and sort_key == "updated_at":
+        return card.get("updated_date")
+    return value
+
 
 def _validated_int(value: Any, name: str, *, minimum: int) -> int:
     """Validate integer constructor options without silently truncating values."""
@@ -322,14 +347,15 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             "priority",
             "due_date",
             "created_date",
+            "created_at",
             "updated_date",
+            "updated_at",
             "title",
         }
-        allowed_sort_keys.update(
-            field["key"] for field in normalized_fields if field.get("sortable")
-        )
+        allowed_sort_keys.update(field["key"] for field in normalized_fields if field.get("sortable"))
         if not isinstance(default_sort, str) or default_sort not in allowed_sort_keys:
             raise KanbanValidationError(f"Unsupported default sort key: {default_sort!r}")
+        default_sort = _canonical_sort_key(default_sort)
 
         callbacks: dict[str, KanbanCallback | None] = {
             "on_card_clicked": on_card_clicked,
@@ -369,7 +395,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         if id_factory is not None and not callable(id_factory):
             raise KanbanValidationError("id_factory must be callable or None")
         if conflict_strategy not in {"server_wins", "local_wins", "callback"}:
-            raise KanbanValidationError("conflict_strategy must be 'server_wins', 'local_wins', or 'callback'")
+            raise KanbanValidationError(
+                "conflict_strategy must be 'server_wins', 'local_wins', or 'callback'"
+            )
         if timezone_name.upper() in {"UTC", "ETC/UTC", "GMT"}:
             configured_timezone = timezone.utc
         else:
@@ -499,12 +527,19 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._persistence_state: PersistenceState = "idle"
         self._persistence_message: str | None = None
         self._mutation_locked = False
-        self._column_totals: dict[Any, int] = {}
-        self._loaded_offsets: dict[Any, int] = {}
+        self._column_totals: dict[Any, int] = {
+            column["id"]: sum(1 for card in normalized_cards if card["column"] == column["id"])
+            for column in normalized_columns
+        }
+        self._loaded_offsets: dict[Any, int] = {
+            column["id"]: sum(1 for card in normalized_cards if card["column"] == column["id"])
+            for column in normalized_columns
+        }
+        self._loaded_offsets[None] = len(normalized_cards)
         self._has_more = False
         self._poll_after_id: str | None = None
-        self._history_undo: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        self._history_redo: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        self._history_undo: list[_HistoryEntry] = []
+        self._history_redo: list[_HistoryEntry] = []
         self._history_suspended = False
         self._batch_events: list[MutationEvent] | None = None
         self._persistence: PersistenceCoordinator | None = None
@@ -547,6 +582,15 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 self.after_idle(self.refresh_from_source)
             if self.poll_interval_ms:
                 self._schedule_poll()
+
+    def destroy(self) -> None:
+        """Close persistence exactly once before the widget tears down callbacks."""
+
+        persistence = getattr(self, "_persistence", None)
+        self._persistence = None
+        if persistence is not None:
+            persistence.close()
+        super().destroy()
 
     # ------------------------------------------------------------------
     # Callback and error handling
@@ -635,7 +679,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def _record_history(self, before: dict[str, Any] | None, after: dict[str, Any] | None = None) -> None:
         if before is None or self._history_suspended or self.undo_limit == 0:
             return
-        after = self.get_state() if after is None else clone(after)
+        after = self._capture_internal_state() if after is None else clone(after)
         if before == after:
             return
         self._history_undo.append((clone(before), after))
@@ -649,20 +693,70 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def can_redo(self) -> bool:
         return bool(self._history_redo)
 
+    def _capture_internal_state(self) -> dict[str, Any]:
+        """Capture board state together with paging metadata for safe rollback."""
+
+        return {
+            **self.get_state(),
+            "__column_totals": clone(self._column_totals),
+            "__loaded_offsets": clone(self._loaded_offsets),
+            "__has_more": self._has_more,
+        }
+
+    def _restore_internal_state(self, state: Mapping[str, Any]) -> None:
+        """Restore a state captured by :meth:`_capture_internal_state`."""
+
+        self.set_state(state)
+        self._restore_paging_metadata(state)
+
+    def _capture_history_snapshot(self) -> _HistorySnapshot:
+        """Capture both history stacks before an asynchronous undo or redo."""
+
+        return (clone(self._history_undo), clone(self._history_redo))
+
+    def _restore_history_snapshot(self, snapshot: _HistorySnapshot) -> None:
+        """Restore history after durable undo/redo persistence is rejected."""
+
+        self._history_undo = clone(snapshot[0])
+        self._history_redo = clone(snapshot[1])
+
+    def _restore_paging_metadata(self, state: Mapping[str, Any]) -> None:
+        """Restore paging metadata after a public bulk setter recomputes it."""
+
+        raw_totals = state.get("__column_totals")
+        if isinstance(raw_totals, Mapping):
+            self._column_totals = {key: max(0, int(value)) for key, value in raw_totals.items()}
+        raw_offsets = state.get("__loaded_offsets")
+        if isinstance(raw_offsets, Mapping):
+            self._loaded_offsets = {key: max(0, int(value)) for key, value in raw_offsets.items()}
+        self._has_more = bool(state.get("__has_more", self._has_more))
+        self._sync_paging_metadata_view()
+
+    def _clear_history(self) -> None:
+        """Discard snapshots that no longer describe the currently loaded page."""
+
+        self._history_undo.clear()
+        self._history_redo.clear()
+
     def undo(self) -> bool:
         """Restore the state before the latest accepted mutation."""
 
         self._ensure_mutation_allowed()
         if not self._history_undo:
             return False
+        history_before = self._capture_history_snapshot()
         before, after = self._history_undo.pop()
         self._history_suspended = True
         try:
-            self.set_state(before)
+            self._restore_internal_state(before)
         finally:
             self._history_suspended = False
         self._history_redo.append((before, after))
-        self._persist_state_replacement("undo", rollback_state=after)
+        self._persist_state_replacement(
+            "undo",
+            rollback_state=after,
+            rollback_history=history_before,
+        )
         return True
 
     def redo(self) -> bool:
@@ -671,24 +765,192 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._ensure_mutation_allowed()
         if not self._history_redo:
             return False
+        history_before = self._capture_history_snapshot()
         before, after = self._history_redo.pop()
         self._history_suspended = True
         try:
-            self.set_state(after)
+            self._restore_internal_state(after)
         finally:
             self._history_suspended = False
         self._history_undo.append((before, after))
-        self._persist_state_replacement("redo", rollback_state=before)
+        self._persist_state_replacement(
+            "redo",
+            rollback_state=before,
+            rollback_history=history_before,
+        )
         return True
 
-    def _persist_state_replacement(self, source: str, rollback_state: dict[str, Any]) -> None:
+    def _persist_state_replacement(
+        self,
+        source: str,
+        rollback_state: dict[str, Any],
+        rollback_history: _HistorySnapshot,
+    ) -> None:
+        if self._persistence is not None:
+            events = self._state_delta_events(rollback_state, self._capture_internal_state(), source=source)
+            if not events:
+                return
+            self._set_persistence_status("saving", f"Saving {source}...")
+
+            def succeeded(result: MutationResult) -> None:
+                self._board_revision = result.board_revision or self._board_revision
+                self._apply_canonical_result({}, result)
+
+            def failed(error: Exception | MutationResult) -> None:
+                self._history_suspended = True
+                try:
+                    if isinstance(error, MutationResult) and error.conflict and error.conflict.server_data:
+                        self.set_data(error.conflict.server_data)
+                        self._board_revision = error.conflict.actual_revision
+                        self._clear_history()
+                        self.refresh_from_source()
+                    else:
+                        self._restore_internal_state(rollback_state)
+                        self._restore_history_snapshot(rollback_history)
+                finally:
+                    self._history_suspended = False
+                reason = error.reason if isinstance(error, MutationResult) else str(error)
+                self._action_cancelled(
+                    create_event(f"{source}_failed", source=source),
+                    reason or f"Unable to save {source}",
+                )
+
+            self._persistence.submit_batch(events, on_success=succeeded, on_failure=failed)
+            return
         event = create_event(
             "board_replaced",
             source=source,
             columns=self.get_columns(),
             cards=self.get_all_cards(),
         )
-        self._invoke_data_changed(event, rollback_state=rollback_state, record_history=False)
+        reason = self._invoke_data_changed(event, rollback_state=rollback_state, record_history=False)
+        if reason:
+            self._history_suspended = True
+            try:
+                self._restore_internal_state(rollback_state)
+                self._restore_history_snapshot(rollback_history)
+            finally:
+                self._history_suspended = False
+            self._action_cancelled(event, reason)
+
+    def _state_delta_events(
+        self,
+        previous: Mapping[str, Any],
+        current: Mapping[str, Any],
+        *,
+        source: str,
+    ) -> list[MutationEvent]:
+        """Describe a state transition without replacing unseen server records."""
+
+        previous_columns = [dict(column) for column in previous.get("columns", [])]
+        current_columns = [dict(column) for column in current.get("columns", [])]
+        previous_cards = [dict(card) for card in previous.get("cards", [])]
+        current_cards = [dict(card) for card in current.get("cards", [])]
+        previous_columns_by_id = {column["id"]: column for column in previous_columns}
+        current_columns_by_id = {column["id"]: column for column in current_columns}
+        previous_cards_by_id = {card["id"]: card for card in previous_cards}
+        current_cards_by_id = {card["id"]: card for card in current_cards}
+        transaction_id = str(uuid4())
+        events: list[MutationEvent] = []
+        renamed_columns: dict[Any, Any] = {}
+
+        for old_column, new_column in zip(previous_columns, current_columns):
+            old_id = old_column["id"]
+            new_id = new_column["id"]
+            if (
+                old_id != new_id
+                and old_id not in current_columns_by_id
+                and new_id not in previous_columns_by_id
+            ):
+                renamed_columns[old_id] = new_id
+
+        def append(event_type: str, **payload: Any) -> None:
+            action = create_event(event_type, source=source, transaction_id=transaction_id, **payload)
+            events.append(
+                MutationEvent.from_mapping(
+                    {
+                        **action,
+                        "payload": self._operation_payload(action),
+                        "board_id": self.board_id,
+                        "actor_id": self.actor_id,
+                        "expected_revision": self._board_revision,
+                    }
+                )
+            )
+
+        for old_id, new_id in renamed_columns.items():
+            old = previous_columns_by_id[old_id]
+            column = current_columns_by_id[new_id]
+            append(
+                "column_updated",
+                column_id=new_id,
+                old_column_id=old_id,
+                column_data=clone(column),
+                old_column_data=clone(old),
+                changed_fields={
+                    key: clone(value) for key, value in column.items() if old.get(key) != value
+                },
+            )
+        renamed_targets = set(renamed_columns.values())
+        for index, column in enumerate(current_columns):
+            if column["id"] not in previous_columns_by_id and column["id"] not in renamed_targets:
+                append("column_created", column_id=column["id"], column_data=clone(column), index=index)
+        for column_id, column in current_columns_by_id.items():
+            old = previous_columns_by_id.get(column_id)
+            if old is not None and old != column:
+                append(
+                    "column_updated",
+                    column_id=column_id,
+                    old_column_id=column_id,
+                    column_data=clone(column),
+                    old_column_data=clone(old),
+                    changed_fields={
+                        key: clone(value) for key, value in column.items() if old.get(key) != value
+                    },
+                )
+
+        for card_id, old in previous_cards_by_id.items():
+            if card_id not in current_cards_by_id:
+                append(
+                    "card_deleted",
+                    card_id=card_id,
+                    card_data=clone(old),
+                    old_card_data=clone(old),
+                )
+        for card_id, card in current_cards_by_id.items():
+            old = previous_cards_by_id.get(card_id)
+            if old is None:
+                append(
+                    "card_created",
+                    card_id=card_id,
+                    card_data=clone(card),
+                    temporary_id=False,
+                )
+            elif old != card:
+                renamed_old = clone(old)
+                old_column = renamed_old.get("column")
+                if old_column in renamed_columns:
+                    renamed_old["column"] = renamed_columns[old_column]
+                if renamed_old == card:
+                    continue
+                append(
+                    "card_updated",
+                    card_id=card_id,
+                    old_card_id=card_id,
+                    card_data=clone(card),
+                    old_card_data=clone(old),
+                    changed_fields={
+                        key: clone(value) for key, value in card.items() if old.get(key) != value
+                    },
+                )
+
+        for column_id, old in previous_columns_by_id.items():
+            if column_id not in current_columns_by_id and column_id not in renamed_columns:
+                append("column_deleted", column_id=column_id, column_data=clone(old))
+        previous_order = [renamed_columns.get(column["id"], column["id"]) for column in previous_columns]
+        if previous_order != [column["id"] for column in current_columns]:
+            append("column_reordered", columns=clone(current_columns))
+        return events
 
     def _invoke_callback(self, name: str, event: dict[str, Any], *, cancellable: bool = False) -> str | None:
         callback = self._callbacks.get(name)
@@ -803,7 +1065,10 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 if isinstance(error, MutationResult) and error.conflict is not None:
                     self._handle_conflict(event, error, rollback_state)
                     return
-                if isinstance(error, (ConnectionError, TimeoutError, OSError)) and not self._persistence.online:
+                if (
+                    isinstance(error, (ConnectionError, TimeoutError, OSError))
+                    and not self._persistence.online
+                ):
                     self.logger.warning(
                         "Kanban mutation queued offline",
                         extra={"kanban_event_id": event.metadata.event_id, "kanban_board_id": self.board_id},
@@ -812,7 +1077,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 if rollback_state is not None:
                     self._history_suspended = True
                     try:
-                        self.set_state(rollback_state)
+                        self._restore_internal_state(rollback_state)
                     finally:
                         self._history_suspended = False
                 reason = error.reason if isinstance(error, MutationResult) else str(error)
@@ -927,18 +1192,36 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 self._apply_canonical_result(event.payload, accepted)
                 self._record_history(rollback_state)
 
+            def local_failed(error: Exception | MutationResult) -> None:
+                if (
+                    isinstance(error, (ConnectionError, TimeoutError, OSError))
+                    and self._persistence is not None
+                    and not self._persistence.online
+                ):
+                    return
+                if rollback_state is not None:
+                    self._history_suspended = True
+                    try:
+                        self._restore_internal_state(rollback_state)
+                    finally:
+                        self._history_suspended = False
+                reason = error.reason if isinstance(error, MutationResult) else str(error)
+                self._action_cancelled(event.to_dict(), reason or "Save failed")
+
             self._persistence.submit(
                 event,
                 on_success=local_saved,
-                on_failure=lambda error: self._action_cancelled(event.to_dict(), str(error)),
+                on_failure=local_failed,
             )
             return
         server_data = conflict.server_data
         if server_data is not None:
             self.set_data(server_data)
             self._board_revision = conflict.actual_revision
+            self._clear_history()
+            self.refresh_from_source()
         elif rollback_state is not None:
-            self.set_state(rollback_state)
+            self._restore_internal_state(rollback_state)
         self._action_cancelled(event.to_dict(), conflict.message)
 
     # ------------------------------------------------------------------
@@ -948,7 +1231,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Validate, add, and emit ``on_card_created`` for a new card."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         candidate = dict(card_data)
         temporary_id = False
         if candidate.get("id") in (None, ""):
@@ -968,10 +1251,25 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         if card["id"] in self._cards:
             raise KanbanDuplicateIDError(f"Duplicate card ID: {card['id']!r}")
         self._check_column_accepts(card["column"])
+        column_was_partial = self._column_has_partial_card_data(card["column"])
+        global_was_partial = self._has_more
         if card.get("sort_order") is None:
             card["sort_order"] = self._next_sort_order(card["column"])
 
         self._cards[card["id"]] = card
+        self._adjust_column_total(card["column"], 1)
+        matches_query = self._matches_active_server_query(card)
+        column_enters_prefix = matches_query and (
+            not column_was_partial or self._offset_contains_card(card["id"], card["column"])
+        )
+        global_enters_prefix = matches_query and (
+            not global_was_partial or self._offset_contains_card(card["id"], None)
+        )
+        self._adjust_loaded_offsets(
+            card["column"],
+            int(column_enters_prefix),
+            int(global_enters_prefix),
+        )
         event = create_event(
             "card_created",
             source=source,
@@ -985,6 +1283,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             del self._cards[card["id"]]
+            self._restore_paging_metadata(rollback_state)
             self._action_cancelled(event, reason)
             return None
         if self.incremental_card_rendering:
@@ -1003,7 +1302,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Merge updates into a card and restore it if the callback cancels."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         if not isinstance(new_data, Mapping):
             raise KanbanValidationError("Card update data must be a mapping")
         old = clone(self._require_card(card_id))
@@ -1020,6 +1319,13 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             self._check_column_accepts(updated["column"])
             if "sort_order" not in new_data:
                 updated["sort_order"] = self._next_sort_order(updated["column"])
+        old_column_was_partial = self._column_has_partial_card_data(old["column"])
+        new_column_was_partial = self._column_has_partial_card_data(updated["column"])
+        global_was_partial = self._has_more
+        old_column_in_prefix = not old_column_was_partial or self._offset_contains_card(
+            card_id, old["column"]
+        )
+        old_global_in_prefix = not global_was_partial or self._offset_contains_card(card_id, None)
         affected_columns = {old["column"], updated["column"]}
         if updated["column"] == old["column"]:
             snapshot = {card_id: old}
@@ -1031,6 +1337,44 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             }
         del self._cards[card_id]
         self._cards[new_id] = updated
+        if updated["column"] != old["column"]:
+            self._adjust_column_total(old["column"], -1)
+            self._adjust_column_total(updated["column"], 1)
+        same_column = updated["column"] == old["column"]
+        column_sort = self._column_sorts.get(updated["column"], self._global_sort)
+        if same_column and not self._sort_position_changed(old, updated, column_sort):
+            new_column_in_prefix = old_column_in_prefix
+        else:
+            prospective_column_offset = self._loaded_offsets.get(updated["column"], 0)
+            if same_column and old_column_in_prefix:
+                prospective_column_offset -= 1
+            new_column_in_prefix = not new_column_was_partial or self._offset_contains_card(
+                new_id,
+                updated["column"],
+                offset=max(0, prospective_column_offset),
+            )
+        if same_column and not self._sort_position_changed(old, updated, self._global_sort):
+            new_global_in_prefix = old_global_in_prefix
+        else:
+            prospective_global_offset = self._loaded_offsets.get(None, 0) - int(old_global_in_prefix)
+            new_global_in_prefix = not global_was_partial or self._offset_contains_card(
+                new_id,
+                None,
+                offset=max(0, prospective_global_offset),
+            )
+        if same_column:
+            self._adjust_loaded_offsets(
+                updated["column"],
+                int(new_column_in_prefix) - int(old_column_in_prefix),
+                int(new_global_in_prefix) - int(old_global_in_prefix),
+            )
+        else:
+            self._adjust_loaded_offsets(old["column"], -int(old_column_in_prefix), 0)
+            self._adjust_loaded_offsets(
+                updated["column"],
+                int(new_column_in_prefix),
+                int(new_global_in_prefix) - int(old_global_in_prefix),
+            )
 
         event = create_event(
             "card_updated",
@@ -1055,6 +1399,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                     if current_id in {card_id, new_id} or current["column"] in affected_columns:
                         del self._cards[current_id]
             self._cards.update(snapshot)
+            self._restore_paging_metadata(rollback_state)
             self._action_cancelled(event, reason)
             return None
         if self._selected_card_id == card_id:
@@ -1071,15 +1416,30 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Delete a card, unless ``on_card_deleted`` rejects the operation."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         old = clone(self._require_card(card_id))
         column_id = old["column"]
+        column_was_partial = self._column_has_partial_card_data(column_id)
+        global_was_partial = self._has_more
+        matches_query = self._matches_active_server_query(old)
+        column_in_prefix = matches_query and (
+            not column_was_partial or self._offset_contains_card(card_id, column_id)
+        )
+        global_in_prefix = matches_query and (
+            not global_was_partial or self._offset_contains_card(card_id, None)
+        )
         snapshot = {
             current_id: clone(current)
             for current_id, current in self._cards.items()
             if current["column"] == column_id
         }
         del self._cards[card_id]
+        self._adjust_column_total(column_id, -1)
+        self._adjust_loaded_offsets(
+            column_id,
+            -int(column_in_prefix),
+            -int(global_in_prefix),
+        )
         event = create_event(
             "card_deleted",
             source=source,
@@ -1097,6 +1457,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 if current["column"] == column_id:
                     del self._cards[current_id]
             self._cards.update(snapshot)
+            self._restore_paging_metadata(rollback_state)
             self._action_cancelled(event, reason)
             return False
         if self._selected_card_id == card_id:
@@ -1127,7 +1488,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Move or reorder a card and persist sequential ``sort_order`` values."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         try:
             target_exists = target_column in self._column_ids()
         except TypeError as exc:
@@ -1137,6 +1498,13 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         card = self._require_card(card_id)
         old_card = clone(card)
         old_column = card["column"]
+        old_column_was_partial = self._column_has_partial_card_data(old_column)
+        target_column_was_partial = self._column_has_partial_card_data(target_column)
+        global_was_partial = self._has_more
+        old_column_in_prefix = not old_column_was_partial or self._offset_contains_card(
+            card_id, old_column
+        )
+        old_global_in_prefix = not global_was_partial or self._offset_contains_card(card_id, None)
         source_cards = self._manual_cards_for_column(old_column)
         old_index = next(index for index, item in enumerate(source_cards) if item["id"] == card_id)
         old_sort_order = card.get("sort_order")
@@ -1166,8 +1534,41 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         snapshot = {item["id"]: clone(item) for item in affected_cards}
         card["column"] = target_column
         card["updated_at"] = datetime.now(self.timezone).isoformat()
+        if target_column != old_column:
+            self._adjust_column_total(old_column, -1)
+            self._adjust_column_total(target_column, 1)
         target_cards.insert(insertion_index, card)
         card["sort_order"] = self._rank_for_insertion(target_cards, insertion_index)
+        prospective_target_offset = self._loaded_offsets.get(target_column, 0)
+        if target_column == old_column and old_column_in_prefix:
+            prospective_target_offset -= 1
+        target_column_in_prefix = (
+            not target_column_was_partial
+            or self._offset_contains_card(
+                card_id,
+                target_column,
+                offset=max(0, prospective_target_offset),
+            )
+        )
+        prospective_global_offset = self._loaded_offsets.get(None, 0) - int(old_global_in_prefix)
+        target_global_in_prefix = not global_was_partial or self._offset_contains_card(
+            card_id,
+            None,
+            offset=max(0, prospective_global_offset),
+        )
+        if target_column == old_column:
+            self._adjust_loaded_offsets(
+                target_column,
+                int(target_column_in_prefix) - int(old_column_in_prefix),
+                int(target_global_in_prefix) - int(old_global_in_prefix),
+            )
+        else:
+            self._adjust_loaded_offsets(old_column, -int(old_column_in_prefix), 0)
+            self._adjust_loaded_offsets(
+                target_column,
+                int(target_column_in_prefix),
+                int(target_global_in_prefix) - int(old_global_in_prefix),
+            )
 
         event_type = "card_reordered" if old_column == target_column else "card_moved"
         callback_name = "on_card_reordered" if old_column == target_column else "on_card_moved"
@@ -1192,6 +1593,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         if reason:
             for snapshot_id, snapshot_card in snapshot.items():
                 self._cards[snapshot_id] = snapshot_card
+            self._restore_paging_metadata(rollback_state)
             self._action_cancelled(event, reason)
             return False
         if self.incremental_card_rendering:
@@ -1215,7 +1617,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._ensure_mutation_allowed()
         if self._batch_events is not None:
             raise KanbanValidationError("Nested batches are not supported")
-        before = self.get_state()
+        before = self._capture_internal_state()
         self._batch_events = []
         dispatch: dict[str, Callable[..., Any]] = {
             "add_card": self.add_card,
@@ -1227,6 +1629,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             "delete_column": self.delete_column,
             "move_column": self.move_column,
         }
+        rejected = False
         try:
             for raw_operation in operations:
                 operation = dict(raw_operation)
@@ -1235,17 +1638,27 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 if callback is None:
                     raise KanbanValidationError(f"Unsupported batch operation: {name!r}")
                 operation.setdefault("source", source)
-                callback(**operation)
+                outcome = callback(**operation)
+                if outcome is None or outcome is False:
+                    rejected = True
+                    break
             events = self._batch_events
         except Exception:
             self._history_suspended = True
             try:
-                self.set_state(before)
+                self._restore_internal_state(before)
             finally:
                 self._history_suspended = False
             raise
         finally:
             self._batch_events = None
+        if rejected:
+            self._history_suspended = True
+            try:
+                self._restore_internal_state(before)
+            finally:
+                self._history_suspended = False
+            return False
         if not events:
             return True
 
@@ -1263,8 +1676,10 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                     if isinstance(error, MutationResult) and error.conflict and error.conflict.server_data:
                         self.set_data(error.conflict.server_data)
                         self._board_revision = error.conflict.actual_revision
+                        self._clear_history()
+                        self.refresh_from_source()
                     else:
-                        self.set_state(before)
+                        self._restore_internal_state(before)
                 finally:
                     self._history_suspended = False
                 reason = error.reason if isinstance(error, MutationResult) else str(error)
@@ -1285,7 +1700,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         )
         reason = self._invoke_callback("on_data_changed", event, cancellable=True)
         if reason:
-            self.set_state(before)
+            self._restore_internal_state(before)
             self._action_cancelled(event, reason)
             return False
         self._record_history(before)
@@ -1319,11 +1734,13 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Append a column and emit a cancellable creation event."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         column = validate_column(column_data)
         if column["id"] in self._column_ids():
             raise KanbanDuplicateIDError(f"Duplicate column ID: {column['id']!r}")
         self._columns_data.append(column)
+        self._column_totals[column["id"]] = 0
+        self._loaded_offsets[column["id"]] = 0
         event = create_event(
             "column_created",
             source=source,
@@ -1336,6 +1753,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data.pop()
+            self._column_totals.pop(column["id"], None)
+            self._loaded_offsets.pop(column["id"], None)
             self._action_cancelled(event, reason)
             return None
         if self.incremental_column_rendering:
@@ -1354,7 +1773,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Update a column, including atomically renaming its ID."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         if not isinstance(new_data, Mapping):
             raise KanbanValidationError("Column update data must be a mapping")
         index = self._column_index(column_id)
@@ -1373,6 +1792,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                     card["column"] = new_id
             if column_id in self._column_sorts:
                 self._column_sorts[new_id] = self._column_sorts.pop(column_id)
+            self._column_totals[new_id] = self._column_totals.pop(column_id, 0)
+            self._loaded_offsets[new_id] = self._loaded_offsets.pop(column_id, 0)
 
         event = create_event(
             "column_updated",
@@ -1393,6 +1814,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 self._cards[affected_card_id]["column"] = column_id
             if new_id != column_id and new_id in self._column_sorts:
                 self._column_sorts[column_id] = self._column_sorts.pop(new_id)
+            if new_id != column_id:
+                self._column_totals[column_id] = self._column_totals.pop(new_id, 0)
+                self._loaded_offsets[column_id] = self._loaded_offsets.pop(new_id, 0)
             self._action_cancelled(event, reason)
             return None
         if updated == old and new_id == column_id:
@@ -1407,11 +1831,13 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Delete an empty column. Cards must be moved or deleted first."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         index = self._column_index(column_id)
-        if any(card["column"] == column_id for card in self._cards.values()):
+        if self._effective_column_total(column_id) > 0:
             raise KanbanValidationError("Cannot delete a column while it still contains cards")
         column = self._columns_data.pop(index)
+        column_total = self._column_totals.pop(column_id, 0)
+        loaded_offset = self._loaded_offsets.pop(column_id, 0)
         event = create_event(
             "column_deleted",
             source=source,
@@ -1424,6 +1850,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             reason = self._invoke_data_changed(event, rollback_state=rollback_state)
         if reason:
             self._columns_data.insert(index, column)
+            self._column_totals[column_id] = column_total
+            self._loaded_offsets[column_id] = loaded_offset
             self._action_cancelled(event, reason)
             return False
         self._column_sorts.pop(column_id, None)
@@ -1437,7 +1865,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Move a column in the board's ordered column list."""
 
         self._ensure_mutation_allowed()
-        rollback_state = self.get_state()
+        rollback_state = self._capture_internal_state()
         old_index = self._column_index(column_id)
         new_index = max(
             0,
@@ -1489,12 +1917,11 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def get_style(self) -> dict[str, Any]:
         """Return the board's complete style snapshot, including nested maps."""
 
-        return {
-            **dict(self.theme),
-            "priority_colors": clone(self.priority_colors),
-            "tag_colors": clone(self.tag_colors),
-            "font_config": dict(self.font_config),
-        }
+        snapshot = merge_theme(self.theme)
+        snapshot["priority_colors"] = clone(self.priority_colors)
+        snapshot["tag_colors"] = clone(self.tag_colors)
+        snapshot["font_config"] = dict(self.font_config)
+        return snapshot
 
     def get_data(self) -> BoardData:
         """Return mutable board data without view-specific UI state."""
@@ -1525,10 +1952,18 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
 
         def loaded(result: Any) -> None:
             self._board_revision = result.board_revision
-            self._column_totals = clone(result.column_totals)
-            self._has_more = bool(result.has_more)
-            self._loaded_offsets = {column["id"]: 0 for column in result.columns}
+            totals = clone(result.column_totals)
+            offsets = {
+                column["id"]: sum(1 for card in result.cards if card["column"] == column["id"])
+                for column in result.columns
+            }
+            offsets[None] = len(result.cards)
             self.set_data({"columns": result.columns, "cards": result.cards})
+            self._column_totals = totals
+            self._loaded_offsets = offsets
+            self._has_more = bool(result.has_more)
+            self._sync_paging_metadata_view()
+            self._clear_history()
 
         def failed(exc: Exception) -> None:
             self._emit_error(exc, create_event("board_load_failed", source="data_source"))
@@ -1544,16 +1979,32 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
 
         def loaded(page: Any) -> None:
             self._board_revision = page.board_revision or self._board_revision
-            self._column_totals = clone(page.column_totals)
-            self._has_more = bool(page.has_more)
+            totals = clone(self._column_totals)
+            if query.column_id is None:
+                totals = clone(page.column_totals)
+            else:
+                totals.update(clone(page.column_totals))
+            offsets = clone(self._loaded_offsets)
             if append:
                 merged = {card["id"]: card for card in self.get_all_cards()}
                 merged.update({card["id"]: card for card in page.cards})
                 self.set_cards(merged.values())
+            elif query.column_id is not None:
+                retained = [card for card in self.get_all_cards() if card["column"] != query.column_id]
+                self.set_cards([*retained, *page.cards])
             else:
                 self.set_cards(page.cards)
-            if query.column_id is not None:
-                self._loaded_offsets[query.column_id] = query.offset + len(page.cards)
+            if query.column_id is None:
+                offsets = {
+                    column["id"]: sum(1 for card in self._cards.values() if card["column"] == column["id"])
+                    for column in self._columns_data
+                }
+            offsets[query.column_id] = query.offset + len(page.cards)
+            self._column_totals = totals
+            self._loaded_offsets = offsets
+            self._has_more = bool(page.has_more)
+            self._sync_paging_metadata_view()
+            self._clear_history()
 
         def failed(exc: Exception) -> None:
             self._emit_error(exc, create_event("card_query_failed", source="data_source"))
@@ -1564,12 +2015,17 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def load_next_page(self, column_id: Any | None = None) -> bool:
         """Append the next lazy page, optionally for one column."""
 
-        offset = self._loaded_offsets.get(column_id, len(self._cards))
+        fallback = (
+            len(self._cards)
+            if column_id is None
+            else sum(1 for card in self._cards.values() if card["column"] == column_id)
+        )
+        offset = self._loaded_offsets.get(column_id, fallback)
         query = CardQuery(
             column_id=column_id,
             search=self._search_query,
             filters=clone(self._filters),
-            sort_key=(self._column_sorts.get(column_id, self._global_sort))[0],
+            sort_key=_canonical_sort_key((self._column_sorts.get(column_id, self._global_sort))[0]),
             reverse=(self._column_sorts.get(column_id, self._global_sort))[1],
             offset=offset,
             limit=self.page_size,
@@ -1633,11 +2089,14 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         for card in normalized:
             validate_card_values(card, self.fields)
         if self.incremental_card_rendering:
-            self._replace_cards_incrementally(normalized)
+            self._replace_cards_incrementally(normalized, sync_view=False)
+            self._recompute_local_paging_metadata()
+            self._sync_card_view()
         else:
             self._cards = {card["id"]: card for card in normalized}
             if self._selected_card_id not in self._cards:
                 self._selected_card_id = None
+            self._recompute_local_paging_metadata()
             self.refresh()
 
     def set_columns(self, columns: Iterable[Mapping[str, Any]]) -> None:
@@ -1647,11 +2106,14 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         ids = {column["id"] for column in normalized}
         unknown = {card["column"] for card in self._cards.values()} - ids
         if unknown:
-            raise KanbanUnknownColumnError(f"Existing cards reference removed columns: {sorted(map(str, unknown))}")
+            raise KanbanUnknownColumnError(
+                f"Existing cards reference removed columns: {sorted(map(str, unknown))}"
+            )
         old_by_id = {column["id"]: column for column in self._columns_data}
         old_ids = set(old_by_id)
         self._columns_data = normalized
         self._column_sorts = {key: value for key, value in self._column_sorts.items() if key in ids}
+        self._recompute_local_paging_metadata()
         if self.incremental_column_rendering and ids == old_ids:
             changed_ids = [column["id"] for column in normalized if column != old_by_id[column["id"]]]
             for changed_id in changed_ids:
@@ -1665,6 +2127,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
 
         self._cards.clear()
         self._selected_card_id = None
+        self._recompute_local_paging_metadata()
         self._clear_card_widgets()
 
     def get_state(self) -> dict[str, Any]:
@@ -1726,9 +2189,12 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             self.toolbar.set_search_query(self._search_query)
             self.toolbar.set_filter_active(bool(self._filters))
         if columns_unchanged and self.incremental_card_rendering:
-            self._replace_cards_incrementally(cards)
+            self._replace_cards_incrementally(cards, sync_view=False)
+            self._recompute_local_paging_metadata()
+            self._sync_card_view()
         else:
             self._cards = {card["id"]: card for card in cards}
+            self._recompute_local_paging_metadata()
             self.refresh()
 
     # ------------------------------------------------------------------
@@ -1741,7 +2207,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             return False
         old_query = self._search_query
         self._search_query = str(query).strip()
-        event = create_event("search_changed", source="toolbar", query=self._search_query, old_query=old_query)
+        event = create_event(
+            "search_changed", source="toolbar", query=self._search_query, old_query=old_query
+        )
         reason = self._invoke_callback("on_search_changed", event, cancellable=True)
         if reason:
             self._search_query = old_query
@@ -1835,6 +2303,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             return False
         if not isinstance(sort_key, str) or sort_key not in self._allowed_sort_keys():
             raise KanbanValidationError(f"Unsupported sort key: {sort_key!r}")
+        sort_key = _canonical_sort_key(sort_key)
         if not isinstance(reverse, bool):
             raise KanbanValidationError("reverse must be a boolean")
         if column_id is not None:
@@ -1929,7 +2398,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     ) -> None:
         """Open a generated card form using the configured presentation mode."""
 
-        self._close_card_form()
+        if not self._request_close_card_form():
+            return
         if self.card_form_mode == "popup":
             dialog: CardFormDialog
             dialog = CardFormDialog(
@@ -1971,6 +2441,19 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         )
         panel.after_idle(panel.focus_first_control)
 
+    def _request_close_card_form(self) -> bool:
+        """Ask the active form to close and report whether it accepted."""
+
+        panel = self._card_form_panel
+        if panel is not None:
+            panel._close()
+            return self._card_form_panel is not panel
+        dialog = self._card_form_dialog
+        if dialog is not None:
+            dialog._close()
+            return self._card_form_dialog is not dialog
+        return True
+
     def _close_card_form(self) -> None:
         """Close the active embedded or popup card form, if one exists."""
 
@@ -1995,7 +2478,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         """Open the generated add form, or notify an external form callback."""
 
         if column_id is None:
-            column_id = next((column["id"] for column in self._columns_data if not column.get("locked")), None)
+            column_id = next(
+                (column["id"] for column in self._columns_data if not column.get("locked")), None
+            )
         if column_id is None:
             return
         self._column_index(column_id)
@@ -2120,8 +2605,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             ("Manual order", "manual"),
             ("Priority", "priority"),
             ("Due date", "due_date"),
-            ("Created date", "created_date"),
-            ("Updated date", "updated_date"),
+            ("Created date", "created_at"),
+            ("Updated date", "updated_at"),
             ("Title", "title"),
         ]
         known = {key for _, key in options}
@@ -2143,9 +2628,15 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         if self.enable_sorting and self.allow_column_sorting:
             menu.add_command(label="Sort column...", command=lambda: self._show_sort_menu(button, column_id))
         width_menu = self._create_menu(menu)
-        width_menu.add_command(label="Narrow", command=lambda: self.set_column_width(self.min_column_width, column_id))
-        width_menu.add_command(label="Default", command=lambda: self.set_column_width(self.column_width, column_id))
-        width_menu.add_command(label="Wide", command=lambda: self.set_column_width(self.max_column_width, column_id))
+        width_menu.add_command(
+            label="Narrow", command=lambda: self.set_column_width(self.min_column_width, column_id)
+        )
+        width_menu.add_command(
+            label="Default", command=lambda: self.set_column_width(self.column_width, column_id)
+        )
+        width_menu.add_command(
+            label="Wide", command=lambda: self.set_column_width(self.max_column_width, column_id)
+        )
         menu.add_cascade(label="Column width", menu=width_menu)
         self._popup_widget_menu(menu, button)
 
@@ -2188,7 +2679,11 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         )
         move_menu = self._create_menu(menu)
         for column in self._columns_data:
-            state = "disabled" if column.get("locked") or column["id"] == self._cards[card_id]["column"] else "normal"
+            state = (
+                "disabled"
+                if column.get("locked") or column["id"] == self._cards[card_id]["column"]
+                else "normal"
+            )
             move_menu.add_command(
                 label=str(column["title"]),
                 state=state,
@@ -2275,7 +2770,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             "priority",
             "due_date",
             "created_date",
+            "created_at",
             "updated_date",
+            "updated_at",
             "title",
         }
         allowed.update(field["key"] for field in self.fields if field.get("sortable"))
@@ -2288,12 +2785,122 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         reverse = value.get("reverse", False)
         if not isinstance(sort_key, str) or sort_key not in self._allowed_sort_keys():
             raise KanbanValidationError(f"{label} has unsupported sort key {sort_key!r}")
+        sort_key = _canonical_sort_key(sort_key)
         if not isinstance(reverse, bool):
             raise KanbanValidationError(f"{label} 'reverse' must be a boolean")
         return sort_key, reverse
 
     def _column_ids(self) -> set[Any]:
         return {column["id"] for column in self._columns_data}
+
+    def _recompute_local_paging_metadata(self) -> None:
+        """Treat the currently owned cards as a complete, locally supplied board."""
+
+        counts = {
+            column["id"]: sum(1 for card in self._cards.values() if card["column"] == column["id"])
+            for column in self._columns_data
+        }
+        self._column_totals = counts
+        self._loaded_offsets = {**counts, None: len(self._cards)}
+        self._has_more = False
+
+    def _sync_paging_metadata_view(self) -> None:
+        """Refresh count-only widgets after server paging metadata is restored."""
+
+        for column_id in getattr(self, "_column_widgets", {}):
+            self._update_column_summary(column_id)
+        self._update_toolbar_summary()
+
+    def _column_has_partial_card_data(self, column_id: Any) -> bool:
+        loaded = sum(1 for card in self._cards.values() if card["column"] == column_id)
+        return self._effective_column_total(column_id) > loaded
+
+    def _offset_contains_card(
+        self,
+        card_id: Any,
+        column_id: Any | None,
+        *,
+        offset: int | None = None,
+    ) -> bool:
+        """Return whether a loaded card is inside a server page's consumed prefix."""
+
+        if offset is None:
+            if column_id not in self._loaded_offsets:
+                return False
+            offset = self._loaded_offsets[column_id]
+        if offset <= 0:
+            return False
+        if column_id is None:
+            ordered = self._ordered_cards_for_query()
+        else:
+            card = self._cards.get(card_id)
+            if card is None or card["column"] != column_id:
+                return False
+            ordered = self._ordered_cards_for_column(column_id)
+        if self.server_side_query:
+            ordered = [card for card in ordered if self._card_matches_view(card)]
+        return any(card["id"] == card_id for card in ordered[:offset])
+
+    def _matches_active_server_query(self, card: Mapping[str, Any]) -> bool:
+        if not self.server_side_query:
+            return True
+        return self._card_matches_view(dict(card))
+
+    def _adjust_loaded_offsets(
+        self,
+        column_id: Any,
+        column_delta: int,
+        global_delta: int,
+    ) -> None:
+        """Advance or rewind consumed server prefixes after an optimistic write."""
+
+        if column_id in self._loaded_offsets:
+            self._loaded_offsets[column_id] = max(
+                0,
+                self._loaded_offsets[column_id] + column_delta,
+            )
+        if None in self._loaded_offsets:
+            self._loaded_offsets[None] = max(0, self._loaded_offsets[None] + global_delta)
+
+    @staticmethod
+    def _sort_position_changed(
+        old: Mapping[str, Any],
+        new: Mapping[str, Any],
+        sort_state: tuple[str, bool],
+    ) -> bool:
+        """Return whether an update can move a card across a page boundary."""
+
+        sort_key = _canonical_sort_key(sort_state[0])
+        if sort_key == "manual":
+            return old.get("sort_order") != new.get("sort_order")
+        if sort_key == "priority":
+            return old.get("priority") != new.get("priority")
+        return _card_sort_value(old, sort_key) != _card_sort_value(new, sort_key)
+
+    def _effective_column_total(self, column_id: Any) -> int:
+        """Return the best known full count, never less than loaded cards."""
+
+        loaded = sum(1 for card in self._cards.values() if card["column"] == column_id)
+        return max(loaded, int(self._column_totals.get(column_id, loaded)))
+
+    def _adjust_column_total(self, column_id: Any, delta: int) -> None:
+        """Keep server totals aligned with accepted optimistic mutations."""
+
+        loaded_now = sum(1 for card in self._cards.values() if card["column"] == column_id)
+        loaded_before = max(0, loaded_now - delta)
+        current = max(loaded_before, int(self._column_totals.get(column_id, loaded_before)))
+        self._column_totals[column_id] = max(0, current + delta)
+
+    def _has_partial_card_data(self) -> bool:
+        """Return whether the owned card mapping represents only a page."""
+
+        if self._has_more:
+            return True
+        return any(
+            self._effective_column_total(column["id"])
+            > sum(1 for card in self._cards.values() if card["column"] == column["id"])
+            for column in self._columns_data
+        )
 
     def _normalize_card_values(self, card: Mapping[str, Any]) -> dict[str, Any]:
         normalized = dict(card)
@@ -2318,7 +2925,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             raise KanbanValidationError(f"Unknown card ID: {card_id!r}") from exc
 
     def _manual_cards_for_column(self, column_id: Any) -> list[dict[str, Any]]:
-        indexed = [(index, card) for index, card in enumerate(self._cards.values()) if card["column"] == column_id]
+        indexed = [
+            (index, card) for index, card in enumerate(self._cards.values()) if card["column"] == column_id
+        ]
         indexed.sort(
             key=lambda pair: (
                 pair[1].get("sort_order") is None,
@@ -2338,6 +2947,9 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             sort_order = card.get("sort_order")
             if isinstance(sort_order, (int, float)) and not isinstance(sort_order, bool):
                 highest = max(highest, sort_order)
+        if self._column_has_partial_card_data(column_id):
+            sparse_gap = max(1024, (self._effective_column_total(column_id) + 1) * 1024)
+            return highest + sparse_gap
         return highest + 1
 
     @staticmethod
@@ -2359,6 +2971,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def _ordered_cards_for_column(self, column_id: Any) -> list[dict[str, Any]]:
         cards = self._manual_cards_for_column(column_id)
         sort_key, reverse = self._column_sorts.get(column_id, self._global_sort)
+        sort_key = _canonical_sort_key(sort_key)
         if sort_key == "manual":
             return list(reversed(cards)) if reverse else cards
         if sort_key == "priority":
@@ -2370,8 +2983,42 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                     searchable_text(card.get("priority")),
                 )
         else:
+
             def key(card: dict[str, Any]) -> Any:
-                return comparable_value(card.get(sort_key))
+                return comparable_value(_card_sort_value(card, sort_key))
+
+        return sorted(cards, key=key, reverse=reverse)
+
+    def _ordered_cards_for_query(self) -> list[dict[str, Any]]:
+        """Order all loaded cards as the active global server query does."""
+
+        cards = list(self._cards.values())
+        sort_key, reverse = self._global_sort
+        sort_key = _canonical_sort_key(sort_key)
+        if sort_key == "manual":
+            indexed = list(enumerate(cards))
+            indexed.sort(
+                key=lambda pair: (
+                    pair[1].get("sort_order") is None,
+                    comparable_value(pair[1].get("sort_order")),
+                    pair[0],
+                ),
+                reverse=reverse,
+            )
+            return [card for _, card in indexed]
+        if sort_key == "priority":
+            ranking = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+            def key(card: dict[str, Any]) -> Any:
+                return (
+                    ranking.get(str(card.get("priority", "")).casefold(), 99),
+                    searchable_text(card.get("priority")),
+                )
+        else:
+
+            def key(card: dict[str, Any]) -> Any:
+                return comparable_value(_card_sort_value(card, sort_key))
+
         return sorted(cards, key=key, reverse=reverse)
 
     def _card_index(self, card_id: Any) -> int:
@@ -2390,12 +3037,18 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def _reindex_column(self, column_id: Any) -> None:
         self._apply_manual_order(column_id, self._manual_cards_for_column(column_id))
 
-    def _changed_order_cards(self, snapshot: dict[Any, dict[str, Any]], columns: set[Any]) -> list[dict[str, Any]]:
+    def _changed_order_cards(
+        self, snapshot: dict[Any, dict[str, Any]], columns: set[Any]
+    ) -> list[dict[str, Any]]:
         changed: list[dict[str, Any]] = []
         for card_id, old in snapshot.items():
             card = self._cards.get(card_id)
-            if card is not None and (card["column"] in columns or old.get("column") in columns) and (
-                old.get("column") != card.get("column") or old.get("sort_order") != card.get("sort_order")
+            if (
+                card is not None
+                and (card["column"] in columns or old.get("column") in columns)
+                and (
+                    old.get("column") != card.get("column") or old.get("sort_order") != card.get("sort_order")
+                )
             ):
                 changed.append(clone(card))
         return changed
@@ -2408,7 +3061,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             raise KanbanValidationError(f"Column {column_id!r} is locked")
         max_cards = column.get("max_cards")
         if self.enforce_column_limits and max_cards is not None:
-            count = sum(1 for card in self._cards.values() if card["column"] == column_id)
+            count = self._effective_column_total(column_id)
             if count >= max_cards:
                 event = create_event(
                     "move_blocked",
@@ -2430,10 +3083,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         current_column = self._cards.get(card_id, {}).get("column") if card_id is not None else None
         if current_column == column_id:
             return True
-        total = self._column_totals.get(
-            column_id,
-            sum(1 for card in self._cards.values() if card["column"] == column_id),
-        )
+        total = self._effective_column_total(column_id)
         return total < maximum
 
     def _card_matches_view(self, card: dict[str, Any]) -> bool:

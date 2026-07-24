@@ -34,9 +34,11 @@ jobs:
         run: |
           python -m ruff check ctk_kanban tests example_all_features.py example_sqlite.py scripts
           python -m mypy
+          python scripts/check_docs.py
           xvfb-run -a python -m pytest -q
           python -m build
           python scripts/validate_dist.py --dist dist
+          python scripts/smoke_install.py --wheel-dir dist
       - name: Upload TestPyPI artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:

@@ -10,6 +10,15 @@ from pathlib import Path
 from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[1]
+DOCS_VERSION_PATTERN = re.compile(r'(<span class="nav-version">)v[^<]+ Docs(</span>)')
+
+
+def update_docs_version(document: str, version: str) -> str:
+    """Return the documentation page with its visible release version updated."""
+
+    if len(DOCS_VERSION_PATTERN.findall(document)) != 1:
+        raise ValueError("docs/index.html must contain exactly one version badge")
+    return DOCS_VERSION_PATTERN.sub(rf"\g<1>v{version} Docs\g<2>", document, count=1)
 
 
 def main() -> None:
@@ -41,11 +50,14 @@ def main() -> None:
     release_section = f"## Unreleased\n\n## {version} - {date.today().isoformat()}\n\n{match.group('body').strip()}\n\n"
     updated_changelog = changelog[: match.start()] + release_section + changelog[match.end() :].lstrip()
 
-    version_file.write_text(updated_version, encoding="utf-8")
-    changelog_path.write_text(updated_changelog, encoding="utf-8")
+    docs_path = ROOT / "docs" / "index.html"
+    updated_docs = update_docs_version(docs_path.read_text(encoding="utf-8"), version)
+
+    version_file.write_text(updated_version, encoding="utf-8", newline="\n")
+    changelog_path.write_text(updated_changelog, encoding="utf-8", newline="\n")
+    docs_path.write_text(updated_docs, encoding="utf-8", newline="\n")
     print(f"Prepared {version}. Run tox, commit, then tag v{version}.")
 
 
 if __name__ == "__main__":
     main()
-

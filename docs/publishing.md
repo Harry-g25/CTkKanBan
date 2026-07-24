@@ -21,7 +21,16 @@ Add user-facing changes under `## Unreleased` in `CHANGELOG.md`, then run:
 
 ```bash
 python scripts/prepare_release.py 0.3.0
-tox -e lint,type,package,py314
+tox -e lint,type,package,py314,ctk-min,ctk-current
+```
+
+`prepare_release.py` updates the package, changelog, and visible documentation version together. Review all three changes before committing.
+
+If a Windows checkout lives in a OneDrive-synced folder and tox reports `FailedToStart` while creating its packaging backend, keep tox's disposable environments outside the synced tree and rerun the command:
+
+```powershell
+$env:TOX_WORK_DIR = Join-Path $env:LOCALAPPDATA "ctk-kanban-tox"
+tox -e lint,type,package,py314,ctk-min,ctk-current
 ```
 
 Push the release-preparation commit and run **Publish to TestPyPI** manually. Test installation from TestPyPI in a clean environment:
@@ -44,12 +53,13 @@ git push origin v0.3.0
 `publish.yml` then:
 
 1. Checks that the tag, package version, and dated changelog section agree.
-2. Runs linting, core type checks, tests, and branch coverage.
+2. Runs linting, core type checks, branch coverage, and tests against the minimum and current supported CustomTkinter releases.
 3. Builds exactly one wheel and one source archive.
 4. Checks metadata, archive safety, typing marker, Twine rendering, wheel contents, and Pyroma score.
-5. Generates SHA-256 checksums and GitHub artifact attestations.
-6. Publishes the same files to PyPI through trusted publishing.
-7. Creates a GitHub release with generated notes and attaches the distributions and checksums.
+5. Installs the exact wheel with normal dependency resolution, runs `pip check`, and smoke-tests its SQLite adapter.
+6. Generates SHA-256 checksums and GitHub artifact attestations only after the wheel smoke test succeeds.
+7. Publishes the same files to PyPI through trusted publishing.
+8. Creates a GitHub release with generated notes and attaches the distributions and checksums.
 
 PyPI releases are immutable. Never delete and reuse a version. If a release is wrong, fix it and publish a higher version.
 
@@ -62,4 +72,3 @@ Verify provenance for a downloaded file with the GitHub CLI:
 ```bash
 gh attestation verify ctk_kanban-0.3.0-py3-none-any.whl --repo Harry-g25/CTkKanBan
 ```
-

@@ -33,7 +33,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "customtkinter>=5.2.2,<6",
+    "customtkinter>=5.2.2,<7",
     "tzdata>=2025.2; platform_system == 'Windows'",
 ]
 

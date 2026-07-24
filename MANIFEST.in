@@ -1,3 +1,4 @@
+include .gitattributes
 include CHANGELOG.md
 include CODE_OF_CONDUCT.md
 include CONTRIBUTING.md
@@ -6,6 +7,7 @@ include README.md
 include SECURITY.md
 include example_all_features.py
 include example_sqlite.py
+include tests/gui_test_app.py
 include tox.ini
 recursive-include docs *
 recursive-include scripts *.py

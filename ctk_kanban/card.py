@@ -98,7 +98,7 @@ class CTkKanbanCard(ctk.CTkFrame):
 
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=1)
-        density_padding = {"compact": 8, "comfortable": 11, "spacious": 14}.get(self.density, 11)
+        density_padding = {"compact": 8, "comfortable": 10, "spacious": 13}.get(self.density, 10)
         priority = self.card_data.get("priority")
         accent_color = self.priority_colors.get(
             str(priority),
@@ -110,35 +110,7 @@ class CTkKanbanCard(ctk.CTkFrame):
             corner_radius=4,
             fg_color=accent_color,
         )
-        self.accent_bar.grid(row=0, column=0, rowspan=50, sticky="ns", pady=8)
-
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=1, sticky="ew", padx=(12, 10), pady=(density_padding, 4))
-        header.grid_columnconfigure(0, weight=1)
-        header.grid_columnconfigure(1, minsize=18)
-        title = ctk.CTkLabel(
-            header,
-            text=str(self.card_data.get("title", "Untitled card")),
-            anchor="w",
-            justify="left",
-            wraplength=max(120, self.card_width - 56),
-            font=self.theme.get("card_title_font") or ctk.CTkFont(size=14, weight="bold"),
-            text_color=self.theme.get("card_title_text_color", self.theme["text_color"]),
-        )
-        self.title_label = title
-        title.grid(row=0, column=0, sticky="ew")
-        if self.show_drag_handle:
-            self.drag_handle = ctk.CTkLabel(
-                header,
-                text="::",
-                width=18,
-                text_color=self.theme.get("card_drag_handle_color", self.theme["muted_text_color"]),
-                cursor="fleur",
-                font=ctk.CTkFont(size=9, weight="bold"),
-            )
-            self.drag_handle.grid(row=0, column=1, padx=(4, 0))
-            self.drag_handle.grid_remove()
-            Tooltip(self.drag_handle, "Drag to move card")
+        self.accent_bar.place(x=0, rely=0.5, anchor="w", relheight=0.86)
 
         visible_fields = [
             field
@@ -168,6 +140,58 @@ class CTkKanbanCard(ctk.CTkFrame):
             metadata_fields = metadata_fields[:2]
             badge_fields = badge_fields[:1]
 
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=1, sticky="ew", padx=(13, 10), pady=(density_padding, 3))
+        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(2, minsize=18)
+        title_reserve = 58
+        title = ctk.CTkLabel(
+            header,
+            text=str(self.card_data.get("title", "Untitled card")),
+            height=22,
+            anchor="w",
+            justify="left",
+            wraplength=max(120, self.card_width - title_reserve),
+            font=self.theme.get("card_title_font") or ctk.CTkFont(size=14, weight="bold"),
+            text_color=self.theme.get("card_title_text_color", self.theme["text_color"]),
+        )
+        self.title_label = title
+        title.grid(row=0, column=0, sticky="ew")
+
+        if priority not in (None, ""):
+            priority_color = self.priority_colors.get(str(priority), self.theme["tag_text_color"])
+            priority_text_color = (
+                priority_color
+                if isinstance(priority_color, str)
+                else self.theme.get("tag_text_color", self.theme["text_color"])
+            )
+            self.priority_badge = ctk.CTkLabel(
+                header,
+                text=str(priority).upper(),
+                height=19,
+                corner_radius=6,
+                fg_color=self.theme.get("card_priority_fg_color", self.theme["tag_fg_color"]),
+                text_color=priority_text_color,
+                font=self.theme.get("badge_font") or ctk.CTkFont(size=9, weight="bold"),
+            )
+            self.priority_badge.grid(row=0, column=1, padx=(7, 1))
+            title_reserve += 58
+            title.configure(wraplength=max(100, self.card_width - title_reserve))
+
+        if self.show_drag_handle:
+            self.drag_handle = ctk.CTkLabel(
+                header,
+                text="⠿",
+                width=18,
+                text_color=self.theme.get("card_drag_handle_color", self.theme["muted_text_color"]),
+                cursor="fleur",
+                font=ctk.CTkFont(size=13, weight="bold"),
+            )
+            self.drag_handle.grid(row=0, column=2, padx=(4, 0))
+            self.drag_handle.grid_remove()
+            Tooltip(self.drag_handle, "Drag to move card", theme=self.theme)
+        self._title_reserved_width = title_reserve
+
         max_description = int(self.theme.get("card_description_max_chars", 150))
         if self.card_mode == "compact":
             max_description = min(max_description, 82)
@@ -186,78 +210,66 @@ class CTkKanbanCard(ctk.CTkFrame):
                 text_color=self.theme.get("card_body_text_color", self.theme["muted_text_color"]),
                 font=self.theme.get("card_body_font") or ctk.CTkFont(size=12),
             )
-            label.grid(row=row, column=1, sticky="ew", padx=(12, 12), pady=(1, 6))
-            self._wrap_labels.append((label, 42))
+            label.grid(row=row, column=1, sticky="ew", padx=(13, 12), pady=(0, 5))
+            self._wrap_labels.append((label, 44))
+            row += 1
+
+        for field in badge_fields:
+            self._build_badges(row, field, self.card_data.get(field["key"]))
             row += 1
 
         if metadata_fields:
-            metadata = ctk.CTkFrame(self, fg_color="transparent")
-            metadata.grid(row=row, column=1, sticky="ew", padx=(12, 12), pady=(3, 4))
-            metadata.grid_columnconfigure(1, weight=1)
-            for index, field in enumerate(metadata_fields):
-                value = self.card_data.get(field["key"])
-                field_type = field.get("type", "text")
-                shown_value = (
-                    format_temporal(
-                        value,
-                        field_type=field_type,
-                        timezone_info=self.timezone_info,
-                        locale_name=self.locale_name,
-                    )
-                    if field_type in {"date", "datetime"}
-                    else display_value(value)
-                )
-                ctk.CTkLabel(
-                    metadata,
-                    text=str(field["label"]).split(" (", 1)[0],
-                    anchor="w",
-                    text_color=self.theme.get(
-                        "card_metadata_label_text_color",
-                        self.theme["muted_text_color"],
-                    ),
-                    font=ctk.CTkFont(size=10),
-                ).grid(row=index, column=0, sticky="nw", padx=(0, 10), pady=1)
-                value_label = ctk.CTkLabel(
-                    metadata,
-                    text=shown_value,
-                    anchor="w",
-                    justify="left",
-                    wraplength=max(80, self.card_width - 130),
-                    text_color=self.theme.get("card_metadata_text_color", self.theme["text_color"]),
-                    font=self.theme.get("card_metadata_font") or ctk.CTkFont(size=10),
-                )
-                value_label.grid(row=index, column=1, sticky="new", pady=1)
-                self._wrap_labels.append((value_label, 130))
+            separator = ctk.CTkFrame(
+                self,
+                height=1,
+                fg_color=self.theme.get("card_separator_color", self.theme["card_border_color"]),
+            )
+            separator.grid(row=row, column=1, sticky="ew", padx=(13, 12), pady=(5, 4))
+            row += 1
+            metadata_text = "  •  ".join(
+                self._format_metadata(field, self.card_data.get(field["key"]))
+                for field in metadata_fields
+            )
+            self.metadata_label = ctk.CTkLabel(
+                self,
+                text=metadata_text,
+                height=18,
+                anchor="w",
+                justify="left",
+                wraplength=max(100, self.card_width - 44),
+                text_color=self.theme.get("card_metadata_text_color", self.theme["muted_text_color"]),
+                font=self.theme.get("card_metadata_font") or ctk.CTkFont(size=10),
+            )
+            self.metadata_label.grid(row=row, column=1, sticky="ew", padx=(13, 12), pady=(0, 2))
+            self._wrap_labels.append((self.metadata_label, 44))
             row += 1
 
-        footer_row = row
-        if priority not in (None, ""):
-            priority_color = self.priority_colors.get(str(priority), self.theme["tag_text_color"])
-            priority_text_color = (
-                priority_color
-                if isinstance(priority_color, str)
-                else self.theme.get("tag_text_color", self.theme["text_color"])
-            )
-            priority_holder = ctk.CTkFrame(self, fg_color="transparent")
-            priority_holder.grid(row=footer_row, column=1, sticky="w", padx=(10, 12), pady=(5, 1))
-            self.priority_badge = ctk.CTkLabel(
-                priority_holder,
-                text=str(priority).upper(),
-                height=20,
-                corner_radius=6,
-                fg_color=self.theme.get("card_priority_fg_color", self.theme["tag_fg_color"]),
-                text_color=priority_text_color,
-                font=self.theme.get("badge_font") or ctk.CTkFont(size=9, weight="bold"),
-            )
-            self.priority_badge.pack(side="left", padx=2)
-            footer_row += 1
-
-        for field in badge_fields:
-            self._build_badges(footer_row, field, self.card_data.get(field["key"]))
-            footer_row += 1
-
         spacer = ctk.CTkFrame(self, height=max(4, density_padding // 2), fg_color="transparent")
-        spacer.grid(row=footer_row, column=1)
+        spacer.grid(row=row, column=1)
+
+    def _format_metadata(self, field: dict[str, Any], value: Any) -> str:
+        """Return a concise, readable footer item for one field."""
+
+        field_type = field.get("type", "text")
+        shown_value = (
+            format_temporal(
+                value,
+                field_type=field_type,
+                timezone_info=self.timezone_info,
+                locale_name=self.locale_name,
+            )
+            if field_type in {"date", "datetime"}
+            else display_value(value)
+        )
+        key = str(field["key"]).casefold()
+        label = str(field["label"]).split(" (", 1)[0]
+        if key in {"assignee", "assigned_to", "owner"}:
+            return shown_value
+        if key in {"due", "due_date", "deadline"}:
+            return f"Due {shown_value}"
+        if key in {"estimate", "effort", "story_points"}:
+            return f"{label} {shown_value}"
+        return f"{label}: {shown_value}"
 
     def _build_badges(self, row: int, field: dict[str, Any], value: Any) -> None:
         """Render tag, tags, and badge values as compact chips."""
@@ -268,7 +280,7 @@ class CTkKanbanCard(ctk.CTkFrame):
         if hidden_count:
             values.append(f"+{hidden_count} more")
         holder = ctk.CTkFrame(self, fg_color="transparent")
-        holder.grid(row=row, column=1, sticky="w", padx=(10, 12), pady=(3, 2))
+        holder.grid(row=row, column=1, sticky="w", padx=(11, 12), pady=(2, 2))
         for index, item in enumerate(values):
             text = str(item)
             color = self.tag_colors.get(text, self.theme["tag_fg_color"])
@@ -277,8 +289,8 @@ class CTkKanbanCard(ctk.CTkFrame):
             chip = ctk.CTkLabel(
                 holder,
                 text=text,
-                height=20,
-                corner_radius=6,
+                height=19,
+                corner_radius=5,
                 fg_color=color,
                 text_color=(
                     self.theme["tag_text_color"]
@@ -289,7 +301,11 @@ class CTkKanbanCard(ctk.CTkFrame):
             )
             chip.grid(row=index // self.tags_per_row, column=index % self.tags_per_row, padx=2, pady=1)
             if text.startswith("+") and hidden_count:
-                Tooltip(chip, ", ".join(str(item) for item in list(value)[self.max_visible_tags :]))
+                Tooltip(
+                    chip,
+                    ", ".join(str(item) for item in list(value)[self.max_visible_tags :]),
+                    theme=self.theme,
+                )
 
     def _bind_pointer_events(self) -> None:
         """Bind the same gestures to card descendants for natural clicking."""
@@ -336,7 +352,10 @@ class CTkKanbanCard(ctk.CTkFrame):
         if self.show_drag_handle and hasattr(self, "drag_handle"):
             self.drag_handle.grid()
         if self.hover_enabled and not self.selected and not self.dimmed:
-            self.configure(fg_color=self.theme["card_hover_color"])
+            self.configure(
+                fg_color=self.theme["card_hover_color"],
+                border_color=self.theme.get("card_hover_border_color", self.theme["card_border_color"]),
+            )
 
     def _on_leave(self, event: Any) -> None:
         if self.dragging or not self._hovered:
@@ -429,6 +448,8 @@ class CTkKanbanCard(ctk.CTkFrame):
 
         self.card_width = width
         if hasattr(self, "title_label"):
-            self.title_label.configure(wraplength=max(120, width - 56))
+            self.title_label.configure(
+                wraplength=max(100, width - getattr(self, "_title_reserved_width", 58))
+            )
         for label, reserved_width in self._wrap_labels:
             label.configure(wraplength=max(80, width - reserved_width))

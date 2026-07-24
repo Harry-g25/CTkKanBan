@@ -16,6 +16,12 @@ DEFAULT_THEME: dict[str, Any] = {
     "toolbar_button_text_color": ("#334155", "#D7E0EC"),
     "toolbar_primary_button_text_color": ("#FFFFFF", "#FFFFFF"),
     "toolbar_summary_text_color": ("#64748B", "#93A4BA"),
+    "toolbar_count_fg_color": ("#EEF2F7", "#1B273A"),
+    "toolbar_context_fg_color": ("#F8FAFC", "#0E1726"),
+    "toolbar_context_border_color": ("#E8EDF3", "#243147"),
+    "toolbar_action_border_color": ("#E2E8F0", "#2A3950"),
+    "toolbar_height": 64,
+    "toolbar_search_width": 400,
     "column_fg_color": ("#E9EEF5", "#111827"),
     "column_header_fg_color": "transparent",
     "column_border_color": ("#DCE3EC", "#243147"),
@@ -32,8 +38,13 @@ DEFAULT_THEME: dict[str, Any] = {
     "column_lock_fg_color": ("#FEF3C7", "#493518"),
     "column_lock_text_color": ("#92400E", "#FCD34D"),
     "column_no_results_text_color": ("#64748B", "#8292A8"),
+    "column_empty_fg_color": ("#F5F8FB", "#141E2F"),
+    "column_empty_border_color": ("#D8E0EA", "#2A3950"),
+    "column_accent_height": 3,
+    "column_header_height": 46,
     "card_fg_color": ("#FFFFFF", "#182235"),
     "card_hover_color": ("#F8FAFC", "#1D2A40"),
+    "card_hover_border_color": ("#CBD5E1", "#3A4B65"),
     "card_selected_color": ("#EFF6FF", "#172F52"),
     "card_border_color": ("#DFE6EE", "#2A3950"),
     "card_selected_border_color": ("#3B82F6", "#60A5FA"),
@@ -48,8 +59,9 @@ DEFAULT_THEME: dict[str, Any] = {
     "card_priority_fg_color": ("#F1F5F9", "#263247"),
     "card_drag_handle_color": ("#A3AFBF", "#66778F"),
     "card_accent_default_color": ("#CBD5E1", "#475569"),
+    "card_separator_color": ("#EDF1F5", "#263247"),
     "card_accent_width": 4,
-    "card_description_max_chars": 150,
+    "card_description_max_chars": 128,
     "button_fg_color": ("#2563EB", "#3B82F6"),
     "button_hover_color": ("#1D4ED8", "#2563EB"),
     "button_text_color": ("#FFFFFF", "#FFFFFF"),
@@ -103,11 +115,18 @@ DEFAULT_THEME: dict[str, Any] = {
     "dialog_corner_radius": 14,
     "dialog_title_text_color": ("#172033", "#F1F5F9"),
     "dialog_text_color": ("#334155", "#D7E0EC"),
+    "dialog_subtitle_text_color": ("#64748B", "#93A4BA"),
+    "dialog_divider_color": ("#E8EDF3", "#243147"),
+    "dialog_section_fg_color": ("#F8FAFC", "#0E1726"),
+    "dialog_section_border_color": ("#E8EDF3", "#243147"),
     "panel_fg_color": ("#FFFFFF", "#111827"),
     "panel_border_color": ("#E2E8F0", "#263247"),
     "panel_border_width": 1,
     "panel_corner_radius": 14,
     "panel_title_text_color": ("#172033", "#F1F5F9"),
+    "form_header_subtitle_text_color": ("#64748B", "#93A4BA"),
+    "form_footer_fg_color": ("#F8FAFC", "#0E1726"),
+    "form_divider_color": ("#E8EDF3", "#243147"),
     "menu_fg_color": ("#FFFFFF", "#182235"),
     "menu_hover_color": ("#EFF6FF", "#263B5C"),
     "menu_text_color": ("#172033", "#F1F5F9"),
@@ -116,6 +135,16 @@ DEFAULT_THEME: dict[str, Any] = {
     "menu_border_width": 0,
     "scrollbar_button_color": ("#CBD5E1", "#334155"),
     "scrollbar_button_hover_color": ("#94A3B8", "#475569"),
+    "tooltip_fg_color": ("#172033", "#E2E8F0"),
+    "tooltip_text_color": ("#FFFFFF", "#172033"),
+    "tooltip_border_color": ("#334155", "#CBD5E1"),
+    "calendar_fg_color": ("#FFFFFF", "#111827"),
+    "calendar_weekday_text_color": ("#64748B", "#93A4BA"),
+    "calendar_day_hover_color": ("#EFF6FF", "#263B5C"),
+    "calendar_selected_fg_color": ("#2563EB", "#3B82F6"),
+    "calendar_selected_text_color": ("#FFFFFF", "#FFFFFF"),
+    "calendar_today_fg_color": ("#E8F0FE", "#1C3152"),
+    "calendar_today_text_color": ("#1D4ED8", "#93C5FD"),
     "drop_indicator_color": ("#2563EB", "#60A5FA"),
     "drag_preview_fg_color": ("#172033", "#E2E8F0"),
     "drag_preview_text_color": ("#FFFFFF", "#172033"),
@@ -135,8 +164,8 @@ DEFAULT_THEME: dict[str, Any] = {
     "border_width": 0,
     "board_padding": 16,
     "responsive_preferred_min_column_width": 260,
-    "card_gap": 10,
-    "card_min_height": 72,
+    "card_gap": 12,
+    "card_min_height": 68,
 }
 
 DEFAULT_STYLE = DEFAULT_THEME
@@ -149,12 +178,35 @@ DEFAULT_PRIORITY_COLORS: dict[str, str] = {
 }
 
 
+def _copy_style_value(value: Any) -> Any:
+    """Copy style containers while preserving Tk-backed resource objects.
+
+    ``CTkFont`` and similar objects retain a reference to their Tcl interpreter
+    and cannot be deep-copied.  Style mappings still need defensive copies for
+    ordinary mutable containers, so copy those recursively and only preserve
+    the identity of a leaf value when ``deepcopy`` is unsupported.
+    """
+
+    if isinstance(value, Mapping):
+        return {key: _copy_style_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_copy_style_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_copy_style_value(item) for item in value)
+    if isinstance(value, set):
+        return {_copy_style_value(item) for item in value}
+    try:
+        return deepcopy(value)
+    except Exception:  # Tk-backed resources cannot participate in Python deepcopy.
+        return value
+
+
 def merge_theme(theme: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Return a defensive copy of defaults updated by *theme*."""
 
-    merged = deepcopy(DEFAULT_THEME)
+    merged = _copy_style_value(DEFAULT_THEME)
     if theme:
-        merged.update(deepcopy(dict(theme)))
+        merged.update(_copy_style_value(theme))
     return merged
 
 

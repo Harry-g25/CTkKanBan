@@ -6,10 +6,9 @@ import sys
 from typing import Any
 
 import customtkinter as ctk
+
 import ctk_kanban
-
 from ctk_kanban import CTkKanbanBoard, __version__
-
 
 COLUMNS = [
     {"id": "backlog", "title": "Backlog", "color": "#64748B"},
@@ -172,6 +171,7 @@ CARDS = [
         "sort_order": 1,
     },
 ]
+
 
 def log_event(event: dict[str, Any]) -> None:
     """Stand-in for application logging or database persistence."""

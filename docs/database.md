@@ -5,8 +5,10 @@
 ## SQLite Quick Start
 
 ```python
+import customtkinter as ctk
 from ctk_kanban import CTkKanbanBoard, SQLiteKanbanDataSource
 
+app = ctk.CTk()
 source = SQLiteKanbanDataSource("kanban.db")
 source.seed_board(
     "work",
@@ -27,6 +29,8 @@ board = CTkKanbanBoard(
     timezone_name="Europe/London",
     locale_name="en_GB",
 )
+board.pack(fill="both", expand=True)
+app.mainloop()
 ```
 
 The SQLite adapter creates its schema automatically. Writes are transactional, batches are atomic, and each board has a monotonically increasing revision.
@@ -38,9 +42,9 @@ Implement `KanbanDataSource` for PostgreSQL, SQL Server, REST, or another backen
 ```python
 class KanbanDataSource(Protocol):
     def load_board(self, board_id, query=None): ...
-    def query_cards(self, board_id, query): ...
     def apply_mutation(self, event): ...
-    def apply_batch(self, event): ...
+    def apply_batch(self, events): ...
+    def query_cards(self, board_id, query): ...
     def get_changes(self, board_id, since_revision): ...
 ```
 
@@ -55,7 +59,7 @@ Every write includes:
 - `board_id`: durable board identity.
 - `actor_id`: user, process, or device responsible for the change.
 - `expected_revision`: optimistic concurrency check.
-- `occurred_at`: UTC timestamp.
+- `timestamp`: UTC timestamp.
 - `source`: UI, drag, API, undo, redo, or another caller-defined source.
 
 Create operations may start with temporary IDs. Return a canonical card in `MutationResult.card` or an `id_map`; the board remaps selection and widgets without duplicating the card.
@@ -68,7 +72,7 @@ Immutable card and column IDs are enabled by default. This avoids accidental pri
 
 ## Reliability
 
-The persistence coordinator uses one worker so mutation order is preserved. Transient connection failures use bounded exponential retry, then remain in an offline queue. Call `board.set_online(True)` after connectivity returns or use the toolbar Retry action. The local board remains visible while offline.
+The persistence coordinator uses one worker so mutation order is preserved. Transient connection failures use bounded exponential retry, then remain in an in-memory offline queue. Call `board.set_online(True)` after connectivity returns or use the toolbar Retry action. The local board remains visible while offline, but queued operations are process-local and are lost if the application exits; use a durable outbox in the application or adapter when crash recovery is required.
 
 `disable_while_saving=True` prevents duplicate writes. Persistence callbacks expose saving, saved, offline, conflict, and error states. Application logs receive structured event, transaction, board, actor, and revision context.
 
@@ -86,5 +90,6 @@ Polling uses `get_changes()` and `poll_interval_ms`; it refreshes when another c
 - Return canonical IDs, timestamps, defaults, and versions from the backend.
 - Keep adapter methods blocking and thread-safe; the coordinator owns threading.
 - Store UTC timestamps and configure `timezone_name` and `locale_name` for display.
-- Use `apply_batch()` for multi-card edits that must succeed or fail together.
+- Implement `apply_batch(events)` as one transaction and reject the entire list if any event cannot be applied.
+- In-memory boards accept hashable IDs; the built-in SQLite adapter requires non-empty string or integer IDs so they round-trip through durable storage.
 - Test disconnect, retry, stale revision, duplicate submission, and remote-change paths.

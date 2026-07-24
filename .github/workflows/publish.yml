@@ -24,8 +24,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.14"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+            customtkinter: customtkinter==5.2.2
+          - os: ubuntu-latest
+            python-version: "3.14"
+            customtkinter: customtkinter>=6,<7
+          - os: windows-latest
+            python-version: "3.10"
+            customtkinter: customtkinter==5.2.2
+          - os: windows-latest
+            python-version: "3.14"
+            customtkinter: customtkinter>=6,<7
+          - os: macos-latest
+            python-version: "3.10"
+            customtkinter: customtkinter==5.2.2
+          - os: macos-latest
+            python-version: "3.14"
+            customtkinter: customtkinter>=6,<7
     steps:
       - name: Check out release tag
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
@@ -39,7 +56,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install --yes xvfb
       - name: Install package and tests
-        run: python -m pip install -e ".[test]"
+        env:
+          CUSTOMTKINTER_CONSTRAINT: ${{ matrix.customtkinter }}
+        run: |
+          python -c "import os, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', '.[test]', os.environ['CUSTOMTKINTER_CONSTRAINT']])"
+          python -m pip check
       - name: Run tests on Linux
         if: runner.os == 'Linux'
         run: xvfb-run -a python -m pytest -q
@@ -74,11 +95,14 @@ jobs:
         run: |
           python -m ruff check ctk_kanban tests example_all_features.py example_sqlite.py scripts
           python -m mypy
+          python scripts/check_docs.py
           xvfb-run -a python -m pytest --cov=ctk_kanban --cov-report=term -q
       - name: Build release distributions
         run: python -m build
       - name: Validate tag, metadata, and artifacts
         run: python scripts/validate_dist.py --dist dist --tag "${GITHUB_REF_NAME}" --write-checksums
+      - name: Install and smoke-test the exact release wheel
+        run: python scripts/smoke_install.py --wheel-dir dist
       - name: Upload immutable release artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
