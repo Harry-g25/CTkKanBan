@@ -158,8 +158,8 @@
             <p>
               The package is built around one primary widget: <code>CTkKanbanBoard</code>. You give it an ordered set
               of columns, an optional initial set of cards, and an optional field schema. From there, the board handles
-              rendering, selection, drag-and-drop movement, search, filters, sorting, built-in edit dialogs, and
-              context menus.
+              rendering, selection, drag-and-drop movement, search, filters, sorting, inline field editing, built-in
+              forms, and context menus.
             </p>
             <p>
               Two design choices define the project:
@@ -179,8 +179,8 @@
               <article class="info-card">
                 <h4>What CTkKanBan gives you</h4>
                 <p>
-                  A reusable board widget, default card rendering, built-in add/edit forms, per-card and per-column
-                  operations, and a large style surface.
+                  A reusable board widget, default card rendering, live inline editing, built-in add/edit forms,
+                  per-card and per-column operations, and a large style surface.
                 </p>
               </article>
               <article class="info-card">
@@ -492,11 +492,17 @@ app.mainloop()</code></pre>
 
           <section class="doc-section" id="tutorial-forms">
             <div class="section-rule"></div>
-            <h2>Built-in Card Forms</h2>
+            <h2>Inline Editing and Built-in Card Forms</h2>
             <p>
               The built-in form system is driven entirely by field definitions. If
-              <code>enable_builtin_card_form=True</code>, the board can open add and edit forms automatically from the
-              toolbar, per-column add buttons, double-click, or the card context menu.
+              <code>enable_builtin_card_form=True</code>, the board can open the add form automatically from the
+              toolbar and per-column add buttons. Existing cards use inline field editing by default.
+            </p>
+            <p>
+              Click any value in the default card renderer to edit it in place. Empty editable
+              <code>show_on_card</code> fields receive an add placeholder. Enter, focus loss, or the check button saves;
+              Escape cancels. Text areas use Ctrl+Enter to save. Set
+              <code>enable_inline_card_editing=False</code> to retain the earlier full-card edit flow.
             </p>
 
             <div class="code-block">
@@ -542,6 +548,7 @@ board = CTkKanbanBoard(
     cards=[],
     fields=fields,
     card_form_mode="sidepanel",  # or "popup"
+    enable_inline_card_editing=True,
     enable_builtin_card_form=True,
 )
 
@@ -566,10 +573,10 @@ board.open_add_card_form("todo")</code></pre>
             </div>
 
             <div class="callout callout--warn">
-              <strong>Field control limitation:</strong> the built-in form gives dedicated widgets to
-              <code>textarea</code>, <code>checkbox</code>, and <code>select</code>. Other field types, including
-              <code>date</code>, <code>datetime</code>, <code>tag</code>, <code>badge</code>, and
-              <code>multiselect</code>, are edited through text entry controls. For <code>tags</code> and
+              <strong>Field controls:</strong> the built-in form and inline editor give dedicated widgets to
+              <code>textarea</code>, <code>checkbox</code>, <code>select</code>, and <code>date</code>. Other field
+              types, including <code>datetime</code>, <code>tag</code>, <code>badge</code> without options, and
+              <code>multiselect</code>, use compact text entry controls. For <code>tags</code> and
               <code>multiselect</code>, comma-separated input is normalized to <code>list[str]</code>.
             </div>
           </section>
@@ -1143,8 +1150,8 @@ board = CTkKanbanBoard(
               The built-in card context menu includes:
             </p>
             <ul>
-              <li><strong>Open</strong>: opens the edit flow.</li>
-              <li><strong>Edit</strong>: opens the edit flow directly.</li>
+              <li><strong>Open</strong>: starts inline title editing by default.</li>
+              <li><strong>Edit</strong>: starts inline title editing directly.</li>
               <li><strong>Delete</strong>: optionally confirms, then deletes.</li>
               <li><strong>Duplicate</strong>: copies the card and appends <code>(copy)</code> to the title.</li>
               <li><strong>Move to</strong>: lists eligible target columns.</li>
@@ -1474,7 +1481,12 @@ board = CTkKanbanBoard(
                   <tr>
                     <td><code>enable_card_double_click</code></td>
                     <td><code>True</code></td>
-                    <td>Double-click opens the edit flow unless you override it with a callback.</td>
+                    <td>Double-click starts inline title editing unless you override it with a callback.</td>
+                  </tr>
+                  <tr>
+                    <td><code>enable_inline_card_editing</code></td>
+                    <td><code>True</code></td>
+                    <td>Lets users click default-rendered card fields and edit them inside the card.</td>
                   </tr>
                   <tr>
                     <td><code>enable_builtin_card_form</code></td>
@@ -2168,6 +2180,11 @@ board = CTkKanbanBoard(
                     <td>Returns the selected card if one is currently selected.</td>
                   </tr>
                   <tr>
+                    <td><span class="signature">start_inline_card_edit(card_id, field_key="title")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Starts editing one visible writable field inside a default-rendered card.</td>
+                  </tr>
+                  <tr>
                     <td><span class="signature">open_add_card_form(column_id=None)</span></td>
                     <td><code>None</code></td>
                     <td>Opens the add flow for a column or the first unlocked column when omitted.</td>
@@ -2175,7 +2192,7 @@ board = CTkKanbanBoard(
                   <tr>
                     <td><span class="signature">open_edit_card_form(card_id)</span></td>
                     <td><code>None</code></td>
-                    <td>Opens the edit flow for the target card.</td>
+                    <td>Explicitly opens the configured full-card popup or side-panel form.</td>
                   </tr>
                   <tr>
                     <td><span class="signature">request_delete_card(card_id)</span></td>
@@ -2559,7 +2576,7 @@ board = CTkKanbanBoard(
                   </tr>
                   <tr>
                     <td><code>show_on_card</code></td>
-                    <td>Includes the field in the default card renderer.</td>
+                    <td>Includes the field in the default card renderer and makes it an inline-edit target.</td>
                   </tr>
                   <tr>
                     <td><code>show_in_form</code></td>
@@ -2579,7 +2596,7 @@ board = CTkKanbanBoard(
                   </tr>
                   <tr>
                     <td><code>read_only</code></td>
-                    <td>Disables editing in the built-in form while preserving the value.</td>
+                    <td>Disables editing in both the inline editor and built-in form while preserving the value.</td>
                   </tr>
                   <tr>
                     <td><code>validator</code></td>

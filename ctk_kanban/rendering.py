@@ -130,6 +130,18 @@ class RenderingMixin:
 
         self._cancel_retired_cleanup()
         self._clear_drag_visuals()
+        active_inline_card = getattr(self, "_inline_edit_card", None)
+        if active_inline_card is not None:
+            try:
+                if (
+                    active_inline_card.winfo_exists()
+                    and active_inline_card.editing_field_key is not None
+                ):
+                    active_inline_card.cancel_inline_edit()
+            except tk.TclError:
+                pass
+            self._inline_edit_card = None
+            self._unbind_inline_outside_click()
         for widget in list(self._column_widgets.values()):
             if widget.winfo_exists():
                 widget.destroy()
@@ -319,6 +331,14 @@ class RenderingMixin:
             on_release=self._on_card_release,
             on_double_click=self._on_card_double_click,
             on_right_click=self._on_card_right_click,
+            on_inline_edit_start=self._begin_inline_card_edit,
+            on_inline_edit_commit=self._commit_inline_card_edit,
+            on_inline_edit_end=self._end_inline_card_edit,
+            inline_editing_enabled=(
+                self.enable_inline_card_editing
+                and self.enable_builtin_card_form
+                and self.card_renderer is None
+            ),
             hover_enabled=self.enable_card_hover,
             card_width=max(160, self.column_width - 26),
             show_drag_handle=self.show_drag_handles,
@@ -481,6 +501,10 @@ class RenderingMixin:
             widget = self._hidden_card_widgets.pop(card_id, None)
         if widget is None:
             return
+        if widget.editing_field_key is not None:
+            widget.cancel_inline_edit()
+        if self._inline_edit_card is widget:
+            self._inline_edit_card = None
         for column in self._column_widgets.values():
             if widget in column.card_widgets:
                 column.remove_card_widget(widget)
@@ -495,6 +519,10 @@ class RenderingMixin:
             widget = self._hidden_card_widgets.pop(card_id, None)
         if widget is None:
             return
+        if widget.editing_field_key is not None:
+            widget.cancel_inline_edit()
+        if self._inline_edit_card is widget:
+            self._inline_edit_card = None
         for column in self._column_widgets.values():
             if widget in column.card_widgets:
                 column.remove_card_widget(widget)

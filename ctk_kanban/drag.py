@@ -154,6 +154,7 @@ class DragDropMixin:
     def _on_card_double_click(self, card_widget: CTkKanbanCard, event: Any) -> None:
         if not self.enable_card_double_click:
             return
+        inline_field_key = getattr(event, "inline_field_key", None)
         event_data = create_event(
             "card_double_clicked",
             source="mouse",
@@ -161,13 +162,23 @@ class DragDropMixin:
             card_data=self.get_card(card_widget.card_id),
             x_root=event.x_root,
             y_root=event.y_root,
+            field_key=inline_field_key,
         )
         if self._callbacks.get("on_card_double_clicked") is not None:
+            if (
+                inline_field_key is not None
+                and card_widget.editing_field_key == inline_field_key
+            ):
+                card_widget.cancel_inline_edit()
             self._invoke_callback("on_card_double_clicked", event_data)
+        elif inline_field_key is not None:
+            self.start_inline_card_edit(card_widget.card_id, inline_field_key)
         else:
-            self.open_edit_card_form(card_widget.card_id)
+            self._begin_default_card_edit(card_widget.card_id)
 
     def _on_card_right_click(self, card_widget: CTkKanbanCard, event: Any) -> None:
+        if not self._request_commit_inline_edit():
+            return
         if self.enable_card_selection:
             self.select_card(card_widget.card_id)
         event_data = create_event(
@@ -210,7 +221,7 @@ class DragDropMixin:
                 ),
             )
         else:
-            self.open_edit_card_form(card_id)
+            self._begin_default_card_edit(card_id)
 
     # ------------------------------------------------------------------
     # Column drag handling
@@ -417,5 +428,3 @@ class DragDropMixin:
             mode = ctk.get_appearance_mode().lower()
             return str(color[1] if mode == "dark" else color[0])
         return str(color)
-
-

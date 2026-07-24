@@ -127,6 +127,29 @@ def parse_list_value(value: Any) -> list[str]:
     return [str(value)]
 
 
+def coerce_field_value(
+    field: dict[str, Any],
+    value: Any,
+    *,
+    strip_strings: bool = True,
+) -> Any:
+    """Convert a field control value into the card model's expected type."""
+
+    if strip_strings and isinstance(value, str):
+        value = value.strip()
+    field_type = field.get("type", "text")
+    if field_type == "number" and value != "":
+        number = float(value)
+        if not isfinite(number):
+            raise ValueError(f"{field['label']} must be finite")
+        value = int(number) if number.is_integer() else number
+    elif field_type in {"tags", "multiselect"}:
+        value = parse_list_value(value)
+    if value == "" and not field.get("required"):
+        value = clone(field.get("empty_value"))
+    return value
+
+
 def generate_card_id(existing_ids: Iterable[Any]) -> Any:
     """Generate a practical ID that follows the board's existing ID style."""
 

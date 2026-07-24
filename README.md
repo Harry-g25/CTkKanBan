@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/CTkKanBan.svg)](https://pypi.org/project/CTkKanBan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Harry-g25/CTkKanBan/blob/main/LICENSE)
 
-CTkKanban is a configurable Kanban widget for CustomTkinter desktop applications. It ships with a polished adaptive light/dark design, generated forms, drag and drop, search, advanced filters, sorting, undo/redo, responsive columns, and database-backed operation.
+CTkKanban is a configurable Kanban widget for CustomTkinter desktop applications. It ships with a polished adaptive light/dark design, live inline card editing, generated forms, drag and drop, search, advanced filters, sorting, undo/redo, responsive columns, and database-backed operation.
 
 The built-in design uses layered surfaces, priority-accented cards, responsive metadata tiles, column color rails, active filter treatments, and database status pills. Every visual token remains overridable through `style` or `theme`.
 
@@ -34,6 +34,34 @@ board = board_class(
 board.pack(fill="both", expand=True)
 app.mainloop()
 ```
+
+## Inline card editing
+
+Inline editing is enabled by default. Click any value rendered on a card—including an empty
+`show_on_card` field—to edit it without opening a dialog. Press Enter or click the check button to
+save, click away to autosave, or press Escape to cancel. Text areas use Ctrl+Enter to save so Enter
+can still insert a new line.
+
+Edits use the same validation, callbacks, undo history, filtering, sorting, and persistence path as
+`update_card()`. Read-only and hidden fields are never editable. To keep the earlier popup/side-panel
+interaction, configure `enable_inline_card_editing=False`; `open_edit_card_form(card_id)` also remains
+available for an explicit full-card form.
+
+```python
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    fields=fields,
+    enable_inline_card_editing=True,
+)
+
+# Keyboard-free or application-driven activation is also available.
+board.start_inline_card_edit(card_id=1, field_key="priority")
+```
+
+Automatic field hit targets are available with the default card renderer. Applications using a
+custom `card_renderer` retain the full-card edit flow and can build their own editing controls.
 
 ## SQLite board
 

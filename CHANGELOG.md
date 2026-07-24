@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added live, field-aware editing inside default cards, including empty-field placeholders, typed controls, keyboard save/cancel behavior, validation feedback, and persistence through the normal card update pipeline.
+- Added `enable_inline_card_editing` and `start_inline_card_edit()` while retaining the explicit popup and side-panel form APIs for compatibility.
+
 ## 0.3.0 - 2026-07-24
 
 - Added `CRUDKanbanDataSource`, a four-callback bridge for connecting existing SQL, NoSQL, ORM, and API repositories without implementing the full persistence protocol.

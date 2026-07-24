@@ -8,6 +8,7 @@ import tkinter as tk
 from datetime import date, datetime, timezone
 from math import isfinite
 from tkinter import messagebox
+from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Mapping
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -31,7 +32,14 @@ from .models import BoardData, CardRenderer, ContextMenuItem, KanbanCallback
 from .query import card_matches_filters
 from .rendering import RenderingMixin
 from .themes import DEFAULT_PRIORITY_COLORS, merge_theme
-from .utils import clone, comparable_value, generate_card_id, parse_temporal, searchable_text
+from .utils import (
+    clone,
+    comparable_value,
+    generate_card_id,
+    iter_widget_tree,
+    parse_temporal,
+    searchable_text,
+)
 from .validators import (
     validate_card,
     validate_card_values,
@@ -150,6 +158,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         enable_card_selection: bool = True,
         enable_card_context_menu: bool = True,
         enable_card_double_click: bool = True,
+        enable_inline_card_editing: bool = True,
         enable_builtin_card_form: bool = True,
         card_form_mode: str = "popup",
         confirm_delete: bool = True,
@@ -311,6 +320,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             "enable_card_selection": enable_card_selection,
             "enable_card_context_menu": enable_card_context_menu,
             "enable_card_double_click": enable_card_double_click,
+            "enable_inline_card_editing": enable_inline_card_editing,
             "enable_builtin_card_form": enable_builtin_card_form,
             "confirm_delete": confirm_delete,
             "confirm_discard_changes": confirm_discard_changes,
@@ -476,6 +486,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self.enable_card_selection = enable_card_selection
         self.enable_card_context_menu = enable_card_context_menu
         self.enable_card_double_click = enable_card_double_click
+        self.enable_inline_card_editing = enable_inline_card_editing
         self.enable_builtin_card_form = enable_builtin_card_form
         self.card_form_mode = card_form_mode
         self.confirm_delete = confirm_delete
@@ -567,6 +578,12 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._last_callback_result = MutationResult()
         self._card_form_panel: CardFormFrame | None = None
         self._card_form_dialog: CardFormDialog | None = None
+        self._inline_edit_card: CTkKanbanCard | None = None
+        self._inline_outside_click_binding: (
+            tuple[Any, Any, str, str, str, list[Any]] | None
+        ) = None
+        self._inline_outside_click_dispatching = False
+        self._inline_outside_unbind_after_id: str | None = None
 
         self._build_board()
         self._ui_after_id = self.after(10, self._drain_ui_queue)
@@ -590,6 +607,18 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._persistence = None
         if persistence is not None:
             persistence.close()
+        active_inline_card = getattr(self, "_inline_edit_card", None)
+        if active_inline_card is not None:
+            try:
+                if (
+                    active_inline_card.winfo_exists()
+                    and active_inline_card.editing_field_key is not None
+                ):
+                    active_inline_card.cancel_inline_edit()
+            except tk.TclError:
+                pass
+            self._inline_edit_card = None
+        self._unbind_inline_outside_click()
         super().destroy()
 
     # ------------------------------------------------------------------
@@ -1406,7 +1435,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             self._selected_card_id = new_id
         if updated == old and new_id == card_id:
             return clone(updated)
-        if self.incremental_card_rendering:
+        if self.incremental_card_rendering or source == "inline_edit":
             self._render_card_update(card_id, old["column"], new_id, updated["column"])
         else:
             self.refresh()
@@ -2389,6 +2418,347 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Built-in forms and menus
     # ------------------------------------------------------------------
+    def start_inline_card_edit(self, card_id: Any, field_key: str = "title") -> bool:
+        """Start editing a visible card field without opening another window."""
+
+        if not self.enable_inline_card_editing or not self.enable_builtin_card_form:
+            return False
+        card_widget = self._card_widgets.get(card_id)
+        if card_widget is None:
+            return False
+        return card_widget.start_inline_edit(field_key)
+
+    def _begin_inline_card_edit(
+        self,
+        card_widget: CTkKanbanCard,
+        field_key: str,
+    ) -> bool:
+        """Coordinate a single active inline editor across the board."""
+
+        if not self.enable_inline_card_editing or not self.enable_builtin_card_form:
+            return False
+        current_widget = self._card_widgets.get(card_widget.card_id)
+        if current_widget is None:
+            return False
+        if current_widget is not card_widget:
+            return current_widget.start_inline_edit(field_key)
+        if not self._request_close_card_form():
+            return False
+        active = self._inline_edit_card
+        if active is not None and active is not card_widget:
+            try:
+                if active.winfo_exists() and active.editing_field_key is not None:
+                    if not active.commit_inline_edit():
+                        return False
+            except tk.TclError:
+                pass
+        self._inline_edit_card = card_widget
+        self._bind_inline_outside_click()
+        if self.enable_card_selection:
+            self.select_card(card_widget.card_id)
+        return True
+
+    def _bind_inline_outside_click(self) -> None:
+        """Watch the owning window so ordinary click-away actions save the edit."""
+
+        pending_after_id = self._inline_outside_unbind_after_id
+        if pending_after_id is not None:
+            self._inline_outside_unbind_after_id = None
+            try:
+                self.after_cancel(pending_after_id)
+            except (tk.TclError, ValueError):
+                pass
+        if self._inline_outside_click_binding is not None:
+            return
+        toplevel = self.winfo_toplevel()
+        bind_owner = toplevel._root()
+        bind_tag = f"CTkKanbanInlineCapture{id(self)}"
+        click_bind_id = tk.Misc.bind_class(
+            bind_owner,
+            bind_tag,
+            "<ButtonPress-1>",
+            self._commit_inline_on_outside_press,
+            add="+",
+        )
+        if click_bind_id is None:
+            return
+        tagged_widgets: list[Any] = []
+        map_bind_id = tk.Misc.bind_all(
+            bind_owner,
+            "<Map>",
+            self._tag_inline_capture_widget,
+            add="+",
+        )
+        if map_bind_id is None:
+            self._remove_tcl_binding_callback(
+                bind_owner,
+                ("bind", bind_tag, "<ButtonPress-1>"),
+                click_bind_id,
+            )
+            return
+        self._inline_outside_click_binding = (
+            toplevel,
+            bind_owner,
+            bind_tag,
+            click_bind_id,
+            map_bind_id,
+            tagged_widgets,
+        )
+        for widget in iter_widget_tree(toplevel):
+            self._tag_inline_capture_widget(widget=widget)
+
+    def _tag_inline_capture_widget(
+        self,
+        event: Any = None,
+        *,
+        widget: Any = None,
+    ) -> None:
+        """Prepend the capture tag to existing and newly mapped host widgets."""
+
+        binding = self._inline_outside_click_binding
+        if binding is None:
+            return
+        (
+            toplevel,
+            _bind_owner,
+            bind_tag,
+            _click_bind_id,
+            _map_bind_id,
+            tagged_widgets,
+        ) = binding
+        target = widget if widget is not None else getattr(event, "widget", None)
+        if target is None:
+            return
+        try:
+            if target.winfo_toplevel() is not toplevel:
+                return
+            tags = tuple(target.bindtags())
+            if bind_tag not in tags:
+                target.bindtags((bind_tag, *tags))
+                tagged_widgets.append(target)
+        except (tk.TclError, AttributeError):
+            pass
+
+    def _unbind_inline_outside_click(self) -> None:
+        if self._inline_outside_click_dispatching:
+            if self._inline_outside_unbind_after_id is None:
+                self._inline_outside_unbind_after_id = self.after_idle(
+                    self._unbind_inline_outside_click
+                )
+            return
+        pending_after_id = self._inline_outside_unbind_after_id
+        self._inline_outside_unbind_after_id = None
+        if pending_after_id is not None:
+            try:
+                self.after_cancel(pending_after_id)
+            except (tk.TclError, ValueError):
+                pass
+        binding = getattr(self, "_inline_outside_click_binding", None)
+        self._inline_outside_click_binding = None
+        if binding is None:
+            return
+        (
+            _toplevel,
+            bind_owner,
+            bind_tag,
+            click_bind_id,
+            map_bind_id,
+            tagged_widgets,
+        ) = binding
+        for widget in tagged_widgets:
+            try:
+                tags = tuple(widget.bindtags())
+                if bind_tag in tags:
+                    widget.bindtags(tuple(tag for tag in tags if tag != bind_tag))
+            except tk.TclError:
+                pass
+        for bind_path, bind_id in (
+            (("bind", bind_tag, "<ButtonPress-1>"), click_bind_id),
+            (
+                ("bind", "all", "<Map>"),
+                map_bind_id,
+            ),
+        ):
+            try:
+                self._remove_tcl_binding_callback(
+                    bind_owner,
+                    bind_path,
+                    bind_id,
+                )
+            except tk.TclError:
+                pass
+
+    @staticmethod
+    def _remove_tcl_binding_callback(
+        bind_owner: Any,
+        bind_path: tuple[str, str, str],
+        bind_id: str,
+    ) -> None:
+        """Remove one Tk callback without disturbing sibling binding scripts."""
+
+        script = str(bind_owner.tk.call(*bind_path))
+        prefix = f'if {{"[{bind_id} '
+        remaining_lines = [
+            line
+            for line in script.split("\n")
+            if not line.startswith(prefix)
+        ]
+        while remaining_lines and not remaining_lines[-1].strip():
+            remaining_lines.pop()
+        remaining = "\n".join(remaining_lines)
+        bind_owner.tk.call(*bind_path, remaining)
+        bind_owner.deletecommand(bind_id)
+
+    @staticmethod
+    def _widget_is_within(widget: Any, ancestor: Any) -> bool:
+        while widget is not None:
+            if widget is ancestor:
+                return True
+            widget = getattr(widget, "master", None)
+        return False
+
+    @staticmethod
+    def _inline_target_details(target: Any) -> tuple[Any | None, str | None]:
+        """Return the card and field represented by a pointer target."""
+
+        path: list[Any] = []
+        widget = target
+        while widget is not None:
+            path.append(widget)
+            if isinstance(widget, CTkKanbanCard):
+                field_key = next(
+                    (
+                        widget._inline_widget_fields[item]
+                        for item in path
+                        if item in widget._inline_widget_fields
+                    ),
+                    None,
+                )
+                return widget.card_id, field_key
+            widget = getattr(widget, "master", None)
+        return None, None
+
+    def _replay_card_click_after_refresh(
+        self,
+        card_id: Any,
+        field_key: str | None,
+        x_root: int,
+        y_root: int,
+    ) -> None:
+        """Complete a click whose original card widget was rebuilt mid-press."""
+
+        card_widget = self._card_widgets.get(card_id)
+        if card_widget is None:
+            return
+        self._handle_card_click(
+            card_id,
+            SimpleNamespace(x_root=x_root, y_root=y_root),
+        )
+        if field_key is not None:
+            card_widget.start_inline_edit(field_key)
+
+    def _commit_inline_on_outside_press(self, event: Any) -> str | None:
+        active = self._inline_edit_card
+        if active is None or active.editing_field_key is None:
+            self._inline_outside_click_dispatching = True
+            try:
+                self._unbind_inline_outside_click()
+            finally:
+                self._inline_outside_click_dispatching = False
+            return None
+        target = getattr(event, "widget", None)
+        editor = active.inline_editor
+        if editor is not None and self._widget_is_within(target, editor):
+            return None
+        if target in active._inline_widget_fields:
+            return None
+        target_was_active_card = self._widget_is_within(target, active)
+        target_card_id, target_field_key = self._inline_target_details(target)
+        self._inline_outside_click_dispatching = True
+        try:
+            committed = active.commit_inline_edit()
+        finally:
+            self._inline_outside_click_dispatching = False
+        if committed:
+            try:
+                target_exists = target is not None and bool(target.winfo_exists())
+            except (tk.TclError, AttributeError):
+                target_exists = False
+            if not target_exists:
+                if target_card_id is not None and not target_was_active_card:
+                    self.after_idle(
+                        self._replay_card_click_after_refresh,
+                        target_card_id,
+                        target_field_key,
+                        int(getattr(event, "x_root", 0) or 0),
+                        int(getattr(event, "y_root", 0) or 0),
+                    )
+                return "break"
+            return "break" if target_was_active_card else None
+        self._drag_state = None
+        return "break"
+
+    def _request_commit_inline_edit(self) -> bool:
+        """Commit the current inline editor before opening another edit surface."""
+
+        active = self._inline_edit_card
+        if active is None:
+            return True
+        try:
+            if not active.winfo_exists() or active.editing_field_key is None:
+                self._inline_edit_card = None
+                self._unbind_inline_outside_click()
+                return True
+        except tk.TclError:
+            self._inline_edit_card = None
+            self._unbind_inline_outside_click()
+            return True
+        return active.commit_inline_edit()
+
+    def _commit_inline_card_edit(
+        self,
+        card_widget: CTkKanbanCard,
+        field_key: str,
+        value: Any,
+    ) -> bool | str:
+        """Save one inline field through the normal update and persistence path."""
+
+        event = create_event(
+            "inline_card_edit_failed",
+            source="inline_edit",
+            card_id=card_widget.card_id,
+            field_key=field_key,
+        )
+        self._last_cancellation_reason = None
+        try:
+            updated = self.update_card(
+                card_widget.card_id,
+                {field_key: value},
+                source="inline_edit",
+            )
+        except KanbanValidationError as exc:
+            return str(exc).strip() or exc.__class__.__name__
+        except Exception as exc:
+            self._emit_error(exc, event)
+            return str(exc).strip() or exc.__class__.__name__
+        if updated is None:
+            return self._last_cancellation_reason or "The change was cancelled"
+        if self._inline_edit_card is card_widget:
+            self._inline_edit_card = None
+        return True
+
+    def _end_inline_card_edit(self, card_widget: CTkKanbanCard) -> None:
+        if self._inline_edit_card is card_widget:
+            self._inline_edit_card = None
+            self._unbind_inline_outside_click()
+
+    def _begin_default_card_edit(self, card_id: Any) -> None:
+        """Use inline title editing when available, otherwise retain form behavior."""
+
+        if self.start_inline_card_edit(card_id, "title"):
+            return
+        self.open_edit_card_form(card_id)
+
     def _open_card_form(
         self,
         *,
@@ -2477,6 +2847,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def open_add_card_form(self, column_id: Any | None = None) -> None:
         """Open the generated add form, or notify an external form callback."""
 
+        if not self._request_commit_inline_edit():
+            return
         if column_id is None:
             column_id = next(
                 (column["id"] for column in self._columns_data if not column.get("locked")), None
@@ -2519,6 +2891,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
     def open_edit_card_form(self, card_id: Any) -> None:
         """Open the generated edit form, or notify an external form callback."""
 
+        if not self._request_commit_inline_edit():
+            return
         card = self._require_card(card_id)
         if not self.enable_builtin_card_form:
             event = create_event("edit_card_requested", source="ui", card_id=card_id, card_data=clone(card))
@@ -2655,7 +3029,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         menu.add_command(
             label="Edit",
             command=lambda: self._invoke_ui_action(
-                lambda: self.open_edit_card_form(card_id),
+                lambda: self._begin_default_card_edit(card_id),
                 "card_edit_failed",
                 card_id=card_id,
             ),

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import tkinter as tk
-from math import isfinite
 from tkinter import messagebox
 from typing import Any, Callable
 
 import customtkinter as ctk
 
-from .utils import clone, display_value, iter_widget_tree, parse_list_value
+from .utils import clone, coerce_field_value, display_value, iter_widget_tree
 from .widgets import DateEntry
 
 
@@ -416,16 +415,11 @@ class CardFormFrame(ctk.CTkFrame):
             else:
                 value = control.get().strip()
 
-            if field_type == "number" and value != "":
-                number = float(value)
-                if not isfinite(number):
-                    raise ValueError(f"{field['label']} must be finite")
-                value = int(number) if number.is_integer() else number
-            elif field_type in {"tags", "multiselect"}:
-                value = parse_list_value(value)
-            if value == "" and not field.get("required"):
-                value = clone(field.get("empty_value"))
-            result[key] = value
+            result[key] = coerce_field_value(
+                field,
+                value,
+                strip_strings=field_type != "select",
+            )
         return result
 
     def _clear_errors(self) -> None:
