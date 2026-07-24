@@ -35,9 +35,126 @@ app.mainloop()
 
 The SQLite adapter creates its schema automatically. Writes are transactional, batches are atomic, and each board has a monotonically increasing revision.
 
+## Bring Your Own CRUD
+
+`CRUDKanbanDataSource` is the shortest route when your application already has a database connection,
+ORM model, repository, document collection, or remote API. You provide four ordinary callbacks and the
+bridge implements the board-specific data-source contract:
+
+```python
+from ctk_kanban import CRUDKanbanDataSource
+
+
+def read_board(board_id):
+    return {
+        "columns": repository.list_columns(board_id),
+        "cards": repository.list_cards(board_id),
+        "revision": repository.get_revision(board_id),  # Optional
+    }
+
+
+def create(resource, board_id, record, context):
+    # resource is "card" or "column".
+    # Return the stored record so generated IDs/defaults reach the board.
+    return repository.insert(
+        resource,
+        board_id,
+        record,
+        position=context.position,
+        transaction=context.transaction,
+    )
+
+
+def update(resource, board_id, record_id, record, context):
+    return repository.update(
+        resource,
+        board_id,
+        record_id,
+        record,
+        position=context.position,
+        transaction=context.transaction,
+    )
+
+
+def delete(resource, board_id, record_id, context):
+    repository.delete(
+        resource,
+        board_id,
+        record_id,
+        transaction=context.transaction,
+    )
+
+
+source = CRUDKanbanDataSource(
+    read=read_board,
+    create=create,
+    update=update,
+    delete=delete,
+)
+
+board = CTkKanbanBoard(
+    app,
+    data_source=source,
+    board_id="work",
+    auto_load=True,
+)
+```
+
+This works with relational, document, key-value, graph, cloud, or HTTP-backed storage because CTkKanban
+does not open the connection or generate database-specific queries. The callbacks own that small part.
+The bridge handles the rest:
+
+- Card and column create, read, update, and delete dispatch.
+- Card moves/reorders as focused updates.
+- Column ordering through `context.position`.
+- Column ID changes and their affected card records.
+- Generated IDs when `create` returns a canonical stored record.
+- Search, filters, sorting, paging, and per-column totals over `read_board`.
+- Batch ID rebasing and an optional shared transaction.
+- Revision-based polling, or an optional custom `changes` callback.
+
+Write callbacks may return:
+
+- A record mapping: successful write with canonical database values.
+- `None` or `True`: successful write using the submitted record.
+- `False`: rejected write; the board restores its prior UI state.
+- `MutationResult`: advanced control over conflicts, revisions, changed records, and retryability.
+
+Every callback receives `CRUDContext`. Its `metadata` property exposes the event ID, transaction ID,
+actor, expected revision, source, and timestamp. Use `event_id` as an idempotency key and enforce
+`expected_revision` inside the same transaction when concurrent writers matter.
+
+### Optional Transactions
+
+Pass a context-manager factory to make a board batch use one database transaction. The object yielded
+by the context manager is available as `context.transaction` in every write callback:
+
+```python
+from contextlib import contextmanager
+
+
+@contextmanager
+def transaction(events):
+    with repository.begin() as session:
+        yield session
+
+
+source = CRUDKanbanDataSource(
+    read=read_board,
+    create=create,
+    update=update,
+    delete=delete,
+    transaction=transaction,
+)
+```
+
+If any callback rejects a write, the bridge raises inside this context so its normal rollback behavior
+runs, then returns the rejection to the board.
+
 ## Data-Source Contract
 
-Implement `KanbanDataSource` for PostgreSQL, SQL Server, REST, or another backend:
+Implement `KanbanDataSource` directly when the backend should own server-side queries, native bulk
+writes, durable event history, optimistic-conflict snapshots, or a change stream:
 
 ```python
 class KanbanDataSource(Protocol):
@@ -91,5 +208,6 @@ Polling uses `get_changes()` and `poll_interval_ms`; it refreshes when another c
 - Keep adapter methods blocking and thread-safe; the coordinator owns threading.
 - Store UTC timestamps and configure `timezone_name` and `locale_name` for display.
 - Implement `apply_batch(events)` as one transaction and reject the entire list if any event cannot be applied.
+- With `CRUDKanbanDataSource`, provide `transaction` if multi-record writes must be atomic.
 - In-memory boards accept hashable IDs; the built-in SQLite adapter requires non-empty string or integer IDs so they round-trip through durable storage.
 - Test disconnect, retry, stale revision, duplicate submission, and remote-change paths.

@@ -59,6 +59,25 @@ Database work runs outside Tk's UI thread. Mutations carry event, transaction, a
 
 The built-in SQLite adapter provides transactional writes, optimistic revisions, atomic batches, server-side search/filter/sort, paging, change polling, generated IDs, and automatic timestamps. The board shows saving, saved, offline, conflict, and error states; duplicate submissions are blocked while a mutation is pending.
 
+For an existing SQL, document, key-value, ORM, or API-backed repository, use
+`CRUDKanbanDataSource` instead of implementing the full adapter contract:
+
+```python
+from ctk_kanban import CRUDKanbanDataSource
+
+source = CRUDKanbanDataSource(
+    read=repository.read_board,
+    create=repository.create,
+    update=repository.update,
+    delete=repository.delete,
+    transaction=repository.transaction,  # Optional
+)
+```
+
+The four callbacks receive either `"card"` or `"column"`, the board ID, the record or ID, and a
+`CRUDContext`. The bridge translates moves, reorders, renames, batching, paging, search, filters, and
+canonical generated IDs. This keeps database-specific connection and query code in your application.
+
 Use only one durable writer: configure either `data_source` or the legacy `on_data_changed` callback, never both.
 
 See the [database integration guide](https://github.com/Harry-g25/CTkKanBan/blob/main/docs/database.md) for the adapter contract, event shape, conflict policies, paging, polling, and a production integration checklist.

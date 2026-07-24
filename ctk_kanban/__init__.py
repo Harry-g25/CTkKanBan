@@ -14,6 +14,7 @@ from .contracts import (
     MutationResult,
     PersistenceState,
 )
+from .crud import CRUDContext, CRUDKanbanDataSource, CRUDResource, CRUDWriteResult
 from .datasource import KanbanDataSource, PersistenceCoordinator, RetryPolicy
 from .exceptions import (
     KanbanConflictError,
@@ -60,6 +61,10 @@ __all__ = [
     "KanbanPersistenceError",
     "KanbanConflictError",
     "KanbanDataSource",
+    "CRUDKanbanDataSource",
+    "CRUDContext",
+    "CRUDResource",
+    "CRUDWriteResult",
     "PersistenceCoordinator",
     "RetryPolicy",
     "EventMetadata",

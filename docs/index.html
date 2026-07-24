@@ -555,11 +555,12 @@ board.sort_cards("manual", reverse=True, column_id="review")</code></pre>
             <div class="section-rule"></div>
             <h2>Persistence Hooks</h2>
             <p>
-              CTkKanBan can use the included transactional SQLite adapter or any implementation of
-              <code>KanbanDataSource</code>. For most small file-based applications, <code>on_data_changed</code> is the simplest
-              legacy integration point for files or small local boards. Database-backed applications should prefer a
-              <code>KanbanDataSource</code>, which receives focused typed operations on a worker thread and may return
-              canonical records, revisions, conflicts, and generated IDs.
+              CTkKanBan can use the included transactional SQLite adapter, the callback-based
+              <code>CRUDKanbanDataSource</code>, or any implementation of <code>KanbanDataSource</code>.
+              Use the CRUD bridge with an existing SQL, document, key-value, ORM, or API repository:
+              provide read, create, update, and delete callbacks while the bridge translates board
+              moves, ordering, generated IDs, queries, and batches. Database work runs on a worker
+              thread and may return canonical records, revisions, conflicts, and generated IDs.
             </p>
 
             <div class="code-block">
@@ -2406,10 +2407,9 @@ board = CTkKanbanBoard(
 
             <h3>How do I add my own database layer?</h3>
             <p>
-              Implement <code>KanbanDataSource</code> for operation-specific writes, canonical records, revisions,
-              conflicts, server-side queries, and change polling. See the
-              <a href="database.md">database integration guide</a>. Use
-              <code>on_data_changed</code> only for the legacy full-snapshot path.
+              Wrap your repository's four CRUD functions with <code>CRUDKanbanDataSource</code>. Implement
+              <code>KanbanDataSource</code> directly only when you need native server-side queries, bulk writes,
+              conflict snapshots, or change streams. See the <a href="database.md">database integration guide</a>.
             </p>
           </section>
 
@@ -2418,8 +2418,8 @@ board = CTkKanbanBoard(
             <h2>Notes and Limitations</h2>
             <ul>
               <li>
-                The package includes a transactional SQLite adapter. Other databases can implement the
-                <code>KanbanDataSource</code> protocol.
+                The package includes a transactional SQLite adapter and a database-agnostic CRUD callback bridge.
+                Advanced integrations can implement the <code>KanbanDataSource</code> protocol directly.
               </li>
               <li>
                 The built-in UI does not provide a column creation, edit, or delete dialog. Column structure changes are
