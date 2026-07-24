@@ -261,7 +261,6 @@ class InlineCardEditingTests(unittest.TestCase):
             card = self.board._card_widgets[1]
             card.start_inline_edit("title")
             self.replace_entry_value(card.inline_control, "Saved before action")
-            button._canvas.event_generate("<Enter>")
             button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
             button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
             self.app.update()
@@ -269,7 +268,6 @@ class InlineCardEditingTests(unittest.TestCase):
             card = self.board._card_widgets[1]
             card.start_inline_edit("title")
             self.replace_entry_value(card.inline_control, "   ")
-            button._canvas.event_generate("<Enter>")
             button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
             button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
             self.app.update()
@@ -303,7 +301,6 @@ class InlineCardEditingTests(unittest.TestCase):
 
             capture_tag = self.board._inline_outside_click_binding[2]
             self.assertEqual(button._canvas.bindtags()[0], capture_tag)
-            button._canvas.event_generate("<Enter>")
             button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
             button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
             self.app.update()
@@ -320,7 +317,6 @@ class InlineCardEditingTests(unittest.TestCase):
             )
             blocked_button.place(x=120, y=4)
             self.app.update()
-            blocked_button._canvas.event_generate("<Enter>")
             blocked_button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
             blocked_button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
             self.app.update()
@@ -462,7 +458,7 @@ class InlineCardEditingTests(unittest.TestCase):
             script = str(self.app.tk.call(*bind_path))
             prefix = f'if {{"[{external_bind_id} '
             remaining = "\n".join(
-                l for l in script.split("\n") if not l.startswith(prefix)
+                ln for ln in script.split("\n") if not ln.startswith(prefix)
             ).rstrip()
             self.app.tk.call(*bind_path, remaining)
             self.app.deletecommand(external_bind_id)
@@ -544,7 +540,6 @@ class InlineCardEditingTests(unittest.TestCase):
             self.replace_entry_value(card.inline_control, "Saved before adding")
             add_target = board._column_widgets["todo"].add_button._canvas
 
-            add_target.event_generate("<Enter>")
             add_target.event_generate("<ButtonPress-1>", x=2, y=2)
             add_target.event_generate("<ButtonRelease-1>", x=2, y=2)
             self.app.update()
