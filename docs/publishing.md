@@ -20,7 +20,7 @@ The publisher workflow names and environment names are identity fields. They mus
 Add user-facing changes under `## Unreleased` in `CHANGELOG.md`, then run:
 
 ```bash
-python scripts/prepare_release.py 0.3.0
+python scripts/prepare_release.py 1.0.0
 tox -e lint,type,package,py314,ctk-min,ctk-current
 ```
 
@@ -36,7 +36,7 @@ tox -e lint,type,package,py314,ctk-min,ctk-current
 Push the release-preparation commit and run **Publish to TestPyPI** manually. Test installation from TestPyPI in a clean environment:
 
 ```bash
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ CTkKanBan==0.3.0
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ CTkKanBan==1.0.0
 ```
 
 The extra index supplies CustomTkinter if it is not mirrored on TestPyPI. Do not use this two-index command for production dependency resolution.
@@ -46,8 +46,8 @@ The extra index supplies CustomTkinter if it is not mirrored on TestPyPI. Do not
 After CI is green on `main`, create and push the matching annotated tag:
 
 ```bash
-git tag -a v0.3.0 -m "CTkKanban 0.3.0"
-git push origin v0.3.0
+git tag -a v1.0.0 -m "CTkKanban 1.0.0"
+git push origin v1.0.0
 ```
 
 `publish.yml` then:
@@ -70,5 +70,5 @@ If publishing fails before PyPI accepts the files, fix the workflow or environme
 Verify provenance for a downloaded file with the GitHub CLI:
 
 ```bash
-gh attestation verify ctk_kanban-0.3.0-py3-none-any.whl --repo Harry-g25/CTkKanBan
+gh attestation verify ctk_kanban-1.0.0-py3-none-any.whl --repo Harry-g25/CTkKanBan
 ```

@@ -132,6 +132,15 @@ class InlineCardEditingTests(unittest.TestCase):
         label = card.inline_error_label
         return "" if label is None else str(label.cget("text")).strip()
 
+    @staticmethod
+    def click_widget(widget: Any) -> None:
+        """Generate a complete pointer click for both CustomTkinter 5 and 6."""
+
+        widget.event_generate("<Enter>")
+        widget.event_generate("<ButtonPress-1>", x=2, y=2)
+        widget.event_generate("<ButtonRelease-1>", x=2, y=2)
+        widget.event_generate("<Leave>")
+
     def test_inline_editing_is_enabled_by_default_and_does_not_open_a_form(self) -> None:
         self.assertTrue(self.board.enable_inline_card_editing)
 
@@ -261,15 +270,13 @@ class InlineCardEditingTests(unittest.TestCase):
             card = self.board._card_widgets[1]
             card.start_inline_edit("title")
             self.replace_entry_value(card.inline_control, "Saved before action")
-            button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
-            button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
+            self.click_widget(button._canvas)
             self.app.update()
 
             card = self.board._card_widgets[1]
             card.start_inline_edit("title")
             self.replace_entry_value(card.inline_control, "   ")
-            button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
-            button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
+            self.click_widget(button._canvas)
             self.app.update()
         finally:
             self.app.withdraw()
@@ -279,6 +286,7 @@ class InlineCardEditingTests(unittest.TestCase):
         self.assertEqual(self.board.get_card(1)["title"], "Saved before action")
         self.assertEqual(card.editing_field_key, "title")
         self.assertTrue(self.error_text(card))
+        self.assertFalse(self.board._inline_outside_release_blocked)
 
     def test_click_away_capture_includes_controls_created_during_the_edit(self) -> None:
         observed_titles: list[str] = []
@@ -301,8 +309,7 @@ class InlineCardEditingTests(unittest.TestCase):
 
             capture_tag = self.board._inline_outside_click_binding[2]
             self.assertEqual(button._canvas.bindtags()[0], capture_tag)
-            button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
-            button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
+            self.click_widget(button._canvas)
             self.app.update()
 
             card = self.board._card_widgets[1]
@@ -317,8 +324,7 @@ class InlineCardEditingTests(unittest.TestCase):
             )
             blocked_button.place(x=120, y=4)
             self.app.update()
-            blocked_button._canvas.event_generate("<ButtonPress-1>", x=2, y=2)
-            blocked_button._canvas.event_generate("<ButtonRelease-1>", x=2, y=2)
+            self.click_widget(blocked_button._canvas)
             self.app.update()
         finally:
             self.app.withdraw()
@@ -399,16 +405,30 @@ class InlineCardEditingTests(unittest.TestCase):
             binding = board._inline_outside_click_binding
             self.assertIsNotNone(binding)
             bind_owner = binding[1]
+            bind_tag = binding[2]
             click_bind_id = binding[3]
             map_bind_id = binding[4]
+            release_bind_id = binding[6]
             self.assertIs(bind_owner, self.app._root())
-            self.assertIn(click_bind_id, bind_owner._tclCommands)
-            self.assertIn(map_bind_id, bind_owner._tclCommands)
+            click_script = str(bind_owner.tk.call("bind", bind_tag, "<ButtonPress-1>"))
+            self.assertIn(click_bind_id, click_script)
+            release_script = str(
+                bind_owner.tk.call("bind", bind_tag, "<ButtonRelease-1>")
+            )
+            self.assertIn(release_bind_id, release_script)
+            map_script = str(bind_owner.tk.call("bind", "all", "<Map>"))
+            self.assertIn(map_bind_id, map_script)
 
             card.cancel_inline_edit()
 
-            self.assertNotIn(click_bind_id, bind_owner._tclCommands)
-            self.assertNotIn(map_bind_id, bind_owner._tclCommands)
+            click_script = str(bind_owner.tk.call("bind", bind_tag, "<ButtonPress-1>"))
+            self.assertNotIn(click_bind_id, click_script)
+            release_script = str(
+                bind_owner.tk.call("bind", bind_tag, "<ButtonRelease-1>")
+            )
+            self.assertNotIn(release_bind_id, release_script)
+            map_script = str(bind_owner.tk.call("bind", "all", "<Map>"))
+            self.assertNotIn(map_bind_id, map_script)
             self.assertIsNone(board._inline_outside_click_binding)
         finally:
             board.destroy()
@@ -444,13 +464,18 @@ class InlineCardEditingTests(unittest.TestCase):
             ]
             self.assertEqual(remaining_lines, baseline_lines)
             self.assertEqual(remaining_script, baseline_script.rstrip())
-            self.assertIn(external_bind_id, self.app._tclCommands)
+            map_script = str(self.app.tk.call(*bind_path))
+            self.assertIn(external_bind_id, map_script)
         finally:
-            tk.Misc._unbind(
-                self.app,
-                bind_path,
-                external_bind_id,
-            )
+            # Remove the external callback without relying on tkinter.Misc._unbind,
+            # which is unavailable on Python 3.10.
+            script = str(self.app.tk.call(*bind_path))
+            prefix = f'if {{"[{external_bind_id} '
+            remaining = "\n".join(
+                line for line in script.split("\n") if not line.startswith(prefix)
+            ).rstrip()
+            self.app.tk.call(*bind_path, remaining)
+            self.app.deletecommand(external_bind_id)
 
     def test_switching_fields_commits_and_opens_the_requested_replacement_editor(self) -> None:
         card = self.board._card_widgets[1]
@@ -529,8 +554,7 @@ class InlineCardEditingTests(unittest.TestCase):
             self.replace_entry_value(card.inline_control, "Saved before adding")
             add_target = board._column_widgets["todo"].add_button._canvas
 
-            add_target.event_generate("<ButtonPress-1>", x=2, y=2)
-            add_target.event_generate("<ButtonRelease-1>", x=2, y=2)
+            self.click_widget(add_target)
             self.app.update()
         finally:
             self.app.withdraw()

@@ -2,8 +2,11 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-07-24
+
 - Added live, field-aware editing inside default cards, including empty-field placeholders, typed controls, keyboard save/cancel behavior, validation feedback, and persistence through the normal card update pipeline.
 - Added `enable_inline_card_editing` and `start_inline_card_edit()` while retaining the explicit popup and side-panel form APIs for compatibility.
+- Kept invalid inline edits from triggering release-driven host controls under CustomTkinter 6 while preserving CustomTkinter 5 behavior.
 
 ## 0.3.0 - 2026-07-24
 

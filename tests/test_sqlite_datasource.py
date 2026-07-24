@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 import time
 import unittest
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from gui_test_app import TEST_APP
@@ -170,7 +170,7 @@ class SQLiteDataSourceTests(unittest.TestCase):
         self.assertTrue(page.has_more)
 
     def test_server_overdue_filter_respects_completed_columns(self) -> None:
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        yesterday = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
         self.source.seed_board(
             "overdue",
             [{"id": "todo", "title": "To Do"}, {"id": "done", "title": "Done"}],

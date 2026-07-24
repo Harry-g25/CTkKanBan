@@ -580,10 +580,11 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         self._card_form_dialog: CardFormDialog | None = None
         self._inline_edit_card: CTkKanbanCard | None = None
         self._inline_outside_click_binding: (
-            tuple[Any, Any, str, str, str, list[Any]] | None
+            tuple[Any, Any, str, str, str, list[Any], str] | None
         ) = None
         self._inline_outside_click_dispatching = False
         self._inline_outside_unbind_after_id: str | None = None
+        self._inline_outside_release_blocked = False
 
         self._build_board()
         self._ui_after_id = self.after(10, self._drain_ui_queue)
@@ -2482,6 +2483,20 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         )
         if click_bind_id is None:
             return
+        release_bind_id = tk.Misc.bind_class(
+            bind_owner,
+            bind_tag,
+            "<ButtonRelease-1>",
+            self._block_inline_release_after_failed_commit,
+            add="+",
+        )
+        if release_bind_id is None:
+            self._remove_tcl_binding_callback(
+                bind_owner,
+                ("bind", bind_tag, "<ButtonPress-1>"),
+                click_bind_id,
+            )
+            return
         tagged_widgets: list[Any] = []
         map_bind_id = tk.Misc.bind_all(
             bind_owner,
@@ -2490,11 +2505,15 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             add="+",
         )
         if map_bind_id is None:
-            self._remove_tcl_binding_callback(
-                bind_owner,
-                ("bind", bind_tag, "<ButtonPress-1>"),
-                click_bind_id,
-            )
+            for bind_path, bind_id in (
+                (("bind", bind_tag, "<ButtonPress-1>"), click_bind_id),
+                (("bind", bind_tag, "<ButtonRelease-1>"), release_bind_id),
+            ):
+                self._remove_tcl_binding_callback(
+                    bind_owner,
+                    bind_path,
+                    bind_id,
+                )
             return
         self._inline_outside_click_binding = (
             toplevel,
@@ -2503,6 +2522,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             click_bind_id,
             map_bind_id,
             tagged_widgets,
+            release_bind_id,
         )
         for widget in iter_widget_tree(toplevel):
             self._tag_inline_capture_widget(widget=widget)
@@ -2525,6 +2545,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             _click_bind_id,
             _map_bind_id,
             tagged_widgets,
+            _release_bind_id,
         ) = binding
         target = widget if widget is not None else getattr(event, "widget", None)
         if target is None:
@@ -2555,6 +2576,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 pass
         binding = getattr(self, "_inline_outside_click_binding", None)
         self._inline_outside_click_binding = None
+        self._inline_outside_release_blocked = False
         if binding is None:
             return
         (
@@ -2564,6 +2586,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             click_bind_id,
             map_bind_id,
             tagged_widgets,
+            release_bind_id,
         ) = binding
         for widget in tagged_widgets:
             try:
@@ -2574,6 +2597,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 pass
         for bind_path, bind_id in (
             (("bind", bind_tag, "<ButtonPress-1>"), click_bind_id),
+            (("bind", bind_tag, "<ButtonRelease-1>"), release_bind_id),
             (
                 ("bind", "all", "<Map>"),
                 map_bind_id,
@@ -2658,6 +2682,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             card_widget.start_inline_edit(field_key)
 
     def _commit_inline_on_outside_press(self, event: Any) -> str | None:
+        self._inline_outside_release_blocked = False
         active = self._inline_edit_card
         if active is None or active.editing_field_key is None:
             self._inline_outside_click_dispatching = True
@@ -2696,6 +2721,18 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                 return "break"
             return "break" if target_was_active_card else None
         self._drag_state = None
+        self._inline_outside_release_blocked = True
+        return "break"
+
+    def _block_inline_release_after_failed_commit(
+        self,
+        _event: Any,
+    ) -> str | None:
+        """Stop release-driven controls after their press failed validation."""
+
+        if not self._inline_outside_release_blocked:
+            return None
+        self._inline_outside_release_blocked = False
         return "break"
 
     def _request_commit_inline_edit(self) -> bool:
