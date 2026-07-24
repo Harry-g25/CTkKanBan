@@ -2638,6 +2638,15 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
             widget = getattr(widget, "master", None)
         return None, None
 
+    @staticmethod
+    def _event_pointer_coordinates(event: Any) -> tuple[int, int] | None:
+        raw_x_root = getattr(event, "x_root", None)
+        raw_y_root = getattr(event, "y_root", None)
+        try:
+            return int(raw_x_root), int(raw_y_root)
+        except (TypeError, ValueError):
+            return None
+
     def _replay_card_click_after_refresh(
         self,
         card_id: Any,
@@ -2697,15 +2706,7 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         finally:
             self._inline_outside_click_dispatching = False
         if committed:
-            raw_x_root = getattr(event, "x_root", None)
-            raw_y_root = getattr(event, "y_root", None)
-            try:
-                pointer_coordinates = (
-                    int(raw_x_root),
-                    int(raw_y_root),
-                )
-            except (TypeError, ValueError):
-                pointer_coordinates = None
+            pointer_coordinates = self._event_pointer_coordinates(event)
             try:
                 target_exists = target is not None and bool(target.winfo_exists())
             except (tk.TclError, AttributeError):
