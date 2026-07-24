@@ -457,6 +457,8 @@ class InlineCardEditingTests(unittest.TestCase):
             self.assertIn(external_bind_id, map_script)
         finally:
             # Remove external bind: compatible with Python 3.10 and later.
+            # Each registered callback occupies one line in the Tcl bind script
+            # with the form: if {"[<funcid> ...]" == "break"} break
             script = str(self.app.tk.call(*bind_path))
             prefix = f'if {{"[{external_bind_id} '
             remaining = "\n".join(
