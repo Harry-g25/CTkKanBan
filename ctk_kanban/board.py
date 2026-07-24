@@ -2640,6 +2640,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
 
     @staticmethod
     def _event_pointer_coordinates(event: Any) -> tuple[int, int] | None:
+        """Return pointer coordinates from an event, or ``None`` when unavailable."""
+
         raw_x_root = getattr(event, "x_root", None)
         raw_y_root = getattr(event, "y_root", None)
         try:
@@ -2706,12 +2708,12 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         finally:
             self._inline_outside_click_dispatching = False
         if committed:
-            pointer_coordinates = self._event_pointer_coordinates(event)
             try:
                 target_exists = target is not None and bool(target.winfo_exists())
             except (tk.TclError, AttributeError):
                 target_exists = False
             if not target_exists:
+                pointer_coordinates = self._event_pointer_coordinates(event)
                 if pointer_coordinates is None:
                     return "break"
                 x_root, y_root = pointer_coordinates
