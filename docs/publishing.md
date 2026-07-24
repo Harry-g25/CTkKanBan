@@ -7,7 +7,7 @@ Releases are built once, validated, attested, published to PyPI with OpenID Conn
 1. In GitHub, create an environment named `pypi`. Add required reviewers and prevent self-review if another maintainer is available. Restrict deployment branches and tags to protected tags matching `v*`.
 2. Create a second environment named `testpypi` with the same protections.
 3. In PyPI, add a trusted publisher for owner `Harry-g25`, repository `CTkKanBan`, workflow `publish.yml`, environment `pypi`.
-4. Because the project is not yet on PyPI, use PyPI's pending-publisher form to reserve `ctk-kanban` and create it on the first successful workflow run.
+4. Because the project is not yet on PyPI, use PyPI's pending-publisher form to reserve `CTkKanBan` and create it on the first successful workflow run. The spelling and capitalization must match the project metadata exactly.
 5. In TestPyPI, add a trusted publisher for workflow `test-publish.yml` and environment `testpypi`.
 6. In GitHub Pages settings, choose GitHub Actions as the source.
 7. Protect `main`. Require pull requests, resolved conversations, and the CI, installed-wheel, and CodeQL checks. Block force pushes and branch deletion.
@@ -36,7 +36,7 @@ tox -e lint,type,package,py314,ctk-min,ctk-current
 Push the release-preparation commit and run **Publish to TestPyPI** manually. Test installation from TestPyPI in a clean environment:
 
 ```bash
-python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ ctk-kanban==0.3.0
+python -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ CTkKanBan==0.3.0
 ```
 
 The extra index supplies CustomTkinter if it is not mirrored on TestPyPI. Do not use this two-index command for production dependency resolution.

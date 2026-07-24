@@ -55,7 +55,7 @@ def main() -> None:
     package_path = Path(ctk_kanban.__file__).resolve()
     if ROOT == package_path or ROOT in package_path.parents:
         raise RuntimeError(f"Smoke test imported the source checkout: {package_path}")
-    installed_version = distribution_version("ctk-kanban")
+    installed_version = distribution_version("CTkKanBan")
     if installed_version != ctk_kanban.__version__:
         raise RuntimeError(
             f"Distribution version {installed_version} does not match imported package {ctk_kanban.__version__}"
@@ -73,7 +73,7 @@ def main() -> None:
         page = source.query_cards("smoke", CardQuery(search="wheel"))
         assert loaded.cards[0]["id"] == 1
         assert page.total == 1
-    print(f"Smoke-tested ctk-kanban {ctk_kanban.__version__} from {package_path}")
+    print(f"Smoke-tested CTkKanBan {ctk_kanban.__version__} from {package_path}")
 
 
 if __name__ == "__main__":

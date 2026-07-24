@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/Harry-g25/CTkKanBan/actions/workflows/ci.yml/badge.svg)](https://github.com/Harry-g25/CTkKanBan/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Harry-g25/CTkKanBan/actions/workflows/codeql.yml/badge.svg)](https://github.com/Harry-g25/CTkKanBan/actions/workflows/codeql.yml)
-[![PyPI](https://img.shields.io/pypi/v/ctk-kanban.svg)](https://pypi.org/project/ctk-kanban/)
-[![Python](https://img.shields.io/pypi/pyversions/ctk-kanban.svg)](https://pypi.org/project/ctk-kanban/)
+[![PyPI](https://img.shields.io/pypi/v/CTkKanBan.svg)](https://pypi.org/project/CTkKanBan/)
+[![Python](https://img.shields.io/pypi/pyversions/CTkKanBan.svg)](https://pypi.org/project/CTkKanBan/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Harry-g25/CTkKanBan/blob/main/LICENSE)
 
 CTkKanban is a configurable Kanban widget for CustomTkinter desktop applications. It ships with a polished adaptive light/dark design, generated forms, drag and drop, search, advanced filters, sorting, undo/redo, responsive columns, and database-backed operation.
@@ -13,7 +13,7 @@ The built-in design uses layered surfaces, priority-accented cards, responsive m
 ## Install
 
 ```bash
-python -m pip install ctk-kanban
+python -m pip install CTkKanBan
 ```
 
 ## In-memory board

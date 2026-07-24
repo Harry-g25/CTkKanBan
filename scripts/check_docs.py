@@ -207,7 +207,7 @@ def check_release_docs(document: str, failures: list[str]) -> None:
     version = match.group(1)
     if f'<span class="nav-version">v{version} Docs</span>' not in document:
         failures.append(f"docs/index.html version badge does not match package version {version}")
-    if '<span id="install-command">python -m pip install ctk-kanban</span>' not in document:
+    if '<span id="install-command">python -m pip install CTkKanBan</span>' not in document:
         failures.append("The documentation hero must show the installable PyPI command")
 
 

@@ -16,7 +16,7 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_NAME = "ctk-kanban"
+PACKAGE_NAME = "CTkKanBan"
 SDIST_REQUIRED_SUFFIXES = frozenset(
     {
         ".gitattributes",
