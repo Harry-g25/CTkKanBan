@@ -461,6 +461,7 @@ class InlineCardEditingTests(unittest.TestCase):
                     external_bind_id,
                 )
             else:
+                # Older Tk builds used in the 3.10 matrix may not expose Misc._unbind.
                 self.board._remove_tcl_binding_callback(
                     self.app,
                     bind_path,
