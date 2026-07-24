@@ -53,8 +53,8 @@ def validate_release_identity(version: str, tag: str | None) -> None:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     if re.search(rf"^## {re.escape(version)} - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.MULTILINE) is None:
         raise ValueError(f"CHANGELOG.md has no dated section for {version}")
-    if tag and tag != f"v{version}":
-        raise ValueError(f"Tag {tag!r} does not match package version v{version}")
+    if tag and tag not in {version, f"v{version}"}:
+        raise ValueError(f"Tag {tag!r} does not match package version {version} or v{version}")
     docs = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
     if f'<span class="nav-version">v{version} Docs</span>' not in docs:
         raise ValueError(f"docs/index.html does not identify itself as v{version}")

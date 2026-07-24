@@ -2657,6 +2657,23 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         if field_key is not None:
             card_widget.start_inline_edit(field_key)
 
+    def _replay_pointer_click_after_refresh(self, x_root: int, y_root: int) -> None:
+        """Replay a click at the same screen coordinates after widgets rebuild."""
+
+        try:
+            target = self.winfo_toplevel().winfo_containing(x_root, y_root)
+        except tk.TclError:
+            return
+        if target is None:
+            return
+        try:
+            x = x_root - int(target.winfo_rootx())
+            y = y_root - int(target.winfo_rooty())
+            target.event_generate("<ButtonPress-1>", x=x, y=y)
+            target.event_generate("<ButtonRelease-1>", x=x, y=y)
+        except tk.TclError:
+            pass
+
     def _commit_inline_on_outside_press(self, event: Any) -> str | None:
         active = self._inline_edit_card
         if active is None or active.editing_field_key is None:
@@ -2680,6 +2697,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         finally:
             self._inline_outside_click_dispatching = False
         if committed:
+            x_root = int(getattr(event, "x_root", 0) or 0)
+            y_root = int(getattr(event, "y_root", 0) or 0)
             try:
                 target_exists = target is not None and bool(target.winfo_exists())
             except (tk.TclError, AttributeError):
@@ -2690,8 +2709,14 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
                         self._replay_card_click_after_refresh,
                         target_card_id,
                         target_field_key,
-                        int(getattr(event, "x_root", 0) or 0),
-                        int(getattr(event, "y_root", 0) or 0),
+                        x_root,
+                        y_root,
+                    )
+                elif not target_was_active_card:
+                    self.after_idle(
+                        self._replay_pointer_click_after_refresh,
+                        x_root,
+                        y_root,
                     )
                 return "break"
             return "break" if target_was_active_card else None

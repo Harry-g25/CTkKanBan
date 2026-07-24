@@ -401,9 +401,15 @@ class InlineCardEditingTests(unittest.TestCase):
             bind_owner = binding[1]
             click_bind_id = binding[3]
             map_bind_id = binding[4]
+            click_script = str(bind_owner.tk.call("bind", binding[2], "<ButtonPress-1>"))
+            map_script = str(bind_owner.tk.call("bind", "all", "<Map>"))
             self.assertIs(bind_owner, self.app._root())
-            self.assertIn(click_bind_id, bind_owner._tclCommands)
-            self.assertIn(map_bind_id, bind_owner._tclCommands)
+            self.assertTrue(
+                click_bind_id in bind_owner._tclCommands or click_bind_id in click_script
+            )
+            self.assertTrue(
+                map_bind_id in bind_owner._tclCommands or map_bind_id in map_script
+            )
 
             card.cancel_inline_edit()
 
@@ -446,11 +452,22 @@ class InlineCardEditingTests(unittest.TestCase):
             self.assertEqual(remaining_script, baseline_script.rstrip())
             self.assertIn(external_bind_id, self.app._tclCommands)
         finally:
-            tk.Misc._unbind(
-                self.app,
-                bind_path,
-                external_bind_id,
-            )
+            if hasattr(tk.Misc, "_unbind"):
+                tk.Misc._unbind(
+                    self.app,
+                    bind_path,
+                    external_bind_id,
+                )
+            else:
+                script = str(self.app.tk.call(*bind_path))
+                prefix = f'if {{"[{external_bind_id} '
+                remaining_lines = [
+                    line for line in script.split("\n") if not line.startswith(prefix)
+                ]
+                while remaining_lines and not remaining_lines[-1].strip():
+                    remaining_lines.pop()
+                self.app.tk.call(*bind_path, "\n".join(remaining_lines))
+                self.app.deletecommand(external_bind_id)
 
     def test_switching_fields_commits_and_opens_the_requested_replacement_editor(self) -> None:
         card = self.board._card_widgets[1]
