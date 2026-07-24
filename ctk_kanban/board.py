@@ -2697,8 +2697,8 @@ class CTkKanbanBoard(RenderingMixin, DragDropMixin, ctk.CTkFrame):
         finally:
             self._inline_outside_click_dispatching = False
         if committed:
-            x_root = int(getattr(event, "x_root", 0) or 0)
-            y_root = int(getattr(event, "y_root", 0) or 0)
+            x_root = int(getattr(event, "x_root", 0))
+            y_root = int(getattr(event, "y_root", 0))
             try:
                 target_exists = target is not None and bool(target.winfo_exists())
             except (tk.TclError, AttributeError):

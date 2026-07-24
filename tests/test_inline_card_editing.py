@@ -401,15 +401,17 @@ class InlineCardEditingTests(unittest.TestCase):
             bind_owner = binding[1]
             click_bind_id = binding[3]
             map_bind_id = binding[4]
-            click_script = str(bind_owner.tk.call("bind", binding[2], "<ButtonPress-1>"))
-            map_script = str(bind_owner.tk.call("bind", "all", "<Map>"))
+            click_bound = click_bind_id in bind_owner._tclCommands
+            if not click_bound:
+                click_bound = click_bind_id in str(
+                    bind_owner.tk.call("bind", binding[2], "<ButtonPress-1>")
+                )
+            map_bound = map_bind_id in bind_owner._tclCommands
+            if not map_bound:
+                map_bound = map_bind_id in str(bind_owner.tk.call("bind", "all", "<Map>"))
             self.assertIs(bind_owner, self.app._root())
-            self.assertTrue(
-                click_bind_id in bind_owner._tclCommands or click_bind_id in click_script
-            )
-            self.assertTrue(
-                map_bind_id in bind_owner._tclCommands or map_bind_id in map_script
-            )
+            self.assertTrue(click_bound)
+            self.assertTrue(map_bound)
 
             card.cancel_inline_edit()
 
@@ -459,15 +461,11 @@ class InlineCardEditingTests(unittest.TestCase):
                     external_bind_id,
                 )
             else:
-                script = str(self.app.tk.call(*bind_path))
-                prefix = f'if {{"[{external_bind_id} '
-                remaining_lines = [
-                    line for line in script.split("\n") if not line.startswith(prefix)
-                ]
-                while remaining_lines and not remaining_lines[-1].strip():
-                    remaining_lines.pop()
-                self.app.tk.call(*bind_path, "\n".join(remaining_lines))
-                self.app.deletecommand(external_bind_id)
+                self.board._remove_tcl_binding_callback(
+                    self.app,
+                    bind_path,
+                    external_bind_id,
+                )
 
     def test_switching_fields_commits_and_opens_the_requested_replacement_editor(self) -> None:
         card = self.board._card_widgets[1]
