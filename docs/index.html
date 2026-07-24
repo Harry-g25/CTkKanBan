@@ -3,41 +3,77 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CTkKanBan Documentation</title>
+    <title>CTkKanBan Guide and API Reference</title>
     <meta
       name="description"
-      content="Developer-facing documentation for CTkKanBan, a configurable Kanban board widget for CustomTkinter."
+      content="The complete CTkKanBan guide: installation, cards, columns, forms, styling, CRUD database integration, persistence, callbacks, and API reference."
     />
+    <meta name="theme-color" content="#0d1117" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
     <link rel="stylesheet" href="styles.css" />
 
-    <link rel="icon" href="assests/favicon/favicon-32x32.png" sizes="32x32" type="image/x-icon">
-    <link rel="apple-touch-icon" href="assests/favicon/apple-touch-icon.png">
-    <link rel="manifest" href="assests/favicon/site.webmanifest">
+    <link rel="icon" href="assests/favicon/favicon-32x32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="assests/favicon/apple-touch-icon.png" />
+    <link rel="manifest" href="assests/favicon/site.webmanifest" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to documentation</a>
     <div class="overlay" id="overlay"></div>
 
-    <nav class="topnav">
+    <nav class="topnav" aria-label="Primary navigation">
       <a class="nav-title" href="#hero">CTkKanBan</a>
       <span class="nav-version">v0.2.0 Docs</span>
       <div class="nav-spacer"></div>
-      <a class="nav-link" href="#installation">Installation</a>
-      <button class="hamburger" id="hamburger" type="button" aria-label="Toggle navigation" aria-expanded="false">&#9776;</button>
+      <a class="nav-link" href="#quick-start">Quick start</a>
+      <a class="nav-link" href="#tutorial-persistence">Databases</a>
+      <a class="nav-link" href="#api-constructor">API</a>
+      <a class="nav-link" href="https://github.com/Harry-g25/CTkKanBan">GitHub</a>
+      <button
+        class="hamburger"
+        id="hamburger"
+        type="button"
+        aria-label="Toggle navigation"
+        aria-controls="sidebar"
+        aria-expanded="false"
+      >&#9776;</button>
     </nav>
 
     <div class="layout">
       <aside class="sidebar" id="sidebar">
+        <div class="docs-search">
+          <label for="docs-search-input">Search this guide</label>
+          <div class="docs-search__control">
+            <input
+              id="docs-search-input"
+              type="search"
+              placeholder="Methods, options, databases..."
+              autocomplete="off"
+              aria-controls="docs-search-results"
+              aria-describedby="docs-search-status"
+            />
+            <kbd>/</kbd>
+          </div>
+          <p class="docs-search__status" id="docs-search-status" aria-live="polite"></p>
+          <div
+            class="docs-search__results"
+            id="docs-search-results"
+            role="region"
+            aria-label="Documentation search results"
+            hidden
+          ></div>
+        </div>
+
         <nav class="sidebar-nav" aria-label="Section navigation">
           <div class="nav-group">
             <p class="nav-group__title">Overview</p>
             <ul>
-              <li><a href="#hero">Introduction</a></li>
+              <li><a href="#introduction">Introduction</a></li>
               <li><a href="#installation">Installation</a></li>
               <li><a href="#quick-start">Quick Start</a></li>
+              <li><a href="#integration-paths">Choose a Storage Path</a></li>
               <li><a href="#board-model">Board Model</a></li>
             </ul>
           </div>
@@ -48,7 +84,7 @@
               <li><a href="#tutorial-first-board">Build Your First Board</a></li>
               <li><a href="#tutorial-forms">Built-in Card Forms</a></li>
               <li><a href="#tutorial-search-filter-sort">Search, Filter, and Sort</a></li>
-              <li><a href="#tutorial-persistence">Persistence Hooks</a></li>
+              <li><a href="#tutorial-persistence">Database and Persistence</a></li>
               <li><a href="#tutorial-rendering">Custom Rendering and Theme</a></li>
             </ul>
           </div>
@@ -68,6 +104,7 @@
             <ul>
               <li><a href="#api-constructor">Constructor</a></li>
               <li><a href="#api-board-methods">Board Methods</a></li>
+              <li><a href="#api-persistence">Persistence API</a></li>
               <li><a href="#api-data-types">Data Types</a></li>
               <li><a href="#api-callbacks">Callback Reference</a></li>
               <li><a href="#api-theme">Theme and Style Reference</a></li>
@@ -87,13 +124,13 @@
         </nav>
       </aside>
 
-      <main class="content">
+      <main class="content" id="main-content">
           <header class="hero" id="hero">
-            <div class="hero-eyebrow">&#10022; CustomTkinter Widget</div>
+            <div class="hero-eyebrow">&#10022; Complete guide and API reference</div>
             <h1>CTkKanBan</h1>
             <p class="hero-sub">
-              A configurable, database-ready Kanban board for CustomTkinter. Build desktop workflows with
-              draggable cards, generated forms, advanced querying, undo, and transactional persistence.
+              Everything you need to build a database-backed Kanban workflow with CustomTkinter: installation,
+              data modeling, forms, querying, CRUD integration, styling, callbacks, and the complete public API.
             </p>
             <div class="hero-install">
               <span class="prompt">$</span>
@@ -105,6 +142,13 @@
               <span class="pill pill-green">Built-in Forms</span>
               <span class="pill pill-purple">CustomTkinter</span>
               <span class="pill pill-amber">Python 3.10+</span>
+              <span class="pill pill-green">Database Ready</span>
+            </div>
+            <div class="hero-paths" aria-label="Popular documentation paths">
+              <a href="#quick-start"><span>01</span>Build a board</a>
+              <a href="#tutorial-persistence"><span>02</span>Connect a database</a>
+              <a href="#tutorial-forms"><span>03</span>Configure forms</a>
+              <a href="#api-constructor"><span>04</span>Browse the API</a>
             </div>
           </header>
 
@@ -196,6 +240,15 @@ source .venv/bin/activate</code></pre>
               <pre><code>python -m pip install ctk-kanban</code></pre>
             </div>
 
+            <p>Verify the interpreter and installed package before debugging GUI code:</p>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>bash</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>python -c "import ctk_kanban; print(ctk_kanban.__version__, ctk_kanban.__file__)"</code></pre>
+            </div>
+
             <h3>4. Explore the source examples (optional)</h3>
             <p>
               The examples are included in the source repository and source distribution, not the installed wheel.
@@ -207,13 +260,14 @@ source .venv/bin/activate</code></pre>
                 <button class="copy-button" type="button">Copy</button>
               </div>
               <pre><code>python -m pip install -e .
-python example_all_features.py</code></pre>
+python example_all_features.py
+python example_sqlite.py</code></pre>
             </div>
 
             <p>
               The demo exercises custom fields, built-in forms, callbacks, styling, drag-and-drop, search, filtering,
-              sorting, and a custom card renderer. It is the best single file to inspect if you want a tour of the
-              intended application-level usage.
+              sorting, and a custom card renderer. <code>example_sqlite.py</code> is the runnable persistence example.
+              Together they are the best source-level tour of intended application usage.
             </p>
 
             <div class="callout callout--success">
@@ -278,6 +332,46 @@ app.mainloop()</code></pre>
               <strong>Mutation rule:</strong> after the widget is created, use methods such as
               <code>add_card()</code>, <code>update_card()</code>, <code>move_card()</code>, and
               <code>set_state()</code> instead of mutating the original input lists. The board stores deep copies.
+            </div>
+          </section>
+
+          <section class="doc-section" id="integration-paths">
+            <div class="section-rule"></div>
+            <h2>Choose a Storage Path</h2>
+            <p>
+              Start with the smallest persistence option that matches the application. You can change paths later
+              because the board UI talks to storage through stable operation and result contracts.
+            </p>
+            <div class="path-grid">
+              <article class="path-card">
+                <span class="path-card__label">Prototype</span>
+                <h3>In-memory board</h3>
+                <p>Pass <code>columns</code> and <code>cards</code> directly. Best for UI work and local prototypes.</p>
+                <a href="#tutorial-first-board">Build the first board &rarr;</a>
+              </article>
+              <article class="path-card">
+                <span class="path-card__label">Included adapter</span>
+                <h3>SQLite</h3>
+                <p>Use the transactional adapter for a local database with schema creation, revisions, and paging.</p>
+                <a href="#persistence-sqlite">Use SQLite &rarr;</a>
+              </article>
+              <article class="path-card">
+                <span class="path-card__label">Most flexible</span>
+                <h3>Your existing CRUD</h3>
+                <p>Wrap four repository functions for SQL, NoSQL, an ORM, a cloud SDK, or an HTTP API.</p>
+                <a href="#persistence-crud">Connect CRUD &rarr;</a>
+              </article>
+              <article class="path-card">
+                <span class="path-card__label">Advanced</span>
+                <h3>Custom data source</h3>
+                <p>Implement the full protocol for native queries, event feeds, conflict snapshots, or bulk writes.</p>
+                <a href="#persistence-protocol">Implement the protocol &rarr;</a>
+              </article>
+            </div>
+            <div class="callout callout--warn">
+              <strong>One writer only:</strong> configure either <code>data_source</code> or the legacy
+              <code>on_data_changed</code> snapshot callback. The constructor rejects both together because two
+              persistence writers can diverge.
             </div>
           </section>
 
@@ -553,14 +647,102 @@ board.sort_cards("manual", reverse=True, column_id="review")</code></pre>
 
           <section class="doc-section" id="tutorial-persistence">
             <div class="section-rule"></div>
-            <h2>Persistence Hooks</h2>
+            <h2>Database and Persistence</h2>
             <p>
-              CTkKanBan can use the included transactional SQLite adapter, the callback-based
-              <code>CRUDKanbanDataSource</code>, or any implementation of <code>KanbanDataSource</code>.
-              Use the CRUD bridge with an existing SQL, document, key-value, ORM, or API repository:
-              provide read, create, update, and delete callbacks while the bridge translates board
-              moves, ordering, generated IDs, queries, and batches. Database work runs on a worker
-              thread and may return canonical records, revisions, conflicts, and generated IDs.
+              Database integration is operation-first. The board updates optimistically, sends a focused mutation to
+              one background persistence worker, then merges canonical IDs, timestamps, versions, or defaults returned
+              by storage. Choose one of the following integration levels.
+            </p>
+
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Option</th>
+                    <th>Use it when</th>
+                    <th>You implement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>SQLiteKanbanDataSource</code></td>
+                    <td>You need a complete local database with no external driver.</td>
+                    <td>Only application setup and initial seed data.</td>
+                  </tr>
+                  <tr>
+                    <td><code>CRUDKanbanDataSource</code></td>
+                    <td>You already have repository, ORM, collection, SDK, or HTTP CRUD functions.</td>
+                    <td>Read, create, update, and delete callbacks.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanDataSource</code></td>
+                    <td>You need native database queries, bulk writes, event history, or change streams.</td>
+                    <td>The complete five-method protocol.</td>
+                  </tr>
+                  <tr>
+                    <td><code>on_data_changed</code></td>
+                    <td>You have a small file or legacy full-snapshot save function.</td>
+                    <td>One synchronous snapshot callback.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 id="persistence-sqlite">SQLite: complete local persistence</h3>
+            <p>
+              The included adapter owns its schema and uses a fresh thread-safe connection for each operation. It
+              provides transactions, atomic batches, optimistic revisions, idempotent event replay, generated card
+              IDs, timestamps, server-side adapter querying, paging, and change polling.
+            </p>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>import customtkinter as ctk
+
+from ctk_kanban import CTkKanbanBoard, SQLiteKanbanDataSource
+
+
+app = ctk.CTk()
+source = SQLiteKanbanDataSource("kanban.db")
+source.seed_board(
+    "work",
+    [
+        {"id": "todo", "title": "To Do"},
+        {"id": "done", "title": "Done"},
+    ],
+    cards=[],
+    replace=False,
+)
+
+board = CTkKanbanBoard(
+    app,
+    data_source=source,
+    board_id="work",
+    actor_id="desktop-user-17",
+    auto_load=True,
+    server_side_query=True,
+    page_size=100,
+    poll_interval_ms=2000,
+    completed_columns=["done"],
+)
+board.pack(fill="both", expand=True)
+app.mainloop()</code></pre>
+            </div>
+
+            <div class="callout">
+              <strong>Seeding behavior:</strong> <code>replace=False</code> creates missing records without clearing an
+              existing board. Use <code>replace=True</code> for an intentional reset; it clears cards, columns, event
+              history, and the board revision.
+            </div>
+
+            <h3 id="persistence-crud">Bring your own CRUD</h3>
+            <p>
+              <code>CRUDKanbanDataSource</code> is database-neutral: it does not guess a connection string, driver,
+              schema, query language, or authentication model. Your application keeps those decisions and supplies
+              four normal repository callbacks. This works for PostgreSQL, MySQL, SQL Server, Oracle, MongoDB,
+              DynamoDB, Redis, graph databases, cloud SDKs, ORMs, and remote APIs.
             </p>
 
             <div class="code-block">
@@ -568,46 +750,271 @@ board.sort_cards("manual", reverse=True, column_id="review")</code></pre>
                 <span>python</span>
                 <button class="copy-button" type="button">Copy</button>
               </div>
-              <pre><code>def save_board_data(event: dict[str, object]) -> bool | dict[str, object]:
-    action = event["action_event"]
-    print("Persist this snapshot:", action["type"], len(event["cards"]), "cards")
+              <pre><code>from contextlib import contextmanager
 
-    if action["type"] == "card_moved" and action["card_id"] == 4 and action["new_column"] == "done":
-        return {"cancel": True, "reason": "Database rejected the move"}
+from ctk_kanban import CRUDKanbanDataSource
 
+
+def read_board(board_id):
+    return {
+        "columns": repository.list_columns(board_id),
+        "cards": repository.list_cards(board_id),
+        "revision": repository.get_revision(board_id),  # Optional
+    }
+
+
+def create(resource, board_id, record, context):
+    # resource is exactly "card" or "column".
+    return repository.insert(
+        resource,
+        board_id,
+        record,
+        position=context.position,
+        transaction=context.transaction,
+        event_id=context.metadata.event_id,
+    )
+
+
+def update(resource, board_id, record_id, record, context):
+    return repository.update(
+        resource,
+        board_id,
+        record_id,
+        record,
+        position=context.position,
+        transaction=context.transaction,
+        expected_revision=context.metadata.expected_revision,
+    )
+
+
+def delete(resource, board_id, record_id, context):
+    repository.delete(
+        resource,
+        board_id,
+        record_id,
+        transaction=context.transaction,
+    )
+
+
+@contextmanager
+def transaction(events):
+    with repository.begin() as session:
+        yield session
+
+
+source = CRUDKanbanDataSource(
+    read=read_board,
+    create=create,
+    update=update,
+    delete=delete,
+    transaction=transaction,  # Optional but recommended for atomic batches
+)</code></pre>
+            </div>
+
+            <p>
+              The bridge translates board operations into CRUD calls:
+            </p>
+            <ul>
+              <li>Card creates, updates, and deletes map directly to the corresponding callback.</li>
+              <li>Card moves and reorders become focused card updates.</li>
+              <li>Column order is supplied as <code>context.position</code>.</li>
+              <li>Column ID changes also update affected card records.</li>
+              <li>Generated IDs are remapped when <code>create</code> returns the canonical stored record.</li>
+              <li>Search, filters, sorting, paging, and totals run over the result of <code>read_board</code>.</li>
+              <li>A batch shares the object yielded by <code>transaction(events)</code>.</li>
+            </ul>
+
+            <h4>CRUD callback return values</h4>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Return</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Record mapping</td>
+                    <td>Accepted. The returned database values become the canonical card or column.</td>
+                  </tr>
+                  <tr>
+                    <td><code>None</code> or <code>True</code></td>
+                    <td>Accepted using the record submitted to the callback.</td>
+                  </tr>
+                  <tr>
+                    <td><code>False</code></td>
+                    <td>Rejected. The board restores the optimistic UI change.</td>
+                  </tr>
+                  <tr>
+                    <td><code>MutationResult</code></td>
+                    <td>Advanced response with conflicts, revisions, ID maps, changed records, or retryability.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="callout callout--warn">
+              <strong>Connection rule:</strong> CRUD callbacks run on the persistence worker, not Tk's UI thread.
+              Do not share a thread-bound cursor or session created on the main thread. Open a connection per call or
+              yield a worker-owned session from <code>transaction(events)</code>.
+            </div>
+
+            <h3 id="persistence-protocol">Implement the full data-source protocol</h3>
+            <p>
+              Use a direct adapter when reading every record into the CRUD bridge would be inefficient or when the
+              backend should own concurrency, queries, event history, and batching.
+            </p>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>from ctk_kanban import (
+    BoardLoadResult,
+    CardPage,
+    CardQuery,
+    ChangePage,
+    MutationEvent,
+    MutationResult,
+)
+
+
+class MyDataSource:
+    def load_board(
+        self, board_id: str, query: CardQuery | None = None
+    ) -> BoardLoadResult:
+        ...
+
+    def apply_mutation(self, event: MutationEvent) -> MutationResult:
+        ...
+
+    def apply_batch(self, events: list[MutationEvent]) -> MutationResult:
+        ...
+
+    def query_cards(self, board_id: str, query: CardQuery) -> CardPage:
+        ...
+
+    def get_changes(
+        self, board_id: str, since_revision: int | str | None
+    ) -> ChangePage:
+        ...</code></pre>
+            </div>
+            <p>
+              Adapter methods are intentionally blocking and thread-safe; <code>PersistenceCoordinator</code> owns
+              the worker. Treat <code>event_id</code> as an idempotency key, check <code>expected_revision</code> in
+              the same transaction as the write, and make <code>apply_batch()</code> all-or-nothing.
+            </p>
+
+            <h3>Mutation lifecycle and canonical records</h3>
+            <ol class="flow-list">
+              <li><strong>Optimistic UI:</strong> the board validates and applies the local operation immediately.</li>
+              <li><strong>Focused event:</strong> only affected records and trace metadata are submitted.</li>
+              <li><strong>Background write:</strong> one worker preserves mutation order away from Tk.</li>
+              <li><strong>Canonical merge:</strong> returned IDs, timestamps, versions, defaults, and affected records replace local values.</li>
+              <li><strong>Failure recovery:</strong> rejection restores the prior board state; transient failures retry and may queue offline.</li>
+            </ol>
+
+            <h3>Retries, offline queue, and status</h3>
+            <p>
+              <code>RetryPolicy</code> defaults to three attempts with bounded exponential backoff. Connection,
+              timeout, and operating-system failures move the coordinator offline after retries. Pending operations
+              remain visible and queue in memory in FIFO order.
+            </p>
+            <p>
+              A custom adapter should raise <code>ConnectionError</code>, <code>TimeoutError</code>, or
+              <code>OSError</code> for retryable connectivity failures. Domain rejections should return
+              <code>MutationResult(accepted=False, reason=...)</code> instead.
+            </p>
+            <div class="chip-row">
+              <span class="chip">idle</span>
+              <span class="chip">loading</span>
+              <span class="chip">saving</span>
+              <span class="chip">saved</span>
+              <span class="chip">offline</span>
+              <span class="chip">retrying</span>
+              <span class="chip">conflict</span>
+              <span class="chip">error</span>
+            </div>
+            <p>
+              Observe transitions with <code>on_persistence_status</code> or
+              <code>get_persistence_status()</code>. Call <code>set_online(True)</code> after connectivity returns,
+              or call <code>retry_last_save()</code> after resolving a rejected write.
+            </p>
+            <div class="callout callout--danger">
+              <strong>Queue durability:</strong> the built-in offline queue is process-local. It is lost if the
+              application exits. Use a durable outbox in your repository or adapter when crash recovery is required.
+            </div>
+
+            <h3>Optimistic conflicts</h3>
+            <p>
+              Storage can return <code>ConflictDetails</code> when <code>expected_revision</code> is stale.
+              Configure <code>conflict_strategy</code> as:
+            </p>
+            <ul>
+              <li><code>"server_wins"</code>: replace local data with the server snapshot.</li>
+              <li><code>"local_wins"</code>: retry the local operation against the current server revision.</li>
+              <li><code>"callback"</code>: invoke <code>on_conflict</code> so the application decides.</li>
+            </ul>
+
+            <h3>Loading, querying, paging, and polling</h3>
+            <ul>
+              <li><code>auto_load=True</code> loads <code>board_id</code> after the widget is constructed.</li>
+              <li><code>server_side_query=True</code> delegates toolbar search, filters, sorting, and paging.</li>
+              <li><code>page_size</code> controls the requested page size; <code>load_next_page()</code> appends more.</li>
+              <li><code>poll_interval_ms &gt; 0</code> calls <code>get_changes()</code> and reloads after remote events.</li>
+              <li>For push systems, call <code>refresh_from_source()</code> from the notification handler.</li>
+            </ul>
+
+            <h3>Legacy snapshot callback</h3>
+            <p>
+              <code>on_data_changed</code> remains useful for JSON files and small local snapshots. It runs
+              synchronously and receives all columns and cards plus the focused action event.
+            </p>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>def save_snapshot(event):
+    write_json({"columns": event["columns"], "cards": event["cards"]})
     return True
-
-
-def log_cancelled_action(event: dict[str, object]) -> None:
-    print("Restored previous state:", event["reason"])
 
 
 board = CTkKanbanBoard(
     app,
     columns=columns,
     cards=cards,
-    on_data_changed=save_board_data,
-    on_action_cancelled=log_cancelled_action,
+    on_data_changed=save_snapshot,
 )</code></pre>
             </div>
-
             <p>
-              Cancellation is part of the public contract:
+              Return <code>False</code> or <code>{"cancel": True, "reason": "..."}</code> to reject and restore an
+              action. Use <code>on_action_cancelled</code> to display or log the reason.
             </p>
-            <ul>
-              <li>Return <code>False</code> to cancel with a default reason.</li>
-              <li>Return <code>{"cancel": True, "reason": "..."}</code> to cancel with an explicit reason.</li>
-              <li>
-                When a cancellable callback rejects an action, the board restores the previous state and emits
-                <code>on_action_cancelled</code>.
-              </li>
-            </ul>
 
             <div class="callout">
-              <strong>Bulk reload rule:</strong> <code>set_data()</code>, <code>set_cards()</code>,
-              <code>set_columns()</code>, and <code>set_state()</code> replace board state without firing persistence
-              callbacks. They are intended for application-driven reloads rather than end-user mutations.
+              <strong>Reload rule:</strong> <code>set_data()</code>, <code>set_cards()</code>,
+              <code>set_columns()</code>, and <code>set_state()</code> replace local state without persistence
+              callbacks. They are intended for application-driven reloads. With a data source, prefer
+              <code>refresh_from_source()</code>.
             </div>
+
+            <h3>Production checklist</h3>
+            <ul class="check-list">
+              <li>Keep credentials and authorization in the application database layer.</li>
+              <li>Use stable string or integer IDs across JSON and database boundaries.</li>
+              <li>Return generated IDs, defaults, UTC timestamps, and record versions from writes.</li>
+              <li>Make event IDs idempotent and enforce expected revisions transactionally.</li>
+              <li>Provide a transaction callback for multi-record CRUD operations.</li>
+              <li>Test disconnect, retry, conflict, duplicate submission, and remote-change paths.</li>
+              <li>Call <code>destroy()</code> when disposing the board so pending Tk callbacks and the worker close.</li>
+            </ul>
+
+            <p>
+              The standalone <a href="database.md">database integration guide</a> contains the same persistence model
+              in a compact format for teams that want a database-only handout.
+            </p>
           </section>
 
           <section class="doc-section" id="tutorial-rendering">
@@ -797,6 +1204,53 @@ board = CTkKanbanBoard(
               This split is deliberate. Use <code>get_data()</code> for persistence formats that should not include UI
               search/filter state. Use <code>get_state()</code> for restoring the board as the user left it.
             </p>
+
+            <h3>Undo and redo</h3>
+            <p>
+              End-user mutations record defensive before/after snapshots up to <code>undo_limit</code>.
+              <code>undo()</code> and <code>redo()</code> restore those snapshots; with a data source attached, the
+              board computes focused delta events so partially loaded server data is not overwritten.
+            </p>
+
+            <h3>Atomic application batches</h3>
+            <p>
+              Use <code>apply_batch()</code> for imports and multi-step edits. Supported operation names are
+              <code>add_card</code>, <code>update_card</code>, <code>delete_card</code>, <code>move_card</code>,
+              <code>add_column</code>, <code>update_column</code>, <code>delete_column</code>, and
+              <code>move_column</code>.
+            </p>
+            <div class="code-block">
+              <div class="code-block__header">
+                <span>python</span>
+                <button class="copy-button" type="button">Copy</button>
+              </div>
+              <pre><code>saved = board.apply_batch(
+    [
+        {
+            "operation": "update_card",
+            "card_id": 10,
+            "new_data": {"priority": "High"},
+        },
+        {
+            "operation": "move_card",
+            "card_id": 10,
+            "target_column": "review",
+        },
+        {
+            "operation": "add_card",
+            "card_data": {
+                "column": "todo",
+                "title": "Follow up",
+            },
+        },
+    ],
+    source="bulk_edit",
+)</code></pre>
+            </div>
+            <div class="callout callout--warn">
+              <strong>Atomicity:</strong> the UI rolls back the whole batch on rejection. Durable atomicity requires
+              <code>apply_batch()</code> in a full adapter or a <code>transaction</code> callback in the CRUD bridge.
+            </div>
           </section>
 
           <section class="doc-section" id="feature-style">
@@ -847,8 +1301,8 @@ board = CTkKanbanBoard(
             </div>
 
             <p>
-              The tables below highlight commonly used options. Run <code>help(CTkKanbanBoard)</code> against your
-              installed version for the complete constructor and public-method reference.
+              The tables below cover the complete constructor surface for this release. Run
+              <code>help(CTkKanbanBoard)</code> against your installed version when you need its exact live signature.
             </p>
 
             <h3>Common core data and layout parameters</h3>
@@ -1186,31 +1640,230 @@ board = CTkKanbanBoard(
               </table>
             </div>
 
+            <h3>Responsive layout and card presentation</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>responsive_columns</code></td>
+                    <td><code>True</code></td>
+                    <td>Lets columns adapt between the configured minimum and maximum widths.</td>
+                  </tr>
+                  <tr>
+                    <td><code>min_column_width</code></td>
+                    <td><code>240</code></td>
+                    <td>Smallest responsive column width; must be at least <code>160</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>max_column_width</code></td>
+                    <td><code>420</code></td>
+                    <td>Largest responsive column width; must not be below the minimum.</td>
+                  </tr>
+                  <tr>
+                    <td><code>column_control_size</code></td>
+                    <td><code>30</code></td>
+                    <td>Pixel size used by compact column controls; minimum <code>28</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>card_density</code></td>
+                    <td><code>"comfortable"</code></td>
+                    <td>Spacing preset: <code>"compact"</code>, <code>"comfortable"</code>, or <code>"spacious"</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>show_drag_handles</code></td>
+                    <td><code>True</code></td>
+                    <td>Shows the visual drag affordance on cards.</td>
+                  </tr>
+                  <tr>
+                    <td><code>max_visible_tags</code></td>
+                    <td><code>6</code></td>
+                    <td>Maximum tags rendered on a card before remaining tags are summarized.</td>
+                  </tr>
+                  <tr>
+                    <td><code>tags_per_row</code></td>
+                    <td><code>3</code></td>
+                    <td>Maximum tag chips placed on each rendered row.</td>
+                  </tr>
+                  <tr>
+                    <td><code>confirm_discard_changes</code></td>
+                    <td><code>True</code></td>
+                    <td>Prompts before replacing or closing a dirty built-in form.</td>
+                  </tr>
+                  <tr>
+                    <td><code>highlight_search_matches</code></td>
+                    <td><code>True</code></td>
+                    <td>Highlights matching text in visible card content.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Data source, reliability, IDs, history, and localization</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>data_source</code></td>
+                    <td><code>None</code></td>
+                    <td>SQLite, CRUD, or custom <code>KanbanDataSource</code> used for durable state.</td>
+                  </tr>
+                  <tr>
+                    <td><code>board_id</code></td>
+                    <td><code>"default"</code></td>
+                    <td>Durable board namespace passed to every data-source operation.</td>
+                  </tr>
+                  <tr>
+                    <td><code>actor_id</code></td>
+                    <td><code>None</code></td>
+                    <td>User, process, or device identity included with mutation metadata.</td>
+                  </tr>
+                  <tr>
+                    <td><code>auto_load</code></td>
+                    <td><code>False</code></td>
+                    <td>Loads the board from <code>data_source</code> after construction.</td>
+                  </tr>
+                  <tr>
+                    <td><code>server_side_query</code></td>
+                    <td><code>False</code></td>
+                    <td>Delegates search, filters, sorting, and paging to the data source.</td>
+                  </tr>
+                  <tr>
+                    <td><code>page_size</code></td>
+                    <td><code>100</code></td>
+                    <td>Requested card page size; must be at least <code>1</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>poll_interval_ms</code></td>
+                    <td><code>0</code></td>
+                    <td>Change polling interval. Zero disables polling.</td>
+                  </tr>
+                  <tr>
+                    <td><code>retry_policy</code></td>
+                    <td><code>None</code></td>
+                    <td>Optional <code>RetryPolicy</code>; defaults are used when omitted.</td>
+                  </tr>
+                  <tr>
+                    <td><code>disable_while_saving</code></td>
+                    <td><code>True</code></td>
+                    <td>Rejects overlapping user mutations while a write is pending.</td>
+                  </tr>
+                  <tr>
+                    <td><code>id_factory</code></td>
+                    <td><code>None</code></td>
+                    <td>Callable that creates local card IDs; UUID strings are used by default.</td>
+                  </tr>
+                  <tr>
+                    <td><code>use_temporary_ids</code></td>
+                    <td><code>True</code></td>
+                    <td>Marks new IDs as temporary so storage may replace them canonically.</td>
+                  </tr>
+                  <tr>
+                    <td><code>immutable_card_ids</code></td>
+                    <td><code>True</code></td>
+                    <td>Prevents ordinary updates from changing a card ID.</td>
+                  </tr>
+                  <tr>
+                    <td><code>immutable_column_ids</code></td>
+                    <td><code>True</code></td>
+                    <td>Prevents ordinary updates from changing a column ID.</td>
+                  </tr>
+                  <tr>
+                    <td><code>conflict_strategy</code></td>
+                    <td><code>"server_wins"</code></td>
+                    <td><code>"server_wins"</code>, <code>"local_wins"</code>, or <code>"callback"</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>undo_limit</code></td>
+                    <td><code>50</code></td>
+                    <td>Maximum in-memory undo entries. Zero disables history.</td>
+                  </tr>
+                  <tr>
+                    <td><code>completion_field</code></td>
+                    <td><code>"completed"</code></td>
+                    <td>Boolean card key used by overdue and completion behavior.</td>
+                  </tr>
+                  <tr>
+                    <td><code>completed_columns</code></td>
+                    <td><code>None</code></td>
+                    <td>Column IDs whose cards count as completed for overdue behavior.</td>
+                  </tr>
+                  <tr>
+                    <td><code>timezone_name</code></td>
+                    <td><code>"UTC"</code></td>
+                    <td>IANA timezone used for date comparison and display.</td>
+                  </tr>
+                  <tr>
+                    <td><code>locale_name</code></td>
+                    <td><code>None</code></td>
+                    <td>Optional locale name used when formatting stored timestamps.</td>
+                  </tr>
+                  <tr>
+                    <td><code>normalize_empty_values</code></td>
+                    <td><code>True</code></td>
+                    <td>Normalizes empty optional form values using each field's empty-value rule.</td>
+                  </tr>
+                  <tr>
+                    <td><code>logger</code></td>
+                    <td><code>None</code></td>
+                    <td>Optional logger for persistence errors and operational diagnostics.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <h3>Callback parameters</h3>
             <p>
-              The constructor accepts the following callback hooks:
+              Callbacks receive an event mapping. Mutation callbacks may cancel before persistence; status and conflict
+              callbacks observe the asynchronous data-source lifecycle.
             </p>
-            <div class="chip-row">
-              <span class="chip">on_card_clicked</span>
-              <span class="chip">on_card_double_clicked</span>
-              <span class="chip">on_card_right_clicked</span>
-              <span class="chip">on_card_moved</span>
-              <span class="chip">on_card_reordered</span>
-              <span class="chip">on_card_created</span>
-              <span class="chip">on_card_updated</span>
-              <span class="chip">on_card_deleted</span>
-              <span class="chip">on_column_created</span>
-              <span class="chip">on_column_updated</span>
-              <span class="chip">on_column_deleted</span>
-              <span class="chip">on_column_reordered</span>
-              <span class="chip">on_data_changed</span>
-              <span class="chip">on_filter_changed</span>
-              <span class="chip">on_search_changed</span>
-              <span class="chip">on_sort_changed</span>
-              <span class="chip">on_action_cancelled</span>
-              <span class="chip">on_error</span>
-              <span class="chip">on_add_card_requested</span>
-              <span class="chip">on_edit_card_requested</span>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Parameter</th>
+                    <th>Default</th>
+                    <th>When it runs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>on_card_clicked</code></td><td><code>None</code></td><td>After a card click and selection update.</td></tr>
+                  <tr><td><code>on_card_double_clicked</code></td><td><code>None</code></td><td>After a card double-click.</td></tr>
+                  <tr><td><code>on_card_right_clicked</code></td><td><code>None</code></td><td>When opening the card context flow.</td></tr>
+                  <tr><td><code>on_card_moved</code></td><td><code>None</code></td><td>Before committing a cross-column move.</td></tr>
+                  <tr><td><code>on_card_reordered</code></td><td><code>None</code></td><td>Before committing same-column order changes.</td></tr>
+                  <tr><td><code>on_card_created</code></td><td><code>None</code></td><td>Before a created card is persisted.</td></tr>
+                  <tr><td><code>on_card_updated</code></td><td><code>None</code></td><td>Before a card update is persisted.</td></tr>
+                  <tr><td><code>on_card_deleted</code></td><td><code>None</code></td><td>Before a card deletion is persisted.</td></tr>
+                  <tr><td><code>on_column_created</code></td><td><code>None</code></td><td>Before a column creation is persisted.</td></tr>
+                  <tr><td><code>on_column_updated</code></td><td><code>None</code></td><td>Before a column update is persisted.</td></tr>
+                  <tr><td><code>on_column_deleted</code></td><td><code>None</code></td><td>Before a column deletion is persisted.</td></tr>
+                  <tr><td><code>on_column_reordered</code></td><td><code>None</code></td><td>Before column order is committed.</td></tr>
+                  <tr><td><code>on_data_changed</code></td><td><code>None</code></td><td>Legacy full-snapshot persistence path.</td></tr>
+                  <tr><td><code>on_filter_changed</code></td><td><code>None</code></td><td>Before active filters change.</td></tr>
+                  <tr><td><code>on_search_changed</code></td><td><code>None</code></td><td>Before the search query changes.</td></tr>
+                  <tr><td><code>on_sort_changed</code></td><td><code>None</code></td><td>Before global or column sort changes.</td></tr>
+                  <tr><td><code>on_action_cancelled</code></td><td><code>None</code></td><td>After an optimistic action is restored.</td></tr>
+                  <tr><td><code>on_error</code></td><td><code>None</code></td><td>When callback, load, query, or persistence work fails.</td></tr>
+                  <tr><td><code>on_add_card_requested</code></td><td><code>None</code></td><td>Overrides the built-in add-card form request.</td></tr>
+                  <tr><td><code>on_edit_card_requested</code></td><td><code>None</code></td><td>Overrides the built-in edit-card form request.</td></tr>
+                  <tr><td><code>on_persistence_status</code></td><td><code>None</code></td><td>On loading, saving, saved, retrying, offline, conflict, or error states.</td></tr>
+                  <tr><td><code>on_conflict</code></td><td><code>None</code></td><td>When storage reports a conflict; may return <code>"server_wins"</code> or <code>"local_wins"</code>.</td></tr>
+                </tbody>
+              </table>
             </div>
           </section>
 
@@ -1278,6 +1931,11 @@ board = CTkKanbanBoard(
                     <td><span class="signature">move_column(column_id, target_index, *, source="api")</span></td>
                     <td><code>bool</code></td>
                     <td>Moves a column in the ordered column list.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">apply_batch(operations, *, source="batch")</span></td>
+                    <td><code>bool</code></td>
+                    <td>Applies supported card and column operations as one UI change and one adapter batch.</td>
                   </tr>
                 </tbody>
               </table>
@@ -1373,6 +2031,86 @@ board = CTkKanbanBoard(
               </table>
             </div>
 
+            <h3>History, data-source, sizing, and lifecycle methods</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Returns</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="signature">can_undo()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Reports whether an undo snapshot is available.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">undo()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Restores the previous state and persists the focused delta when a data source is attached.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">can_redo()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Reports whether a redo snapshot is available.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">redo()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Reapplies the latest undone state and persists its focused delta.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">refresh_from_source()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Starts an asynchronous board load; returns <code>False</code> without a data source.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">query_source(query, *, append=False)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Runs a <code>CardQuery</code> asynchronously and replaces or appends the visible page.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">load_next_page(column_id=None)</span></td>
+                    <td><code>bool</code></td>
+                    <td>Requests the next page globally or for one column using current query state.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">get_persistence_status()</span></td>
+                    <td><code>dict[str, Any]</code></td>
+                    <td>Returns state, message, board revision, and queued mutation count.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">retry_last_save()</span></td>
+                    <td><code>bool</code></td>
+                    <td>Retries the last rejected or failed pending write.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_online(online)</span></td>
+                    <td><code>None</code></td>
+                    <td>Marks persistence online/offline; going online starts FIFO queue replay.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">remap_card_id(old_id, new_id, *, persist=False)</span></td>
+                    <td>Card copy</td>
+                    <td>Replaces a temporary card ID and updates selection/widgets without duplication.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">set_column_width(width, column_id=None)</span></td>
+                    <td><code>None</code></td>
+                    <td>Sets the shared width or one adjustable column width within configured bounds.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="signature">destroy()</span></td>
+                    <td><code>None</code></td>
+                    <td>Cancels polling/cleanup callbacks, closes forms, and shuts down the persistence worker.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <h3>View and UI methods</h3>
             <div class="table-wrap">
               <table class="doc-table">
@@ -1444,6 +2182,235 @@ board = CTkKanbanBoard(
                     <td><code>bool</code></td>
                     <td>Runs the configured confirmation flow, then deletes through the normal delete API.</td>
                   </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section" id="api-persistence">
+            <div class="section-rule"></div>
+            <h2>Persistence API</h2>
+            <p>
+              These public exports form the database-neutral boundary. Application code usually constructs one data
+              source and passes it to <code>CTkKanbanBoard</code>; adapter authors use the typed contracts directly.
+            </p>
+
+            <h3>Data-source classes</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Export</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>KanbanDataSource</code></td>
+                    <td>Runtime-checkable five-method protocol accepted by the board.</td>
+                  </tr>
+                  <tr>
+                    <td><code>SQLiteKanbanDataSource</code></td>
+                    <td>Included transactional SQLite implementation.</td>
+                  </tr>
+                  <tr>
+                    <td><code>CRUDKanbanDataSource</code></td>
+                    <td>Four-callback bridge for an application-owned repository.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PersistenceCoordinator</code></td>
+                    <td>Single-worker ordering, retries, offline replay, loads, queries, and callback scheduling.</td>
+                  </tr>
+                  <tr>
+                    <td><code>RetryPolicy</code></td>
+                    <td>Retry configuration: attempts, initial delay, multiplier, and maximum delay.</td>
+                  </tr>
+                  <tr>
+                    <td><code>CRUDResource</code></td>
+                    <td>Type alias for the literal resource names <code>"card"</code> and <code>"column"</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>CRUDWriteResult</code></td>
+                    <td>Type alias for record mappings, <code>MutationResult</code>, booleans, or <code>None</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>CRUDKanbanDataSource</code></h3>
+            <div class="callout">
+              <span class="signature">CRUDKanbanDataSource(*, read, create, update, delete, transaction=None, changes=None)</span>
+            </div>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Callback</th>
+                    <th>Signature</th>
+                    <th>Responsibility</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>read</code></td>
+                    <td><code>(board_id)</code></td>
+                    <td>Return <code>BoardLoadResult</code> or a mapping with columns, cards, and optional revision.</td>
+                  </tr>
+                  <tr>
+                    <td><code>create</code></td>
+                    <td><code>(resource, board_id, record, context)</code></td>
+                    <td>Insert a card or column and preferably return its canonical stored record.</td>
+                  </tr>
+                  <tr>
+                    <td><code>update</code></td>
+                    <td><code>(resource, board_id, record_id, record, context)</code></td>
+                    <td>Replace/update one stored record. The ID is the previous ID during a rename.</td>
+                  </tr>
+                  <tr>
+                    <td><code>delete</code></td>
+                    <td><code>(resource, board_id, record_id, context)</code></td>
+                    <td>Delete one stored card or column.</td>
+                  </tr>
+                  <tr>
+                    <td><code>transaction</code></td>
+                    <td><code>(events) -&gt; context manager</code></td>
+                    <td>Optional atomic scope. The yielded value becomes <code>context.transaction</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>changes</code></td>
+                    <td><code>(board_id, since_revision)</code></td>
+                    <td>Optional optimized change feed returning <code>ChangePage</code> or an equivalent mapping.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h4><code>CRUDContext</code></h4>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Attribute</th>
+                    <th>Meaning</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>event</code></td><td>The complete focused <code>MutationEvent</code>.</td></tr>
+                  <tr><td><code>metadata</code></td><td>Convenience property exposing <code>event.metadata</code>.</td></tr>
+                  <tr><td><code>transaction</code></td><td>Object yielded by the transaction context manager, or <code>None</code>.</td></tr>
+                  <tr><td><code>position</code></td><td>Ordered column position for column create/reorder operations.</td></tr>
+                  <tr><td><code>previous_id</code></td><td>Stored identifier targeted by update or delete.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>SQLiteKanbanDataSource</code></h3>
+            <div class="callout">
+              <span class="signature">SQLiteKanbanDataSource(path)</span>
+            </div>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>seed_board(board_id, columns, cards, *, replace=False)</code></td><td>Creates/imports an initial board.</td></tr>
+                  <tr><td><code>load_board(board_id, query=None)</code></td><td>Loads columns and a card page.</td></tr>
+                  <tr><td><code>query_cards(board_id, query)</code></td><td>Searches, filters, sorts, and pages cards.</td></tr>
+                  <tr><td><code>apply_mutation(event)</code></td><td>Applies one event transactionally and idempotently.</td></tr>
+                  <tr><td><code>apply_batch(events)</code></td><td>Applies one-board events atomically with temporary-ID rebasing.</td></tr>
+                  <tr><td><code>get_changes(board_id, since_revision)</code></td><td>Returns persisted events after a revision.</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Mutation contracts</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Contract</th>
+                    <th>Important fields</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>EventMetadata</code></td>
+                    <td><code>board_id</code>, <code>actor_id</code>, <code>event_id</code>,
+                      <code>transaction_id</code>, <code>expected_revision</code>, <code>source</code>,
+                      <code>timestamp</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>MutationEvent</code></td>
+                    <td><code>type</code>, focused <code>payload</code>, and <code>metadata</code>.
+                      <code>to_dict()</code> and <code>from_mapping()</code> cross serialization boundaries.</td>
+                  </tr>
+                  <tr>
+                    <td><code>MutationResult</code></td>
+                    <td><code>accepted</code>, <code>reason</code>, canonical <code>card</code>/<code>column</code>,
+                      changed records, <code>id_map</code>, <code>board_revision</code>, <code>conflict</code>,
+                      and <code>retryable</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>ConflictDetails</code></td>
+                    <td><code>expected_revision</code>, <code>actual_revision</code>,
+                      optional <code>server_data</code>, and a user-facing <code>message</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>PersistenceState</code></td>
+                    <td>Literal status values used by persistence status callbacks.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Query and page contracts</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr>
+                    <th>Contract</th>
+                    <th>Fields</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>CardQuery</code></td>
+                    <td><code>column_id</code>, <code>search</code>, <code>filters</code>, <code>sort_key</code>,
+                      <code>reverse</code>, <code>offset</code>, <code>limit</code>, completion settings, and timezone.</td>
+                  </tr>
+                  <tr>
+                    <td><code>CardPage</code></td>
+                    <td><code>cards</code>, <code>total</code>, <code>offset</code>, <code>limit</code>,
+                      <code>column_totals</code>, <code>board_revision</code>, and derived <code>has_more</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>BoardLoadResult</code></td>
+                    <td><code>columns</code>, initial <code>cards</code>, <code>column_totals</code>,
+                      <code>board_revision</code>, and <code>has_more</code>.</td>
+                  </tr>
+                  <tr>
+                    <td><code>ChangePage</code></td>
+                    <td>Mutation <code>events</code> after a revision and the latest <code>board_revision</code>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3><code>RetryPolicy</code> defaults</h3>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead>
+                  <tr><th>Field</th><th>Default</th><th>Meaning</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>attempts</code></td><td><code>3</code></td><td>Total attempts including the first call.</td></tr>
+                  <tr><td><code>initial_delay</code></td><td><code>0.25</code></td><td>Seconds before the first retry.</td></tr>
+                  <tr><td><code>multiplier</code></td><td><code>2.0</code></td><td>Delay multiplier after each failure.</td></tr>
+                  <tr><td><code>max_delay</code></td><td><code>3.0</code></td><td>Maximum delay between attempts.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1876,6 +2843,21 @@ board = CTkKanbanBoard(
                     <td><code>edit_card_requested</code></td>
                     <td>No</td>
                     <td><code>card_id</code>, <code>card_data</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_persistence_status</code></td>
+                    <td><code>persistence_status</code></td>
+                    <td>No</td>
+                    <td><code>board_id</code>, <code>state</code>, <code>message</code>, <code>queued_count</code></td>
+                  </tr>
+                  <tr>
+                    <td><code>on_conflict</code></td>
+                    <td><code>conflict</code></td>
+                    <td>Decision</td>
+                    <td>
+                      <code>mutation</code> and <code>conflict</code>. Return <code>"server_wins"</code> or
+                      <code>"local_wins"</code>; another return keeps the configured strategy.
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -2366,6 +3348,14 @@ board = CTkKanbanBoard(
                     <td><code>KanbanMoveCancelledError</code></td>
                     <td>Exported for callers that want to treat a cancelled move as an error condition.</td>
                   </tr>
+                  <tr>
+                    <td><code>KanbanPersistenceError</code></td>
+                    <td>Raised for board-level persistence constraints, such as mutating while saves are locked.</td>
+                  </tr>
+                  <tr>
+                    <td><code>KanbanConflictError</code></td>
+                    <td>Exported persistence subtype for applications that represent concurrency conflicts as exceptions.</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -2409,7 +3399,35 @@ board = CTkKanbanBoard(
             <p>
               Wrap your repository's four CRUD functions with <code>CRUDKanbanDataSource</code>. Implement
               <code>KanbanDataSource</code> directly only when you need native server-side queries, bulk writes,
-              conflict snapshots, or change streams. See the <a href="database.md">database integration guide</a>.
+              conflict snapshots, or change streams. Start at
+              <a href="#tutorial-persistence">Database and Persistence</a>.
+            </p>
+
+            <h3>Why is the board stuck on offline or error?</h3>
+            <p>
+              Inspect <code>get_persistence_status()</code> and your application logs. Transient connection failures
+              retry and then queue offline; call <code>set_online(True)</code> when connectivity returns. Rejected
+              writes and conflicts require resolution before <code>retry_last_save()</code>.
+            </p>
+
+            <h3>Why does polling reload the board?</h3>
+            <p>
+              <code>get_changes()</code> reports that durable state advanced, then the board calls
+              <code>refresh_from_source()</code> to obtain a consistent page. Set <code>poll_interval_ms=0</code> to
+              disable polling or call refresh from your own push notification handler.
+            </p>
+
+            <h3>Why did a generated database ID not appear?</h3>
+            <p>
+              Return the complete canonical stored card from a CRUD create callback, or set
+              <code>MutationResult.card</code>/<code>id_map</code> in a custom adapter. The board will replace its
+              temporary ID and update selection and widgets.
+            </p>
+
+            <h3>Can callbacks touch Tk widgets?</h3>
+            <p>
+              UI callbacks run on Tk's thread, but data-source and CRUD methods run on the persistence worker. Keep Tk
+              access out of storage code; return typed results and let the coordinator schedule board updates.
             </p>
           </section>
 
@@ -2420,6 +3438,13 @@ board = CTkKanbanBoard(
               <li>
                 The package includes a transactional SQLite adapter and a database-agnostic CRUD callback bridge.
                 Advanced integrations can implement the <code>KanbanDataSource</code> protocol directly.
+              </li>
+              <li>
+                The CRUD bridge filters and pages the complete <code>read</code> result in the worker. For very large
+                datasets, implement native <code>query_cards()</code> in a full data source.
+              </li>
+              <li>
+                The retry/offline queue is in memory, not a durable application outbox.
               </li>
               <li>
                 The built-in UI does not provide a column creation, edit, or delete dialog. Column structure changes are
@@ -2443,6 +3468,10 @@ board = CTkKanbanBoard(
               </li>
               <li>
                 Prefer stable string or integer IDs when board data crosses a JSON or database boundary.
+              </li>
+              <li>
+                The built-in SQLite adapter requires non-empty string or integer card and column IDs so their types
+                survive JSON storage. In-memory boards accept any valid hashable ID.
               </li>
             </ul>
 

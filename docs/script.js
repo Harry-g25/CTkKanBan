@@ -3,6 +3,9 @@ const overlay = document.getElementById("overlay");
 const hamburger = document.getElementById("hamburger");
 const backToTop = document.getElementById("back-to-top");
 const navLinks = [...document.querySelectorAll(".sidebar-nav a")];
+const searchInput = document.getElementById("docs-search-input");
+const searchResults = document.getElementById("docs-search-results");
+const searchStatus = document.getElementById("docs-search-status");
 
 function setMenuOpen(open) {
   sidebar?.classList.toggle("is-open", open);
@@ -22,6 +25,165 @@ navLinks.forEach((link) => {
       setMenuOpen(false);
     }
   });
+});
+
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+const usedHeadingIds = new Set(
+  [...document.querySelectorAll("[id]")].map((element) => element.id),
+);
+
+document.querySelectorAll(".doc-section h2, .doc-section h3, .doc-section h4").forEach((heading) => {
+  if (heading.id) {
+    return;
+  }
+  const base = slugify(heading.textContent || "") || "guide-section";
+  let candidate = base;
+  let suffix = 2;
+  while (usedHeadingIds.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  heading.id = candidate;
+  usedHeadingIds.add(candidate);
+});
+
+function nearestHeading(row) {
+  const section = row.closest(".doc-section");
+  if (!section) {
+    return null;
+  }
+  const headings = [...section.querySelectorAll("h2, h3, h4")];
+  const preceding = headings.filter(
+    (heading) =>
+      heading.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+  return preceding[preceding.length - 1] || null;
+}
+
+const searchIndex = [
+  ...[...document.querySelectorAll(".doc-section h2, .doc-section h3, .doc-section h4")].map(
+    (heading) => ({
+      title: (heading.textContent || "").trim(),
+      context: heading.closest(".doc-section")?.querySelector("h2")?.textContent?.trim() || "Guide",
+      target: heading.id,
+      text: `${heading.textContent || ""} ${heading.parentElement?.textContent || ""}`.toLowerCase(),
+    }),
+  ),
+  ...[...document.querySelectorAll(".doc-table tbody tr")].map((row) => {
+    const heading = nearestHeading(row);
+    const cells = [...row.querySelectorAll("td")];
+    return {
+      title: (cells[0]?.textContent || "Reference entry").trim(),
+      context: (heading?.textContent || "API reference").trim(),
+      target: heading?.id || row.closest(".doc-section")?.id || "hero",
+      text: (row.textContent || "").toLowerCase(),
+    };
+  }),
+];
+
+function closeSearch({ clear = false } = {}) {
+  if (searchResults) {
+    searchResults.hidden = true;
+    searchResults.replaceChildren();
+  }
+  if (searchStatus) {
+    searchStatus.textContent = "";
+  }
+  if (clear && searchInput) {
+    searchInput.value = "";
+  }
+}
+
+function renderSearchResults() {
+  if (!searchInput || !searchResults || !searchStatus) {
+    return;
+  }
+  const query = searchInput.value.trim().toLowerCase();
+  searchResults.replaceChildren();
+  if (query.length < 2) {
+    closeSearch();
+    searchStatus.textContent = query ? "Type one more character" : "";
+    return;
+  }
+
+  const terms = query.split(/\s+/).filter(Boolean);
+  const matches = searchIndex
+    .filter((item) => terms.every((term) => item.text.includes(term)))
+    .sort((left, right) => {
+      const leftTitle = left.title.toLowerCase();
+      const rightTitle = right.title.toLowerCase();
+      return Number(rightTitle.startsWith(query)) - Number(leftTitle.startsWith(query));
+    })
+    .slice(0, 12);
+
+  searchStatus.textContent = matches.length
+    ? `${matches.length} result${matches.length === 1 ? "" : "s"}`
+    : "No matching reference entries";
+  searchResults.hidden = false;
+
+  if (!matches.length) {
+    const empty = document.createElement("p");
+    empty.className = "docs-search__empty";
+    empty.textContent = "Try a method, option, callback, or database term.";
+    searchResults.append(empty);
+    return;
+  }
+
+  matches.forEach((item) => {
+    const link = document.createElement("a");
+    const title = document.createElement("strong");
+    const context = document.createElement("span");
+    link.href = `#${item.target}`;
+    title.textContent = item.title;
+    context.textContent = item.context;
+    link.append(title, context);
+    link.addEventListener("click", () => {
+      closeSearch({ clear: true });
+      if (window.innerWidth <= 768) {
+        setMenuOpen(false);
+      }
+    });
+    searchResults.append(link);
+  });
+}
+
+searchInput?.addEventListener("input", renderSearchResults);
+searchInput?.addEventListener("focus", renderSearchResults);
+searchInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeSearch({ clear: true });
+    searchInput.blur();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  const isTyping =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    target?.isContentEditable;
+  if (event.key === "/" && !isTyping) {
+    event.preventDefault();
+    if (window.innerWidth <= 768) {
+      setMenuOpen(true);
+      window.setTimeout(() => searchInput?.focus(), 300);
+    } else {
+      searchInput?.focus();
+    }
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof Element) || !event.target.closest(".docs-search")) {
+    closeSearch();
+  }
 });
 
 const observedSections = [...document.querySelectorAll("section[id], header[id]")];
