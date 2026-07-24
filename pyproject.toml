@@ -81,10 +81,13 @@ Issues = "https://github.com/Harry-g25/CTkKanBan/issues"
 Source = "https://github.com/Harry-g25/CTkKanBan"
 
 [tool.setuptools.packages.find]
-include = ["ctk_kanban*"]
+include = ["CTkKanBan*", "ctk_kanban*"]
 
 [tool.setuptools.package-data]
 ctk_kanban = ["py.typed"]
+
+[tool.check-wheel-contents]
+ignore = ["W009"]
 
 [tool.setuptools.dynamic]
 version = {attr = "ctk_kanban.version.__version__"}

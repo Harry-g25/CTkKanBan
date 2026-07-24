@@ -20,10 +20,12 @@ python -m pip install CTkKanBan
 
 ```python
 import customtkinter as ctk
-from ctk_kanban import CTkKanbanBoard
+import CTkKanBan
+
+board_class = CTkKanBan.CTkKanbanBoard
 
 app = ctk.CTk()
-board = CTkKanbanBoard(
+board = board_class(
     app,
     columns=[{"id": "todo", "title": "To Do"}, {"id": "done", "title": "Done"}],
     cards=[{"id": 1, "column": "todo", "title": "Try CTkKanban"}],
