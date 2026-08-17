@@ -22,7 +22,7 @@ def main() -> None:
                 "id": 1,
                 "column": "todo",
                 "title": "A straightforward Kanban card",
-                "description": "Use Edit for details and :: to drag.",
+                "description": "Click for details and use the handle to drag.",
                 "priority": "Medium",
                 "tags": ["welcome"],
             }

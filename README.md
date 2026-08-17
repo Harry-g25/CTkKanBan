@@ -32,7 +32,7 @@ board = CTkKanbanBoard(
             "id": 1,
             "column": "todo",
             "title": "Try the simplified board",
-            "description": "Drag only from the :: handle.",
+            "description": "Click for details and use the handle to drag.",
             "priority": "High",
             "tags": ["demo"],
         }
@@ -45,11 +45,10 @@ app.mainloop()
 
 ## Interaction model
 
-- Click a card to select it.
-- Choose **Edit** to slide open the editor drawer from the right side of the board.
-- Save explicitly with **Save** or Enter; Escape cancels.
-- Drag cards only from their `::` handle.
-- Use the visible `...` menu for move and delete actions.
+- Click a card to select it and open the editor drawer.
+- Save explicitly with **Save changes** or Enter; Escape cancels.
+- Drag cards only from their upper-right drag handle.
+- Use the visible menu for move and delete actions.
 - Columns use menu actions for left/right movement instead of column dragging.
 
 There is no inline editing, click-away autosave, whole-card dragging, floating
@@ -82,9 +81,81 @@ emit an event.
 Persistence, retries, paging, polling, and conflict handling intentionally live
 in the host application rather than the widget.
 
+### Database rows
+
+Database results can be converted without adding a database-driver dependency
+to CTkKanban. Mapping rows from psycopg `dict_row`, `sqlite3.Row`, and
+SQLAlchemy are accepted by `snapshot_from_rows()`:
+
+```python
+from ctk_kanban import snapshot_from_rows
+
+snapshot = snapshot_from_rows(column_rows, card_rows)
+board.set_data(snapshot)
+```
+
+Plain DB-API tuple results can be converted using cursor metadata. Fetch each
+result before reusing its cursor:
+
+```python
+from ctk_kanban import rows_from_cursor, snapshot_from_rows
+
+cursor.execute("SELECT id, title FROM kanban_columns ORDER BY position")
+columns = rows_from_cursor(cursor)
+
+cursor.execute(
+    """
+    SELECT id, column_id AS column, title, description, priority, tags
+    FROM kanban_cards
+    ORDER BY column_id, position
+    """
+)
+cards = rows_from_cursor(cursor)
+
+board.set_data(snapshot_from_rows(columns, cards))
+```
+
+Use SQL aliases such as `column_id AS column` to produce CTkKanban's exact
+record keys. Result column names must be unique. `rows_from_cursor()` consumes
+all remaining rows returned by the cursor.
+
+`snapshot_from_cursors(columns_cursor, cards_cursor)` is a shorter equivalent
+when two separately executed cursors are available. Every snapshot helper
+normalizes and validates the complete result before returning it.
+
+### Asynchronous loading
+
+`load_async()` performs fetching and validation on a daemon worker, then calls
+`set_data()` and user callbacks safely on Tk's thread:
+
+```python
+import psycopg
+from psycopg.rows import dict_row
+
+from ctk_kanban import snapshot_from_rows
+
+
+def fetch_board():
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+        columns = connection.execute(COLUMN_QUERY).fetchall()
+        cards = connection.execute(CARD_QUERY).fetchall()
+        return snapshot_from_rows(columns, cards)
+
+
+board.load_async(
+    fetch_board,
+    on_success=lambda snapshot: print("Loaded", len(snapshot["cards"]), "cards"),
+    on_error=lambda error: print("Load failed:", error),
+)
+```
+
+`board.is_loading` reports pending work and `board.load_error` retains the most
+recent asynchronous error. Existing data is preserved on failure unless
+`clear_on_error=True` is requested. Starting a newer load makes an older result
+stale, so it cannot overwrite newer data.
+
 Pass `on_card_open` when the host application owns card editing. Its callback
-receives the card snapshot and replaces the built-in drawer for the Edit
-action.
+receives the card snapshot and replaces the built-in drawer when a card opens.
 
 ## Main API
 
@@ -95,10 +166,16 @@ add_card() / update_card() / move_card() / delete_card()
 add_column() / update_column() / move_column() / delete_column()
 open_add_card_editor() / open_edit_card_editor(id)
 search(query)
+set_loading(bool) / load_async(fetch_snapshot, ...)
+rows_from_cursor(cursor)
+snapshot_from_rows(columns, cards) / snapshot_from_cursors(columns_cursor, cards_cursor)
 ```
 
 The Tk-free `BoardModel` is also public for applications that want to validate
-or manipulate board data without creating a window.
+or manipulate board data without creating a window. `Column.from_definition()`
+and `Card.from_definition()` expose the same normalization for typed application
+code, while `BoardSnapshot`, `ColumnRecord`, and `CardRecord` provide public
+typing shapes.
 
 ## Migrating from 1.x
 

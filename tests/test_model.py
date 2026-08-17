@@ -111,6 +111,25 @@ def test_public_card_round_trips_a_snapshot_record() -> None:
     assert restored.get_card(1) == record
 
 
+def test_typed_records_normalize_mapping_definitions() -> None:
+    column = Column.from_definition({"id": "todo", "title": "  To do  "})
+    card = Card.from_definition(
+        {
+            "id": 1,
+            "column_id": "todo",
+            "title": "  Loaded  ",
+            "description": "  Details  ",
+            "priority": "Medium",
+            "tags": [" database "],
+        }
+    )
+
+    assert column == Column("todo", "To do")
+    assert card == Card(1, "todo", "Loaded", "Details", "Medium", ("database",))
+    assert Column.from_definition(column) is column
+    assert Card.from_definition(card) is card
+
+
 def test_snapshots_and_getters_are_defensive() -> None:
     source_tags = ["one"]
     model = BoardModel(

@@ -8,10 +8,35 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, TypedDict
 
 BoardId = str | int
 CARD_PRIORITIES = ("", "Low", "Medium", "High", "Critical")
+
+
+class ColumnRecord(TypedDict):
+    """Serializable shape returned for a board column."""
+
+    id: BoardId
+    title: str
+
+
+class CardRecord(TypedDict):
+    """Serializable shape returned for a board card."""
+
+    id: BoardId
+    column: BoardId
+    title: str
+    description: str
+    priority: str
+    tags: list[str]
+
+
+class BoardSnapshot(TypedDict):
+    """Detached, serializable board state used by persistence adapters."""
+
+    columns: list[ColumnRecord]
+    cards: list[CardRecord]
 
 
 class BoardModelError(ValueError):
@@ -25,6 +50,12 @@ class Column:
     id: BoardId
     title: str
 
+    @classmethod
+    def from_definition(cls, definition: Column | Mapping[str, Any]) -> Column:
+        """Validate and normalize a typed or mapping column definition."""
+
+        return BoardModel._coerce_column(definition)
+
 
 @dataclass(frozen=True, slots=True)
 class Card:
@@ -36,6 +67,12 @@ class Card:
     description: str = ""
     priority: str = ""
     tags: tuple[str, ...] = ()
+
+    @classmethod
+    def from_definition(cls, definition: Card | Mapping[str, Any]) -> Card:
+        """Validate and normalize a typed or mapping card definition."""
+
+        return BoardModel._coerce_card(definition)
 
 
 ColumnInput = Column | Mapping[str, Any]
@@ -62,7 +99,7 @@ class BoardModel:
         self._card_order: dict[BoardId, list[BoardId]] = {}
         self._replace(columns, cards)
 
-    def snapshot(self) -> dict[str, list[dict[str, Any]]]:
+    def snapshot(self) -> BoardSnapshot:
         """Return a detached, serialisable representation of the board."""
 
         return {
@@ -101,12 +138,12 @@ class BoardModel:
 
         self._replace(columns if columns is not None else (), cards if cards is not None else ())
 
-    def get_card(self, card_id: BoardId) -> dict[str, Any]:
+    def get_card(self, card_id: BoardId) -> CardRecord:
         """Return one detached card record."""
 
         return self._card_dict(self._require_card(card_id))
 
-    def get_cards(self, column_id: BoardId | None = None) -> list[dict[str, Any]]:
+    def get_cards(self, column_id: BoardId | None = None) -> list[CardRecord]:
         """Return cards in manual order, optionally for one column."""
 
         if column_id is not None:
@@ -120,12 +157,12 @@ class BoardModel:
             ]
         return [self._card_dict(self._cards[card_id]) for card_id in ids]
 
-    def get_columns(self) -> list[dict[str, Any]]:
+    def get_columns(self) -> list[ColumnRecord]:
         """Return columns in manual order as detached records."""
 
         return [self._column_dict(self._columns[column_id]) for column_id in self._column_order]
 
-    def add_card(self, card: CardInput, *, index: int | None = None) -> dict[str, Any]:
+    def add_card(self, card: CardInput, *, index: int | None = None) -> CardRecord:
         """Add a card at ``index`` in its column, or append it."""
 
         value = self._coerce_card(card)
@@ -142,7 +179,7 @@ class BoardModel:
         card_id: BoardId,
         updates: Mapping[str, Any] | None = None,
         **changes: Any,
-    ) -> dict[str, Any]:
+    ) -> CardRecord:
         """Update editable card fields, optionally moving it to a column."""
 
         values = self._merge_changes(updates, changes)
@@ -179,7 +216,7 @@ class BoardModel:
         self._cards[card_id] = updated
         return self._card_dict(updated)
 
-    def delete_card(self, card_id: BoardId) -> dict[str, Any]:
+    def delete_card(self, card_id: BoardId) -> CardRecord:
         """Delete and return a detached copy of a card."""
 
         card = self._require_card(card_id)
@@ -192,7 +229,7 @@ class BoardModel:
         card_id: BoardId,
         column_id: BoardId,
         index: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> CardRecord:
         """Move a card to a column and insertion index, appending by default."""
 
         card = self._require_card(card_id)
@@ -208,13 +245,13 @@ class BoardModel:
         self._card_order[column_id].insert(position, card_id)
         return self._card_dict(moved)
 
-    def reorder_card(self, card_id: BoardId, index: int) -> dict[str, Any]:
+    def reorder_card(self, card_id: BoardId, index: int) -> CardRecord:
         """Move a card to another position within its current column."""
 
         card = self._require_card(card_id)
         return self.move_card(card_id, card.column, index)
 
-    def add_column(self, column: ColumnInput, *, index: int | None = None) -> dict[str, Any]:
+    def add_column(self, column: ColumnInput, *, index: int | None = None) -> ColumnRecord:
         """Add a column at ``index``, or append it."""
 
         value = self._coerce_column(column)
@@ -231,7 +268,7 @@ class BoardModel:
         column_id: BoardId,
         updates: Mapping[str, Any] | str | None = None,
         **changes: Any,
-    ) -> dict[str, Any]:
+    ) -> ColumnRecord:
         """Rename a column.
 
         A title string may be passed directly, or supplied in a mapping/keyword.
@@ -255,7 +292,7 @@ class BoardModel:
         column_id: BoardId,
         *,
         delete_cards: bool = False,
-    ) -> dict[str, Any]:
+    ) -> ColumnRecord:
         """Delete a column.
 
         Non-empty columns are protected unless ``delete_cards=True`` is
@@ -274,7 +311,7 @@ class BoardModel:
         self._column_order.remove(column_id)
         return self._column_dict(column)
 
-    def move_column(self, column_id: BoardId, index: int) -> dict[str, Any]:
+    def move_column(self, column_id: BoardId, index: int) -> ColumnRecord:
         """Move a column to a new manual position."""
 
         column = self._require_column(column_id)
@@ -342,16 +379,17 @@ class BoardModel:
 
         cls._validate_id(column.id, "column")
         cls._validate_title(column.title, "column")
-        return replace(column, title=column.title.strip())
+        title = column.title.strip()
+        return column if title == column.title else replace(column, title=title)
 
     @classmethod
     def _coerce_card(cls, value: CardInput) -> Card:
         if isinstance(value, Card):
-            card = replace(
-                value,
-                priority=cls._coerce_priority(value.priority),
-                tags=cls._coerce_tags(value.tags),
-            )
+            priority = cls._coerce_priority(value.priority)
+            tags = cls._coerce_tags(value.tags)
+            card = value
+            if priority != value.priority or tags != value.tags:
+                card = replace(value, priority=priority, tags=tags)
         elif isinstance(value, Mapping):
             cls._reject_unknown_fields(
                 value,
@@ -383,7 +421,11 @@ class BoardModel:
         cls._validate_id(card.column, "column")
         cls._validate_title(card.title, "card")
         cls._validate_text(card.description, "card description")
-        return replace(card, title=card.title.strip(), description=card.description.strip())
+        title = card.title.strip()
+        description = card.description.strip()
+        if title == card.title and description == card.description:
+            return card
+        return replace(card, title=title, description=description)
 
     @staticmethod
     def _validate_id(value: object, kind: str) -> None:
@@ -475,7 +517,7 @@ class BoardModel:
             raise BoardModelError(f"cannot update {kind} field(s): {fields}")
 
     @staticmethod
-    def _card_dict(card: Card) -> dict[str, Any]:
+    def _card_dict(card: Card) -> CardRecord:
         return {
             "id": card.id,
             "column": card.column,
@@ -486,8 +528,16 @@ class BoardModel:
         }
 
     @staticmethod
-    def _column_dict(column: Column) -> dict[str, Any]:
+    def _column_dict(column: Column) -> ColumnRecord:
         return {"id": column.id, "title": column.title}
 
 
-__all__ = ["BoardModel", "BoardModelError", "Card", "Column"]
+__all__ = [
+    "BoardModel",
+    "BoardModelError",
+    "BoardSnapshot",
+    "Card",
+    "CardRecord",
+    "Column",
+    "ColumnRecord",
+]

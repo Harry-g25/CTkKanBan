@@ -33,6 +33,39 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
             self._managed_global_bindings.append((sequence, func_id))
         return func_id
 
+    def _fit_frame_dimensions_to_canvas(self, _event: tk.Event[Any] | None = None) -> None:
+        """Fill the viewport without giving up scrolling for oversized content.
+
+        CustomTkinter's horizontal scroll frame only matches the canvas height.
+        That leaves narrow content anchored to the left of a wide viewport.  The
+        board benefits from a full-width inner frame so its column track can be
+        centred, while still allowing the frame to grow when columns overflow.
+        """
+
+        if self._orientation == "horizontal":
+            canvas_width = self._parent_canvas.winfo_width()
+            content_width = self.winfo_reqwidth()
+            self._parent_canvas.itemconfigure(
+                self._create_window_id,
+                width=max(canvas_width, content_width),
+                height=self._parent_canvas.winfo_height(),
+            )
+        else:
+            self._parent_canvas.itemconfigure(
+                self._create_window_id,
+                width=self._parent_canvas.winfo_width(),
+            )
+        self._parent_canvas.configure(scrollregion=self._parent_canvas.bbox("all"))
+
+    def fit_content_to_canvas(self) -> None:
+        """Recalculate the inner window after children are added or removed."""
+
+        try:
+            self.update_idletasks()
+            self._fit_frame_dimensions_to_canvas()
+        except tk.TclError:
+            pass
+
     def destroy(self) -> None:
         if self._managed_destroyed:
             return

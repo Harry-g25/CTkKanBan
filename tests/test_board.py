@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from types import SimpleNamespace
 from typing import Any
@@ -39,6 +40,15 @@ def make_board(root: Any, **options: Any) -> CTkKanbanBoard:
     board.pack(fill="both", expand=True)
     root.update_idletasks()
     return board
+
+
+def wait_for(root: Any, predicate: Any, *, timeout: float = 2.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError("Timed out waiting for Tk callback")
+        root.update()
+        time.sleep(0.005)
 
 
 def test_one_change_callback_contains_current_snapshot(tk_root: Any) -> None:
@@ -294,6 +304,56 @@ def test_search_only_changes_the_view(tk_root: Any) -> None:
     card = board._card_widgets[2]
     board._on_drag_press(card, SimpleNamespace(x_root=0, y_root=0))
     assert board._drag_state is None
+
+
+def test_async_load_validates_off_thread_and_applies_on_tk_thread(tk_root: Any) -> None:
+    successes: list[dict[str, Any]] = []
+    board = make_board(tk_root, show_toolbar=True)
+
+    thread = board.load_async(
+        lambda: {
+            "columns": [{"id": "backlog", "title": "  Backlog  "}],
+            "cards": [
+                {
+                    "id": 10,
+                    "column_id": "backlog",
+                    "title": "  Loaded asynchronously  ",
+                }
+            ],
+        },
+        on_success=successes.append,
+    )
+
+    assert board.is_loading
+    assert board.search_entry.cget("state") == "disabled"
+    wait_for(tk_root, lambda: not board.is_loading)
+    thread.join(timeout=1)
+
+    assert board.load_error is None
+    assert board.search_entry.cget("state") == "normal"
+    assert board.get_columns() == [{"id": "backlog", "title": "Backlog"}]
+    assert board.get_card(10)["title"] == "Loaded asynchronously"
+    assert successes == [board.get_data()]
+
+
+def test_async_load_preserves_data_and_reports_validation_errors(tk_root: Any) -> None:
+    errors: list[Exception] = []
+    board = make_board(tk_root, show_toolbar=True)
+    original = board.get_data()
+
+    board.load_async(
+        lambda: {
+            "columns": [{"id": "todo", "title": "To do"}],
+            "cards": [{"id": 1, "column": "missing", "title": "Orphan"}],
+        },
+        on_error=errors.append,
+    )
+    wait_for(tk_root, lambda: not board.is_loading)
+
+    assert len(errors) == 1
+    assert board.load_error is errors[0]
+    assert "unknown column" in str(errors[0])
+    assert board.get_data() == original
 
 
 def test_edit_button_to_save_updates_the_board_from_one_embedded_drawer(tk_root: Any) -> None:

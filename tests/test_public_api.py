@@ -11,10 +11,18 @@ def test_public_api_is_intentionally_small() -> None:
         "CTkKanbanBoard",
         "BoardModel",
         "BoardModelError",
+        "BoardSnapshot",
         "Card",
+        "CardRecord",
         "Column",
+        "ColumnRecord",
         "DEFAULT_THEME",
         "merge_theme",
+        "normalize_row",
+        "normalize_rows",
+        "rows_from_cursor",
+        "snapshot_from_cursors",
+        "snapshot_from_rows",
         "__version__",
     }
 

@@ -1,4 +1,4 @@
-"""Small, display-only card widget for the simplified board."""
+"""Compact card widget for the Kanban board."""
 
 from __future__ import annotations
 
@@ -11,11 +11,7 @@ PointerCallback = Callable[["CTkKanbanCard", Any], None]
 
 
 class CTkKanbanCard(ctk.CTkFrame):
-    """Render one card with explicit edit, menu, and drag controls.
-
-    Card content never starts a drag and is never edited in place.  This keeps
-    click, edit, and drag gestures independent from one another.
-    """
+    """Render one card with an open action, menu, and handle-only dragging."""
 
     def __init__(
         self,
@@ -35,9 +31,11 @@ class CTkKanbanCard(ctk.CTkFrame):
         super().__init__(
             master,
             width=width,
+            height=1,
             fg_color=theme["card_fg_color"],
             border_color=theme["card_border_color"],
             border_width=1,
+            corner_radius=10,
         )
         self.card = dict(card)
         self.card_id = self.card["id"]
@@ -46,71 +44,97 @@ class CTkKanbanCard(ctk.CTkFrame):
         self._on_edit = on_edit
         self._on_menu = on_menu
         self._selected = False
+        self._dragging = False
+        self._hovered = False
 
         self.grid_columnconfigure(1, weight=1)
 
-        self.drag_handle = ctk.CTkLabel(
-            self,
-            text="::",
-            width=24,
-            height=28,
-            cursor="fleur" if drag_enabled else "arrow",
-            text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(size=12, weight="bold"),
+        priority = str(self.card.get("priority") or "").strip()
+        priority_key = priority.casefold()
+        strip_color = (
+            self.theme.get(f"priority_{priority_key}_color", self.theme["accent_color"])
+            if priority
+            else self.theme["accent_color"]
         )
-        if drag_enabled:
-            self.drag_handle.grid(row=0, column=0, rowspan=2, padx=(8, 2), pady=(8, 4), sticky="n")
+        self.priority_strip = ctk.CTkFrame(
+            self,
+            width=4,
+            height=1,
+            corner_radius=2,
+            fg_color=strip_color,
+        )
+        self.priority_strip.grid(
+            row=0,
+            column=0,
+            rowspan=3,
+            padx=(8, 0),
+            pady=10,
+            sticky="ns",
+        )
 
         self.title_label = ctk.CTkLabel(
             self,
             text=str(self.card.get("title") or "Untitled"),
             anchor="w",
             justify="left",
-            wraplength=max(120, width - 112),
+            wraplength=max(140, width - 104),
             text_color=self.theme["text_color"],
             font=ctk.CTkFont(size=14, weight="bold"),
         )
         self.title_label.grid(
             row=0,
             column=1,
-            padx=(4, 4) if drag_enabled else (10, 4),
-            pady=(9, 2),
+            padx=(12, 4),
+            pady=(11, 3),
             sticky="ew",
         )
 
-        self.edit_button = ctk.CTkButton(
+        self.drag_handle = ctk.CTkLabel(
             self,
-            text="Edit",
-            width=42,
+            text="⠇",
+            width=24,
             height=26,
-            fg_color="transparent",
-            hover_color=self.theme["control_hover_color"],
-            text_color=self.theme["text_color"],
-            command=self._edit,
+            cursor="fleur" if drag_enabled else "arrow",
+            text_color=self.theme["muted_text_color"],
+            font=ctk.CTkFont(size=15, weight="bold"),
         )
-        self.edit_button.grid(row=0, column=2, padx=(2, 2), pady=(7, 2))
+        if drag_enabled:
+            self.drag_handle.grid(row=0, column=2, padx=(2, 0), pady=(8, 2), sticky="n")
 
         self.menu_button = ctk.CTkButton(
             self,
-            text="...",
+            text="⋯",
             width=30,
             height=26,
+            corner_radius=8,
             fg_color="transparent",
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
             command=self._menu,
         )
-        self.menu_button.grid(row=0, column=3, padx=(0, 7), pady=(7, 2))
+        self.menu_button.grid(row=0, column=3, padx=(0, 8), pady=(8, 2), sticky="n")
+
+        # Compatibility for integrations that invoked the former visible edit
+        # button directly. The card surface is now the visible open action.
+        self.edit_button = ctk.CTkButton(
+            self,
+            text="",
+            width=1,
+            height=1,
+            command=self._edit,
+        )
 
         next_row = 1
         description = str(self.card.get("description") or "").strip()
         if description:
+            if len(description) > 150:
+                description = f"{description[:149].rstrip()}…"
             self.description_label = ctk.CTkLabel(
                 self,
                 text=description,
                 anchor="w",
                 justify="left",
-                wraplength=max(140, width - 60),
+                wraplength=max(160, width - 48),
                 text_color=self.theme["muted_text_color"],
                 font=ctk.CTkFont(size=11),
             )
@@ -118,13 +142,12 @@ class CTkKanbanCard(ctk.CTkFrame):
                 row=next_row,
                 column=1,
                 columnspan=3,
-                padx=(4, 9),
-                pady=(0, 5),
+                padx=(12, 10),
+                pady=(1, 7),
                 sticky="ew",
             )
             next_row += 1
 
-        priority = str(self.card.get("priority") or "").strip()
         raw_tags = self.card.get("tags") or []
         if isinstance(raw_tags, str):
             tags = [item.strip() for item in raw_tags.split(",") if item.strip()]
@@ -133,37 +156,40 @@ class CTkKanbanCard(ctk.CTkFrame):
         self.priority_pill: ctk.CTkLabel | None = None
         self.tag_pills: list[ctk.CTkLabel] = []
         if priority or tags:
-            self.metadata_frame = ctk.CTkFrame(self, fg_color="transparent")
+            self.metadata_frame = ctk.CTkFrame(self, height=1, fg_color="transparent")
             self.metadata_frame.grid(
                 row=next_row,
                 column=1,
                 columnspan=3,
-                padx=(4, 9),
-                pady=(0, 9),
+                padx=(12, 10),
+                pady=(0, 11),
                 sticky="ew",
             )
             pills: list[tuple[str, Any, bool]] = []
             if priority:
-                color = self.theme[f"priority_{priority.casefold()}_color"]
+                color = self.theme.get(
+                    f"priority_{priority.casefold()}_color",
+                    self.theme["accent_color"],
+                )
                 pills.append((priority, color, True))
             palette = self.theme["tag_pill_colors"]
             for tag in tags[:4]:
                 display = tag if len(tag) <= 18 else f"{tag[:17]}…"
                 color_index = sum(ord(character) for character in tag) % len(palette)
                 pills.append((f"#{display}", palette[color_index], False))
-            self._build_pill_rows(pills, max_width=max(140, width - 60))
-        else:
-            self.title_label.grid_configure(pady=(9, 9))
+            self._build_pill_rows(pills, max_width=max(160, width - 48))
+        elif not description:
+            self.title_label.grid_configure(pady=(11, 11))
 
-        self._bind_select(self)
-        self._bind_select(self.title_label)
+        interactive: list[Any] = [self, self.priority_strip, self.title_label]
         if hasattr(self, "description_label"):
-            self._bind_select(self.description_label)
+            interactive.append(self.description_label)
         if hasattr(self, "metadata_frame"):
-            self._bind_select(self.metadata_frame)
-        for pill in [self.priority_pill, *self.tag_pills]:
-            if pill is not None:
-                self._bind_select(pill)
+            interactive.append(self.metadata_frame)
+        interactive.extend(pill for pill in [self.priority_pill, *self.tag_pills] if pill is not None)
+        for widget in interactive:
+            self._bind_select(widget)
+            self._bind_hover(widget)
 
         if drag_enabled:
             self.drag_handle.bind(
@@ -185,6 +211,10 @@ class CTkKanbanCard(ctk.CTkFrame):
     def _bind_select(self, widget: Any) -> None:
         widget.bind("<ButtonRelease-1>", lambda _event: self._select(), add="+")
 
+    def _bind_hover(self, widget: Any) -> None:
+        widget.bind("<Enter>", lambda _event: self._set_hovered(True), add="+")
+        widget.bind("<Leave>", lambda _event: self._set_hovered(False), add="+")
+
     def _build_pill_rows(self, pills: list[tuple[str, Any, bool]], *, max_width: int) -> None:
         row: ctk.CTkFrame | None = None
         row_width = 0
@@ -192,7 +222,7 @@ class CTkKanbanCard(ctk.CTkFrame):
             pill_width = max(42, 18 + len(text) * 6)
             if row is None or row_width + pill_width > max_width:
                 has_previous_row = row is not None
-                row = ctk.CTkFrame(self.metadata_frame, fg_color="transparent")
+                row = ctk.CTkFrame(self.metadata_frame, height=1, fg_color="transparent")
                 row.pack(fill="x", pady=(3, 0) if has_previous_row else 0)
                 row_width = 0
             pill = ctk.CTkLabel(
@@ -215,6 +245,7 @@ class CTkKanbanCard(ctk.CTkFrame):
     def _select(self) -> None:
         if self._on_select is not None:
             self._on_select(self)
+        self._edit()
 
     def _edit(self) -> None:
         if self._on_edit is not None:
@@ -240,11 +271,28 @@ class CTkKanbanCard(ctk.CTkFrame):
             ),
         )
 
+    def _set_hovered(self, hovered: bool) -> None:
+        self._hovered = bool(hovered)
+        if self._dragging:
+            return
+        self.configure(
+            fg_color=(
+                self.theme["card_hover_color"]
+                if self._hovered
+                else self.theme["card_fg_color"]
+            )
+        )
+
     def set_dragging(self, dragging: bool) -> None:
+        self._dragging = bool(dragging)
         self.configure(
             fg_color=(
                 self.theme["dragging_card_fg_color"]
                 if dragging
-                else self.theme["card_fg_color"]
+                else (
+                    self.theme["card_hover_color"]
+                    if self._hovered
+                    else self.theme["card_fg_color"]
+                )
             )
         )

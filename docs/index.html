@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CTkKanban documentation: tutorials, PostgreSQL integration, styling, events, and complete API reference.">
+  <meta name="theme-color" content="#0d1117">
+  <title>CTkKanban — Documentation</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --body-text: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #3b82f6;
+      --accent-h: #60a5fa;
+      --sidebar-w: 272px;
+      --nav-h: 58px;
+      --radius: 8px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 20px); }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 8px;
+      left: 8px;
+      z-index: 500;
+      transform: translateY(-150%);
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+    .skip-link:focus { transform: translateY(0); }
+
+    .topnav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      height: var(--nav-h);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+      background: rgba(13, 17, 23, .93);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-title { font-weight: 700; font-size: 15px; color: var(--text); text-decoration: none; }
+    .nav-ver {
+      font-size: 11px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .nav-spacer { flex: 1; }
+    .nav-a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 500; }
+    .nav-a:hover { color: var(--text); text-decoration: none; }
+    .hamburger {
+      display: none;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .layout { display: flex; padding-top: var(--nav-h); min-height: 100vh; }
+    .sidebar {
+      position: fixed;
+      top: var(--nav-h);
+      bottom: 0;
+      width: var(--sidebar-w);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 20px 12px 40px;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+    .sidebar::-webkit-scrollbar { width: 3px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+    .nav-group { margin-bottom: 22px; }
+    .nav-group-title {
+      padding: 0 8px;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .nav-item {
+      display: block;
+      padding: 5px 8px;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.4;
+      text-decoration: none;
+      transition: color .12s, background .12s;
+    }
+    .nav-item:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+    .nav-item.active { color: var(--accent-h); background: rgba(59, 130, 246, .12); font-weight: 600; }
+    .nav-sub { padding-left: 18px; font-size: 13px; }
+
+    .content {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      min-width: 0;
+      max-width: calc(var(--sidebar-w) + 880px);
+      padding: 0 56px 100px;
+    }
+    .hero { padding: 60px 0 56px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 20px;
+      padding: 3px 12px;
+      border: 1px solid rgba(59, 130, 246, .3);
+      border-radius: 999px;
+      background: rgba(59, 130, 246, .08);
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .hero h1 {
+      margin-bottom: 20px;
+      font-size: 56px;
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -.03em;
+      background: linear-gradient(135deg, #e6edf3 0%, #93c5fd 55%, #c4b5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub { max-width: 60ch; margin-bottom: 36px; color: var(--muted); font-size: 19px; line-height: 1.6; }
+    .hero-install {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: #79c0ff;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 14px;
+    }
+    .hero-install .pr { color: var(--muted); user-select: none; }
+    .hero-copy-btn, .copy-btn {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .hero-copy-btn { padding: 4px 10px; background: var(--surface2); }
+    .hero-copy-btn:hover, .copy-btn:hover { border-color: var(--accent); color: var(--text); }
+    .pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { display: inline-block; border: 1px solid; border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+    .pill-blue { background: rgba(59, 130, 246, .12); color: #93c5fd; border-color: rgba(59, 130, 246, .25); }
+    .pill-green { background: rgba(34, 197, 94, .12); color: #86efac; border-color: rgba(34, 197, 94, .25); }
+    .pill-purple { background: rgba(139, 92, 246, .12); color: #c4b5fd; border-color: rgba(139, 92, 246, .25); }
+    .pill-amber { background: rgba(245, 158, 11, .12); color: #fcd34d; border-color: rgba(245, 158, 11, .25); }
+
+    section { scroll-margin-top: calc(var(--nav-h) + 20px); }
+    h2 { margin-top: 64px; margin-bottom: 4px; color: var(--text); font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
+    h2.first { margin-top: 0; }
+    h3 { margin-top: 44px; margin-bottom: 8px; color: var(--text); font-size: 20px; font-weight: 600; }
+    h4 { margin-top: 28px; margin-bottom: 6px; color: var(--text); font-size: 15px; font-weight: 600; }
+    .section-hr { border: 0; border-top: 1px solid var(--border); margin: 0 0 32px; }
+    p { max-width: 80ch; margin-bottom: 14px; color: var(--body-text); }
+    p:last-child { margin-bottom: 0; }
+    a { color: var(--accent-h); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: var(--text); }
+    code {
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--surface);
+      color: #79c0ff;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12.5px;
+    }
+    ul, ol { padding-left: 22px; margin-bottom: 14px; color: var(--body-text); }
+    li { margin-bottom: 5px; }
+
+    .cb { position: relative; margin: 14px 0 22px; }
+    .cb-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 14px;
+      border: 1px solid var(--border);
+      border-bottom: 0;
+      border-radius: 8px 8px 0 0;
+      background: #1c2128;
+    }
+    .cb-lang { color: var(--muted); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .copy-btn { padding: 2px 9px; background: transparent; transition: color .12s, border-color .12s; }
+    .copy-btn.ok { color: #86efac; border-color: rgba(34, 197, 94, .4); }
+    .cb pre {
+      margin: 0;
+      overflow-x: auto;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      border-radius: 0 0 8px 8px;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      tab-size: 4;
+    }
+    .cb pre code { padding: 0; border: 0; background: transparent; color: inherit; font-size: inherit; }
+
+    .tbl { overflow-x: auto; margin: 14px 0 24px; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      white-space: nowrap;
+    }
+    td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--body-text); vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    tr:hover td { background: rgba(255, 255, 255, .015); }
+    td code { font-size: 11.5px; white-space: nowrap; }
+
+    .callout { margin: 14px 0 22px; padding: 14px 18px; border-left: 3px solid; border-radius: var(--radius); }
+    .callout p { max-width: none; margin: 0; }
+    .callout p + p { margin-top: 8px; }
+    .callout-t { margin-bottom: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .c-info { border-color: var(--accent); background: rgba(59, 130, 246, .07); }
+    .c-info .callout-t { color: var(--accent-h); }
+    .c-warn { border-color: #eab308; background: rgba(234, 179, 8, .07); }
+    .c-warn .callout-t { color: #fde047; }
+    .c-tip { border-color: #22c55e; background: rgba(34, 197, 94, .07); }
+    .c-tip .callout-t { color: #86efac; }
+
+    .faq-item { overflow: hidden; margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .faq-q {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 18px;
+      border: 0;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 500;
+      text-align: left;
+    }
+    .faq-q:hover { background: var(--surface2); }
+    .faq-icon { flex-shrink: 0; color: var(--muted); font-size: 20px; line-height: 1; transition: transform .2s; }
+    .faq-item.open .faq-icon { transform: rotate(45deg); }
+    .faq-a { display: none; padding: 4px 18px 18px; border-top: 1px solid var(--border); background: var(--surface); }
+    .faq-a p:first-child { margin-top: 14px; }
+    .faq-item.open .faq-a { display: block; }
+
+    .btt {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 50;
+      opacity: 0;
+      padding: 9px 14px;
+      border-radius: 8px;
+      background: var(--accent);
+      box-shadow: 0 4px 20px rgba(59, 130, 246, .4);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+      text-decoration: none;
+      transition: opacity .3s;
+    }
+    .btt:hover { background: var(--accent-h); text-decoration: none; }
+    .btt.vis { opacity: 1; pointer-events: auto; }
+    .page-footer { margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 1060px) { .content { padding: 0 32px 80px; } }
+    @media (max-width: 768px) {
+      .hamburger { display: block; }
+      .topnav .nav-a { display: none; }
+      .sidebar {
+        z-index: 150;
+        transform: translateX(-100%);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, .5);
+        transition: transform .28s;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .overlay { display: none; position: fixed; inset: 0; z-index: 140; background: rgba(0, 0, 0, .5); }
+      .overlay.vis { display: block; }
+      .content { margin-left: 0; padding: 0 18px 64px; }
+      .hero h1 { font-size: 38px; }
+      .hero-sub { font-size: 16px; }
+      .hero-install { max-width: 100%; flex-wrap: wrap; }
+      h2 { font-size: 23px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div class="overlay" id="overlay"></div>
+
+  <nav class="topnav" aria-label="Primary">
+    <a class="nav-title" href="#hero">CTkKanban</a>
+    <span class="nav-ver">v2.0.0 Docs</span>
+    <div class="nav-spacer"></div>
+    <a class="nav-a" href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">GitHub</a>
+    <a class="nav-a" href="https://pypi.org/project/CTkKanBan/" target="_blank" rel="noopener noreferrer">PyPI</a>
+    <button class="hamburger" id="hamburger" type="button" aria-label="Toggle documentation menu" aria-controls="sidebar" aria-expanded="false">&#9776;</button>
+  </nav>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <nav aria-label="Documentation">
+        <div class="nav-group">
+          <div class="nav-group-title">Overview</div>
+          <a class="nav-item" href="#hero">Introduction</a>
+          <a class="nav-item" href="#installation">Installation</a>
+          <a class="nav-item" href="#release-200">Release 2.0.0</a>
+          <a class="nav-item" href="#quick-start">Quick Start</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Tutorials</div>
+          <a class="nav-item" href="#tutorial-static">Static Board</a>
+          <a class="nav-item" href="#tutorial-interaction">Board Interaction</a>
+          <a class="nav-item" href="#tutorial-persistence">Save Changes</a>
+          <a class="nav-item" href="#tutorial-postgres">PostgreSQL App</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Board Data</div>
+          <a class="nav-item" href="#data-schema">Data Schema</a>
+          <a class="nav-item nav-sub" href="#data-columns">Columns</a>
+          <a class="nav-item nav-sub" href="#data-cards">Cards</a>
+          <a class="nav-item" href="#data-snapshots">Snapshots</a>
+          <a class="nav-item" href="#data-database">Database Rows</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Features</div>
+          <a class="nav-item" href="#feat-editor">Editor Drawer</a>
+          <a class="nav-item" href="#feat-search">Search</a>
+          <a class="nav-item" href="#feat-selection">Selection</a>
+          <a class="nav-item" href="#feat-movement">Drag &amp; Menus</a>
+          <a class="nav-item" href="#feat-events">Change Events</a>
+          <a class="nav-item" href="#feat-external-editor">External Editor</a>
+          <a class="nav-item" href="#feat-loading">Loading &amp; Async</a>
+          <a class="nav-item" href="#feat-styling">Styling &amp; Themes</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">API Reference</div>
+          <a class="nav-item" href="#api-constructor">Constructor</a>
+          <a class="nav-item" href="#api-board-methods">Board Methods</a>
+          <a class="nav-item" href="#api-model">BoardModel</a>
+          <a class="nav-item" href="#api-records">Records &amp; Types</a>
+          <a class="nav-item" href="#api-adapters">Data Adapters</a>
+          <a class="nav-item" href="#api-theme">Theme API</a>
+        </div>
+        <div class="nav-group">
+          <div class="nav-group-title">Help</div>
+          <a class="nav-item" href="#migration">Migrating from 1.x</a>
+          <a class="nav-item" href="#faq">FAQ &amp; Troubleshooting</a>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="content" id="main-content">
+      <section id="hero">
+        <div class="hero">
+          <div class="hero-eyebrow">&#10022; CustomTkinter Widget</div>
+          <h1>CTkKanban</h1>
+          <p class="hero-sub">A focused Kanban board for CustomTkinter. Build desktop workflows with explicit editing, dependable card movement, application-owned persistence, and a small typed API.</p>
+          <div class="hero-install">
+            <span class="pr">$</span>
+            <span id="install-cmd">python -m pip install --upgrade CTkKanBan</span>
+            <button class="hero-copy-btn" id="install-copy" type="button">Copy</button>
+          </div>
+          <div class="pill-row">
+            <span class="pill pill-blue">Typed Data Model</span>
+            <span class="pill pill-green">Database Helpers</span>
+            <span class="pill pill-purple">CustomTkinter</span>
+            <span class="pill pill-amber">Python 3.10+</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="installation">
+        <h2 class="first">Installation</h2>
+        <hr class="section-hr">
+        <p>Install CTkKanban from PyPI. CustomTkinter is installed automatically as a required dependency.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>python -m pip install --upgrade CTkKanBan</code></pre>
+        </div>
+        <p>CTkKanban 2.0.0 supports Python 3.10 through 3.14 and CustomTkinter 5.2.2 through the current 6.x line.</p>
+        <p>Although the distribution name uses capitals, import the package with its canonical lowercase module name:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>import customtkinter as ctk
+from ctk_kanban import CTkKanbanBoard</code></pre>
+        </div>
+        <p>Public helpers can be imported from the same package root:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import (
+    BoardModel,
+    BoardModelError,
+    Card,
+    Column,
+    DEFAULT_THEME,
+    normalize_row,
+    normalize_rows,
+    rows_from_cursor,
+    snapshot_from_cursors,
+    snapshot_from_rows,
+)</code></pre>
+        </div>
+      </section>
+
+      <section id="release-200">
+        <h2>Release 2.0.0 Highlights</h2>
+        <hr class="section-hr">
+        <p>Version 2 is a deliberate reset around a smaller and more predictable board API.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Area</th><th>What changed</th></tr></thead>
+            <tbody>
+              <tr><td>Editing</td><td>One embedded side drawer with explicit save and cancel behavior.</td></tr>
+              <tr><td>Movement</td><td>Card dragging is restricted to a visible handle; menus provide dependable alternatives.</td></tr>
+              <tr><td>Persistence</td><td>One <code>on_change</code> boundary returns complete snapshots to the host application.</td></tr>
+              <tr><td>Data</td><td>A Tk-free <code>BoardModel</code>, typed record shapes, and strict validation.</td></tr>
+              <tr><td>Databases</td><td>Helpers for DB-API cursors, mapping rows, SQLAlchemy rows, and asynchronous fetching.</td></tr>
+              <tr><td>Appearance</td><td>A responsive toolbar, centered columns, polished cards, empty states, and theme tokens.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout c-warn">
+          <div class="callout-t">Breaking release</div>
+          <p>Version 2 removes the 1.x field-definition, persistence, filtering, sorting, and generated-form systems. Read <a href="#migration">Migrating from 1.x</a> before upgrading an older application.</p>
+        </div>
+      </section>
+
+      <section id="quick-start">
+        <h2>Quick Start</h2>
+        <hr class="section-hr">
+        <p>Create a window, define columns and cards, then pack the board like any other CustomTkinter widget.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>import customtkinter as ctk
+
+from ctk_kanban import CTkKanbanBoard
+
+ctk.set_appearance_mode("System")
+
+app = ctk.CTk()
+app.title("Project board")
+app.geometry("1100x680")
+
+board = CTkKanbanBoard(
+    app,
+    columns=[
+        {"id": "todo", "title": "To do"},
+        {"id": "doing", "title": "Doing"},
+        {"id": "done", "title": "Done"},
+    ],
+    cards=[
+        {
+            "id": 1,
+            "column": "todo",
+            "title": "Publish CTkKanban",
+            "description": "Finish the documentation and release checks.",
+            "priority": "High",
+            "tags": ["release", "docs"],
+        }
+    ],
+    on_change=lambda event: print(event["type"], event["data"]),
+)
+board.pack(fill="both", expand=True)
+
+app.mainloop()</code></pre>
+        </div>
+        <div class="callout c-tip">
+          <div class="callout-t">Data ownership</div>
+          <p>The board owns its current in-memory model. Your application owns durable storage. Read snapshots with <code>get_data()</code>, replace them with <code>set_data()</code>, and persist successful changes from <code>on_change</code>.</p>
+        </div>
+      </section>
+
+      <section id="tutorial-static">
+        <h2>Tutorial 1: Static Board</h2>
+        <hr class="section-hr">
+        <p>Start from static Python data without any storage dependency. Disable dragging and omit persistence callbacks when changes only need to live for the lifetime of the window.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import Card, Column, CTkKanbanBoard
+
+columns = [
+    Column(id="planned", title="Planned"),
+    Column(id="shipped", title="Shipped"),
+]
+
+cards = [
+    Card(
+        id="docs",
+        column="planned",
+        title="Write documentation",
+        priority="Medium",
+        tags=("documentation",),
+    )
+]
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    enable_drag=False,
+    confirm_delete=True,
+)</code></pre>
+        </div>
+        <p><code>Column</code> and <code>Card</code> instances use the same validation as dictionaries. You can freely mix typed instances and mapping records in an input iterable.</p>
+      </section>
+
+      <section id="tutorial-interaction">
+        <h2>Tutorial 2: Board Interaction</h2>
+        <hr class="section-hr">
+        <p>CTkKanban makes destructive and mutating actions visible and deliberate:</p>
+        <ul>
+          <li>Click a card body or its <strong>Edit</strong> action to select it and open the editor drawer.</li>
+          <li>Save with <strong>Save changes</strong>, Enter outside the description box, or Ctrl+Enter anywhere in the editor.</li>
+          <li>Press Escape or choose <strong>Cancel</strong> to close the drawer without saving.</li>
+          <li>Drag from the handle in the card's upper-right corner. A six-pixel threshold prevents accidental drags.</li>
+          <li>Use card menus to move up, move down, move between columns, edit, or delete.</li>
+          <li>Use column menus to rename, move left, move right, or delete a column.</li>
+        </ul>
+        <div class="callout c-info">
+          <div class="callout-t">Search and movement</div>
+          <p>Dragging and positional menu actions are disabled while search is active, because hidden cards make the visible order ambiguous. Clear the search field before reordering cards.</p>
+        </div>
+        <p>Programmatic actions use the same model and event path as the built-in UI:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>board.add_card(
+    {
+        "id": 42,
+        "column": "todo",
+        "title": "Review pull request",
+        "priority": "High",
+        "tags": ["code-review"],
+    },
+    index=0,
+)
+
+board.update_card(42, {"description": "Check tests and typing."})
+board.move_card(42, "doing", index=0)
+board.delete_card(42)</code></pre>
+        </div>
+      </section>
+
+      <section id="tutorial-persistence">
+        <h2>Tutorial 3: Save Changes</h2>
+        <hr class="section-hr">
+        <p>The <code>on_change</code> callback runs once after each successful mutation. Every event contains <code>type</code>, <code>before</code>, and the latest complete snapshot in <code>data</code>, plus the affected record.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>import json
+from pathlib import Path
+
+BOARD_FILE = Path("board.json")
+
+
+def save_change(event):
+    # Suitable for small local files. Avoid slow network or SQL work here.
+    BOARD_FILE.write_text(
+        json.dumps(event["data"], indent=2),
+        encoding="utf-8",
+    )
+
+
+board = CTkKanbanBoard(
+    app,
+    columns=initial_data["columns"],
+    cards=initial_data["cards"],
+    on_change=save_change,
+)</code></pre>
+        </div>
+        <div class="callout c-warn">
+          <div class="callout-t">Keep Tk responsive</div>
+          <p><code>on_change</code> runs on Tk's UI thread. For PostgreSQL, HTTP APIs, or any slow storage, enqueue the event for a worker instead of blocking inside the callback. Tk widgets must still only be accessed from Tk's thread.</p>
+        </div>
+      </section>
+
+      <section id="tutorial-postgres">
+        <h2>Tutorial 4: Complete PostgreSQL App</h2>
+        <hr class="section-hr">
+        <p>This example uses Psycopg 3 mapping rows, SQL aliases that match CTkKanban's schema, and <code>load_async()</code> so database work does not freeze the desktop window.</p>
+        <p>Install Psycopg separately; CTkKanban intentionally does not require a database driver:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>python -m pip install "psycopg[binary]"</code></pre>
+        </div>
+        <h3>Example schema</h3>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">sql</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>CREATE TABLE kanban_columns (
+    id          text PRIMARY KEY,
+    title       text NOT NULL,
+    position    integer NOT NULL
+);
+
+CREATE TABLE kanban_cards (
+    id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    column_id   text NOT NULL REFERENCES kanban_columns(id),
+    title       text NOT NULL,
+    description text NOT NULL DEFAULT '',
+    priority    text NOT NULL DEFAULT '',
+    tags        text[] NOT NULL DEFAULT '{}',
+    position    integer NOT NULL,
+    CHECK (priority IN ('', 'Low', 'Medium', 'High', 'Critical'))
+);</code></pre>
+        </div>
+        <h3>Fetch and display</h3>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>import os
+
+import customtkinter as ctk
+import psycopg
+from psycopg.rows import dict_row
+
+from ctk_kanban import CTkKanbanBoard, snapshot_from_rows
+
+DATABASE_URL = os.environ["DATABASE_URL"]
+
+COLUMN_QUERY = """
+    SELECT id, title
+    FROM kanban_columns
+    ORDER BY position
+"""
+
+CARD_QUERY = """
+    SELECT
+        id,
+        column_id AS column,
+        title,
+        description,
+        priority,
+        tags
+    FROM kanban_cards
+    ORDER BY column_id, position
+"""
+
+
+def fetch_board():
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+        columns = connection.execute(COLUMN_QUERY).fetchall()
+        cards = connection.execute(CARD_QUERY).fetchall()
+    return snapshot_from_rows(columns, cards)
+
+
+app = ctk.CTk()
+app.geometry("1200x720")
+
+status = ctk.CTkLabel(app, text="Connecting…")
+status.pack(fill="x", padx=16, pady=(12, 0))
+
+board = CTkKanbanBoard(app)
+board.pack(fill="both", expand=True)
+
+board.load_async(
+    fetch_board,
+    on_success=lambda data: status.configure(
+        text=f"Loaded {len(data['cards'])} cards"
+    ),
+    on_error=lambda error: status.configure(text=f"Load failed: {error}"),
+)
+
+app.mainloop()</code></pre>
+        </div>
+        <div class="callout c-tip">
+          <div class="callout-t">Why the alias matters</div>
+          <p>The database uses <code>column_id</code>, while serialized card snapshots use <code>column</code>. <code>column_id AS column</code> produces the exact output key. Input accepts either spelling, but snapshots always return <code>column</code>.</p>
+        </div>
+        <p>For plain tuple cursors, use <code>rows_from_cursor()</code> after each query. For writes, use stable IDs and positions, handle transactions in your repository layer, and feed the resulting canonical snapshot back through <code>set_data()</code> if the server changes any values.</p>
+      </section>
+
+      <section id="data-schema">
+        <h2>Board Data Schema</h2>
+        <hr class="section-hr">
+        <p>A board snapshot is a mapping with exactly two keys:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>{
+    "columns": [
+        {"id": "todo", "title": "To do"},
+        {"id": "done", "title": "Done"},
+    ],
+    "cards": [
+        {
+            "id": 1,
+            "column": "todo",
+            "title": "Write release notes",
+            "description": "Summarize version 2.",
+            "priority": "Medium",
+            "tags": ["release"],
+        }
+    ],
+}</code></pre>
+        </div>
+        <p>Unknown fields are rejected rather than silently ignored. Loading is atomic: if any column or card is invalid, the current model remains unchanged.</p>
+      </section>
+
+      <section id="data-columns">
+        <h2>Column Records</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>id</code></td><td><code>str | int</code></td><td>Yes</td><td>Unique column identifier. Blank strings and booleans are rejected.</td></tr>
+              <tr><td><code>title</code></td><td><code>str</code></td><td>Yes</td><td>Visible heading. Leading and trailing whitespace is removed; the result must not be blank.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Column list order is the board's manual left-to-right order.</p>
+      </section>
+
+      <section id="data-cards">
+        <h2>Card Records</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>id</code></td><td><code>str | int</code></td><td>Yes</td><td>Unique card identifier. Blank strings and booleans are rejected.</td></tr>
+              <tr><td><code>column</code></td><td><code>str | int</code></td><td>Yes</td><td>ID of an existing column. <code>column_id</code> is accepted as an input alias.</td></tr>
+              <tr><td><code>title</code></td><td><code>str</code></td><td>Yes</td><td>Nonblank card heading, trimmed during normalization.</td></tr>
+              <tr><td><code>description</code></td><td><code>str</code></td><td>No</td><td>Plain text details. Defaults to an empty string.</td></tr>
+              <tr><td><code>priority</code></td><td><code>str</code></td><td>No</td><td>One of empty, <code>Low</code>, <code>Medium</code>, <code>High</code>, or <code>Critical</code>.</td></tr>
+              <tr><td><code>tags</code></td><td><code>Iterable[str]</code></td><td>No</td><td>Trimmed nonblank strings without commas. Snapshots return a new list.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Cards are serialized in column order and then in their manual top-to-bottom order. IDs should be stable database keys; use strings or integers when snapshots will be JSON encoded.</p>
+      </section>
+
+      <section id="data-snapshots">
+        <h2>Snapshots</h2>
+        <hr class="section-hr">
+        <p><code>get_data()</code> returns detached dictionaries and lists. Mutating the returned value cannot accidentally mutate the live board.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>snapshot = board.get_data()
+snapshot["cards"].append({...})  # Does not change the widget.
+
+board.set_data(snapshot)         # Validates, replaces, and redraws.</code></pre>
+        </div>
+        <p><code>set_data()</code> does not emit <code>on_change</code>. This prevents a database refresh from being mistaken for a user edit and written straight back to storage.</p>
+      </section>
+
+      <section id="data-database">
+        <h2>Database Row Sources</h2>
+        <hr class="section-hr">
+        <p>CTkKanban includes small conversion helpers without taking a dependency on PostgreSQL, SQLite, SQLAlchemy, or any other database library.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Row source</th><th>Recommended helper</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>Psycopg <code>dict_row</code></td><td><code>snapshot_from_rows()</code></td><td>Rows already implement the mapping protocol.</td></tr>
+              <tr><td><code>sqlite3.Row</code></td><td><code>snapshot_from_rows()</code></td><td>Converted through its <code>keys()</code> interface.</td></tr>
+              <tr><td>SQLAlchemy <code>Row</code></td><td><code>snapshot_from_rows()</code></td><td>Converted through <code>row._mapping</code>.</td></tr>
+              <tr><td>Plain DB-API tuples</td><td><code>rows_from_cursor()</code></td><td>Uses <code>cursor.description</code> for column names and consumes remaining rows.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>One reusable DB-API cursor</h3>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import rows_from_cursor, snapshot_from_rows
+
+cursor.execute("""
+    SELECT id, title
+    FROM kanban_columns
+    ORDER BY position
+""")
+columns = rows_from_cursor(cursor)
+
+cursor.execute("""
+    SELECT id, column_id AS column, title,
+           description, priority, tags
+    FROM kanban_cards
+    ORDER BY column_id, position
+""")
+cards = rows_from_cursor(cursor)
+
+board.set_data(snapshot_from_rows(columns, cards))</code></pre>
+        </div>
+        <h3>Two executed cursors</h3>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import snapshot_from_cursors
+
+snapshot = snapshot_from_cursors(columns_cursor, cards_cursor)
+board.set_data(snapshot)</code></pre>
+        </div>
+        <div class="callout c-warn">
+          <div class="callout-t">Query requirements</div>
+          <p>Result column names must be unique, so use SQL aliases for joins. A cursor must contain a <code>SELECT</code> result. PostgreSQL array columns work naturally for <code>tags</code>; JSON text must be decoded into a list before validation.</p>
+        </div>
+      </section>
+
+      <section id="feat-editor">
+        <h2>Feature: Editor Drawer</h2>
+        <hr class="section-hr">
+        <p>The built-in editor is an inspector-style drawer attached to the right side of the board. It keeps the board visible, reserves layout space at high display scaling, and only changes data after an explicit save.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
+            <tbody>
+              <tr><td>Title</td><td>Required. Empty or whitespace-only values display an inline validation message.</td></tr>
+              <tr><td>Description</td><td>Optional multiline plain text.</td></tr>
+              <tr><td>Priority</td><td>Empty, Low, Medium, High, or Critical.</td></tr>
+              <tr><td>Column</td><td>Moves the card when a different destination is saved.</td></tr>
+              <tr><td>Tags</td><td>Add with Enter and remove from the visible tag pills.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Keyboard controls</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Key</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><code>Enter</code></td><td>Saves while focus is inside the editor, except when focus is in the description field.</td></tr>
+              <tr><td><code>Ctrl+Enter</code></td><td>Saves from any field, including the multiline description.</td></tr>
+              <tr><td><code>Escape</code></td><td>Closes the drawer without applying unsaved changes.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Open the drawer directly when a surrounding application has its own buttons or shortcuts:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>board.open_add_card_editor("todo")
+board.open_edit_card_editor(card_id=17)
+board.open_add_column_dialog()</code></pre>
+        </div>
+      </section>
+
+      <section id="feat-search">
+        <h2>Feature: Search</h2>
+        <hr class="section-hr">
+        <p>The toolbar search performs a case-insensitive substring match across title, description, priority, and every tag. It filters only the rendered view; the underlying data and column counts stay intact.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>board.search("critical")
+board.search("database")
+board.search("")  # Clear the filter.</code></pre>
+        </div>
+        <ul>
+          <li>Search does not emit a change event.</li>
+          <li>The toolbar summary shows visible results and total cards.</li>
+          <li>Empty columns display <strong>No matching cards</strong>.</li>
+          <li>Drag and positional movement are disabled until search is cleared.</li>
+        </ul>
+      </section>
+
+      <section id="feat-selection">
+        <h2>Feature: Selection</h2>
+        <hr class="section-hr">
+        <p>Clicking a card selects it and applies the configured selected border color. Selection is board-local and exposes a detached card record:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>selected = board.get_selected_card()
+if selected is not None:
+    print(selected["id"], selected["title"])</code></pre>
+        </div>
+        <p>Deleting the selected card, or replacing the snapshot without that card, clears selection automatically. Selection itself is presentation state and does not emit <code>on_change</code>.</p>
+      </section>
+
+      <section id="feat-movement">
+        <h2>Feature: Dragging &amp; Menus</h2>
+        <hr class="section-hr">
+        <p>Cards can be reordered within a column or moved between columns. The handle-only drag design preserves normal clicking and text interaction across the rest of the card.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Action</th><th>Result</th><th>Event</th></tr></thead>
+            <tbody>
+              <tr><td>Drag card handle</td><td>Moves to the indicated column and insertion position.</td><td><code>card_moved</code></td></tr>
+              <tr><td>Card menu: Move up/down</td><td>Changes top-to-bottom order in the current column.</td><td><code>card_moved</code></td></tr>
+              <tr><td>Card menu: Move to column</td><td>Appends to the chosen destination.</td><td><code>card_moved</code></td></tr>
+              <tr><td>Column menu: Move left/right</td><td>Changes the column's manual position.</td><td><code>column_moved</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Set <code>enable_drag=False</code> to remove card drag behavior while retaining movement through menus and the public API.</p>
+      </section>
+
+      <section id="feat-events">
+        <h2>Feature: Change Events</h2>
+        <hr class="section-hr">
+        <p>Pass one <code>on_change</code> callback to observe every successful board mutation. Callback exceptions are logged under <code>ctk_kanban</code> and do not undo the in-memory change.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>def board_changed(event):
+    print("Operation:", event["type"])
+    print("Before:", event["before"])
+    print("Current:", event["data"])
+
+    if "card" in event:
+        print("Affected card:", event["card"])
+    if "column" in event:
+        print("Affected column:", event["column"])
+
+
+board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Event type</th><th>Additional keys</th><th>Triggered by</th></tr></thead>
+            <tbody>
+              <tr><td><code>card_added</code></td><td><code>card</code></td><td><code>add_card()</code> or the add-card editor.</td></tr>
+              <tr><td><code>card_updated</code></td><td><code>card</code>, <code>previous</code></td><td>A changed <code>update_card()</code> operation or editor save.</td></tr>
+              <tr><td><code>card_deleted</code></td><td><code>card</code></td><td><code>delete_card()</code> or confirmed menu deletion.</td></tr>
+              <tr><td><code>card_moved</code></td><td><code>card</code>, <code>previous</code></td><td>Drag, menu movement, or <code>move_card()</code>.</td></tr>
+              <tr><td><code>column_added</code></td><td><code>column</code></td><td><code>add_column()</code> or the add-column dialog.</td></tr>
+              <tr><td><code>column_updated</code></td><td><code>column</code>, <code>previous</code></td><td>A changed rename operation.</td></tr>
+              <tr><td><code>column_deleted</code></td><td><code>column</code></td><td><code>delete_column()</code> or confirmed menu deletion.</td></tr>
+              <tr><td><code>column_moved</code></td><td><code>column</code></td><td>Menu movement or <code>move_column()</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>All events also contain <code>before</code> and <code>data</code>. No event is sent for a no-op update, a no-op move, selection, search, loading presentation, or <code>set_data()</code>.</p>
+      </section>
+
+      <section id="feat-external-editor">
+        <h2>Feature: External Card Editor</h2>
+        <hr class="section-hr">
+        <p>Pass <code>on_card_open</code> when the host application owns card editing. The callback receives a detached card dictionary and replaces the built-in editor for existing cards.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>def open_application_editor(card):
+    details_panel.show(card)
+
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    on_card_open=open_application_editor,
+)
+
+# When your editor saves:
+board.update_card(card["id"], validated_updates)</code></pre>
+        </div>
+        <p>The callback is for opening an existing card. <code>open_add_card_editor()</code> continues to use CTkKanban's built-in add drawer.</p>
+      </section>
+
+      <section id="feat-loading">
+        <h2>Feature: Loading State &amp; Async Loading</h2>
+        <hr class="section-hr">
+        <p><code>set_loading(True)</code> updates the toolbar summary and disables toolbar inputs without changing board data. <code>load_async()</code> combines that state with safe background fetching and Tk-thread delivery.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>thread = board.load_async(
+    fetch_board,
+    on_success=lambda snapshot: print(
+        f"Loaded {len(snapshot['cards'])} cards"
+    ),
+    on_error=lambda error: print("Could not load:", error),
+    clear_on_error=False,
+)
+
+print(board.is_loading)  # True while the request is pending.
+print(board.load_error)  # None, or the most recent async exception.</code></pre>
+        </div>
+        <ul>
+          <li><code>fetch_board</code> runs on a daemon worker thread and must return a board snapshot mapping.</li>
+          <li>The full snapshot is validated on the worker before it reaches the widget.</li>
+          <li><code>set_data()</code>, <code>on_success</code>, and <code>on_error</code> run on Tk's thread.</li>
+          <li>Existing data stays visible after failure unless <code>clear_on_error=True</code>.</li>
+          <li>Starting a newer load invalidates an older pending result so stale data cannot overwrite the newer request.</li>
+          <li>The returned <code>threading.Thread</code> can be inspected or joined by non-UI test code, but do not join it from Tk's UI thread.</li>
+        </ul>
+        <div class="callout c-info">
+          <div class="callout-t">Thread boundary</div>
+          <p>The fetch callback may use database connections and pure Python conversion helpers. It must not read or configure Tk widgets. Use the success or error callback for UI updates.</p>
+        </div>
+      </section>
+
+      <section id="feat-styling">
+        <h2>Feature: Styling &amp; Themes</h2>
+        <hr class="section-hr">
+        <p>CTkKanban derives its default surfaces, text, inputs, buttons, hover states, and scrollbars from the active CustomTkinter theme. Set appearance and color theme before creating the board:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>import customtkinter as ctk
+
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("green")
+
+board = CTkKanbanBoard(app, columns=columns, cards=cards)</code></pre>
+        </div>
+        <p>Override only the tokens you need. A string fixes one color in both modes; a <code>(light, dark)</code> pair follows appearance mode.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>purple_theme = {
+    "accent_color": ("#7C3AED", "#A78BFA"),
+    "selected_border_color": ("#7C3AED", "#A78BFA"),
+    "drop_indicator_color": ("#7C3AED", "#A78BFA"),
+    "column_accent_colors": (
+        ("#2563EB", "#60A5FA"),
+        ("#7C3AED", "#A78BFA"),
+        ("#C11574", "#F472B6"),
+    ),
+    "card_border_color": ("#CBD5E1", "#334155"),
+}
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    theme=purple_theme,
+    corner_radius=14,  # Normal CTkFrame option for the board itself.
+)</code></pre>
+        </div>
+        <h3>Theme tokens</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Token</th><th>Controls</th></tr></thead>
+            <tbody>
+              <tr><td><code>board_fg_color</code></td><td>Root board surface.</td></tr>
+              <tr><td><code>toolbar_fg_color</code></td><td>Toolbar surface.</td></tr>
+              <tr><td><code>column_fg_color</code></td><td>Column and empty-board surfaces.</td></tr>
+              <tr><td><code>column_header_fg_color</code></td><td>Column header background.</td></tr>
+              <tr><td><code>column_border_color</code></td><td>Column outlines and secondary controls.</td></tr>
+              <tr><td><code>column_accent_colors</code></td><td>Cycled accent palette for column headers.</td></tr>
+              <tr><td><code>card_fg_color</code></td><td>Card surface.</td></tr>
+              <tr><td><code>card_hover_color</code></td><td>Card hover surface.</td></tr>
+              <tr><td><code>dragging_card_fg_color</code></td><td>Card surface during dragging.</td></tr>
+              <tr><td><code>card_border_color</code></td><td>Normal card outline.</td></tr>
+              <tr><td><code>selected_border_color</code></td><td>Selected card outline.</td></tr>
+              <tr><td><code>drop_indicator_color</code></td><td>Drag destination indicator.</td></tr>
+              <tr><td><code>text_color</code></td><td>Primary text.</td></tr>
+              <tr><td><code>muted_text_color</code></td><td>Descriptions, summaries, and placeholders.</td></tr>
+              <tr><td><code>accent_color</code></td><td>Primary actions and accents.</td></tr>
+              <tr><td><code>control_hover_color</code></td><td>Menu-like and secondary control hover state.</td></tr>
+              <tr><td><code>count_fg_color</code></td><td>Column count badge surface.</td></tr>
+              <tr><td><code>empty_icon_fg_color</code></td><td>Empty-board icon surface.</td></tr>
+              <tr><td><code>editor_fg_color</code></td><td>Inspector drawer surface.</td></tr>
+              <tr><td><code>editor_section_fg_color</code></td><td>Grouped editor section surface.</td></tr>
+              <tr><td><code>divider_color</code></td><td>Editor separators.</td></tr>
+              <tr><td><code>input_border_color</code></td><td>Search and editor input borders.</td></tr>
+              <tr><td><code>scrollbar_color</code></td><td>Scrollbar thumb.</td></tr>
+              <tr><td><code>scrollbar_hover_color</code></td><td>Scrollbar hover state.</td></tr>
+              <tr><td><code>danger_color</code></td><td>Destructive actions and validation emphasis.</td></tr>
+              <tr><td><code>pill_text_color</code></td><td>Priority and tag pill text.</td></tr>
+              <tr><td><code>priority_low_color</code></td><td>Low-priority pill.</td></tr>
+              <tr><td><code>priority_medium_color</code></td><td>Medium-priority pill.</td></tr>
+              <tr><td><code>priority_high_color</code></td><td>High-priority pill.</td></tr>
+              <tr><td><code>priority_critical_color</code></td><td>Critical-priority pill.</td></tr>
+              <tr><td><code>tag_pill_colors</code></td><td>Cycled palette for tag pills.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout c-warn">
+          <div class="callout-t">Strict token names</div>
+          <p>Unknown theme keys raise <code>ValueError</code>. Configure the complete appearance before constructing the board; changing a theme mapping later does not restyle widgets that already exist.</p>
+        </div>
+      </section>
+
+      <section id="api-constructor">
+        <h2>API: CTkKanbanBoard Constructor</h2>
+        <hr class="section-hr">
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>CTkKanbanBoard(
+    master,
+    columns=(),
+    cards=(),
+    *,
+    on_change=None,
+    on_card_open=None,
+    theme=None,
+    show_toolbar=True,
+    enable_drag=True,
+    column_width=320,
+    column_height=500,
+    confirm_delete=True,
+    **kwargs,
+)</code></pre>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Parameter</th><th>Type / default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>master</code></td><td>CustomTkinter/Tk parent</td><td>Parent widget.</td></tr>
+              <tr><td><code>columns</code></td><td><code>Iterable</code>, <code>()</code></td><td>Initial column mappings or <code>Column</code> instances in display order.</td></tr>
+              <tr><td><code>cards</code></td><td><code>Iterable</code>, <code>()</code></td><td>Initial card mappings or <code>Card</code> instances in manual order.</td></tr>
+              <tr><td><code>on_change</code></td><td><code>Callable | None</code></td><td>Receives one event dictionary after each changed mutation.</td></tr>
+              <tr><td><code>on_card_open</code></td><td><code>Callable | None</code></td><td>Replaces the built-in existing-card editor and receives a detached card record.</td></tr>
+              <tr><td><code>theme</code></td><td><code>Mapping | None</code></td><td>Partial overrides for known board theme tokens.</td></tr>
+              <tr><td><code>show_toolbar</code></td><td><code>bool = True</code></td><td>Shows title, card summary, search, add-column, and add-card controls.</td></tr>
+              <tr><td><code>enable_drag</code></td><td><code>bool = True</code></td><td>Enables handle-only card dragging.</td></tr>
+              <tr><td><code>column_width</code></td><td><code>int = 320</code></td><td>Column width in widget units. Minimum 220; booleans are rejected.</td></tr>
+              <tr><td><code>column_height</code></td><td><code>int = 500</code></td><td>Column height in widget units. Minimum 240; booleans are rejected.</td></tr>
+              <tr><td><code>confirm_delete</code></td><td><code>bool = True</code></td><td>Shows confirmation dialogs for delete actions initiated through built-in menus.</td></tr>
+              <tr><td><code>**kwargs</code></td><td>CTkFrame options</td><td>Forwarded to <code>customtkinter.CTkFrame</code>, including size, corner radius, and root frame colors.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="api-board-methods">
+        <h2>API: Board Methods</h2>
+        <hr class="section-hr">
+        <h3>Data and rendering</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Method / property</th><th>Returns</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>get_data()</code></td><td><code>BoardSnapshot</code></td><td>Detached complete board state.</td></tr>
+              <tr><td><code>set_data(data)</code></td><td><code>None</code></td><td>Atomically validate and replace the board without a change event.</td></tr>
+              <tr><td><code>refresh(preserve_scroll=True)</code></td><td><code>None</code></td><td>Rebuild structural widgets, optionally retaining horizontal and per-column scroll positions.</td></tr>
+              <tr><td><code>get_card(card_id)</code></td><td><code>CardRecord | None</code></td><td>Detached card, or <code>None</code> when the ID is unknown.</td></tr>
+              <tr><td><code>get_cards(column_id=None)</code></td><td><code>list[CardRecord]</code></td><td>All cards in board order, or cards in one existing column.</td></tr>
+              <tr><td><code>get_columns()</code></td><td><code>list[ColumnRecord]</code></td><td>Detached columns in manual order.</td></tr>
+              <tr><td><code>get_selected_card()</code></td><td><code>CardRecord | None</code></td><td>Current selection snapshot.</td></tr>
+              <tr><td><code>search(query)</code></td><td><code>None</code></td><td>Apply or clear the view-only card search.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Card mutations</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>add_card(card, *, index=None)</code></td><td><code>CardRecord</code></td><td>Add at a zero-based position in its column, or append.</td></tr>
+              <tr><td><code>update_card(card_id, updates)</code></td><td><code>CardRecord</code></td><td>Update editable fields; <code>column</code> or <code>column_id</code> can also move it.</td></tr>
+              <tr><td><code>move_card(card_id, column_id, index=None)</code></td><td><code>CardRecord</code></td><td>Move to a destination and insertion position, or append.</td></tr>
+              <tr><td><code>delete_card(card_id)</code></td><td><code>CardRecord</code></td><td>Delete and return the removed record.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Column mutations</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>add_column(column, *, index=None)</code></td><td><code>ColumnRecord</code></td><td>Add at a zero-based position, or append.</td></tr>
+              <tr><td><code>update_column(column_id, updates)</code></td><td><code>ColumnRecord</code></td><td>Rename with an update mapping containing <code>title</code>.</td></tr>
+              <tr><td><code>move_column(column_id, index)</code></td><td><code>ColumnRecord</code></td><td>Move to a zero-based manual position.</td></tr>
+              <tr><td><code>delete_column(column_id, *, delete_cards=False)</code></td><td><code>ColumnRecord</code></td><td>Delete an empty column, or explicitly cascade its cards.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Editors and loading</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Method / property</th><th>Returns</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>open_add_card_editor(column_id=None)</code></td><td><code>None</code></td><td>Open the add drawer. With no columns, first opens the add-column dialog.</td></tr>
+              <tr><td><code>open_edit_card_editor(card_id)</code></td><td><code>None</code></td><td>Open the built-in editor or call <code>on_card_open</code>. Unknown IDs are ignored.</td></tr>
+              <tr><td><code>open_add_column_dialog()</code></td><td><code>None</code></td><td>Prompt for a title and add a UUID-backed column.</td></tr>
+              <tr><td><code>is_loading</code></td><td><code>bool</code></td><td>Read-only property for pending asynchronous work.</td></tr>
+              <tr><td><code>load_error</code></td><td><code>Exception | None</code></td><td>Most recent async load exception; reset when a new load starts.</td></tr>
+              <tr><td><code>set_loading(loading)</code></td><td><code>None</code></td><td>Set loading presentation. Requires an actual boolean.</td></tr>
+              <tr><td><code>load_async(fetch_snapshot, *, on_success=None, on_error=None, clear_on_error=False)</code></td><td><code>threading.Thread</code></td><td>Fetch and validate off-thread, then deliver through Tk.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="api-model">
+        <h2>API: BoardModel</h2>
+        <hr class="section-hr">
+        <p><code>BoardModel</code> contains the same strict data and ordering behavior without importing or creating a Tk window. It is useful in repositories, tests, command-line tools, and service layers.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import BoardModel
+
+model = BoardModel(columns=columns, cards=cards)
+model.add_column({"id": "blocked", "title": "Blocked"})
+model.move_card(card_id=1, column_id="blocked", index=0)
+
+validated_snapshot = model.snapshot()</code></pre>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Method</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>BoardModel(columns=(), cards=())</code></td><td>Construct and validate initial state.</td></tr>
+              <tr><td><code>snapshot()</code></td><td>Return detached serializable state.</td></tr>
+              <tr><td><code>load(snapshot)</code></td><td>Atomically replace from a complete snapshot.</td></tr>
+              <tr><td><code>load(columns=..., cards=...)</code></td><td>Atomically replace from explicit iterables.</td></tr>
+              <tr><td><code>get_card(id)</code></td><td>Return a record; unlike the widget helper, an unknown ID raises <code>BoardModelError</code>.</td></tr>
+              <tr><td><code>get_cards(column_id=None)</code></td><td>Return ordered card records.</td></tr>
+              <tr><td><code>get_columns()</code></td><td>Return ordered column records.</td></tr>
+              <tr><td><code>add_card()</code>, <code>update_card()</code>, <code>move_card()</code>, <code>delete_card()</code></td><td>Mutate cards with validation and manual ordering.</td></tr>
+              <tr><td><code>reorder_card(card_id, index)</code></td><td>Move within the card's current column.</td></tr>
+              <tr><td><code>add_column()</code>, <code>update_column()</code>, <code>move_column()</code>, <code>delete_column()</code></td><td>Mutate columns. Model <code>update_column()</code> also accepts a title string directly.</td></tr>
+              <tr><td><code>clear()</code></td><td>Remove every column and card.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Invalid records, unknown IDs, duplicate IDs, out-of-range indices, protected nonempty column deletion, and unsupported updates raise <code>BoardModelError</code>, a subclass of <code>ValueError</code>.</p>
+      </section>
+
+      <section id="api-records">
+        <h2>API: Records &amp; Types</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Name</th><th>Kind</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>Column</code></td><td>Frozen dataclass</td><td>Typed input with <code>id</code> and <code>title</code>.</td></tr>
+              <tr><td><code>Card</code></td><td>Frozen dataclass</td><td>Typed input; stores tags as <code>tuple[str, ...]</code>.</td></tr>
+              <tr><td><code>ColumnRecord</code></td><td><code>TypedDict</code></td><td>Serializable column output shape.</td></tr>
+              <tr><td><code>CardRecord</code></td><td><code>TypedDict</code></td><td>Serializable card output shape with tag lists.</td></tr>
+              <tr><td><code>BoardSnapshot</code></td><td><code>TypedDict</code></td><td>Complete <code>columns</code> and <code>cards</code> output shape.</td></tr>
+              <tr><td><code>BoardModelError</code></td><td>Exception</td><td>Validation and model-operation failure.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Definition helpers</h3>
+        <p><code>from_definition()</code> exposes model normalization without building an entire board:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>column = Column.from_definition(
+    {"id": "todo", "title": "  To do  "}
+)
+
+card = Card.from_definition(
+    {
+        "id": 7,
+        "column_id": "todo",
+        "title": "  Normalize me  ",
+        "tags": [" docs ", "release"],
+    }
+)
+
+assert column.title == "To do"
+assert card.column == "todo"
+assert card.tags == ("docs", "release")</code></pre>
+        </div>
+      </section>
+
+      <section id="api-adapters">
+        <h2>API: Data Adapters</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>normalize_row(row)</code></td><td><code>dict[str, Any]</code></td><td>Convert a mapping, SQLAlchemy-style <code>_mapping</code> row, or keys/index row into a plain dictionary.</td></tr>
+              <tr><td><code>normalize_rows(rows)</code></td><td><code>list[dict[str, Any]]</code></td><td>Normalize an iterable of supported row objects.</td></tr>
+              <tr><td><code>rows_from_cursor(cursor)</code></td><td><code>list[dict[str, Any]]</code></td><td>Consume a DB-API cursor and combine tuples with names from <code>cursor.description</code>.</td></tr>
+              <tr><td><code>snapshot_from_rows(columns, cards)</code></td><td><code>BoardSnapshot</code></td><td>Normalize and validate both row collections.</td></tr>
+              <tr><td><code>snapshot_from_cursors(columns_cursor, cards_cursor)</code></td><td><code>BoardSnapshot</code></td><td>Consume two executed cursors and validate the complete board.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout c-info">
+          <div class="callout-t">Cursor behavior</div>
+          <p><code>rows_from_cursor()</code> calls <code>fetchall()</code>, so it consumes all remaining result rows. It raises <code>ValueError</code> when there is no result metadata or when output column names are duplicated.</p>
+        </div>
+      </section>
+
+      <section id="api-theme">
+        <h2>API: Theme Helpers</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Name</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>DEFAULT_THEME</code></td><td>A public dictionary snapshot of all discoverable token names and the CustomTkinter-derived defaults at import time.</td></tr>
+              <tr><td><code>merge_theme(overrides=None)</code></td><td>Build a fresh default mapping from the currently active CustomTkinter color theme, validate override names, and return the merged dictionary.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import DEFAULT_THEME, merge_theme
+
+print(sorted(DEFAULT_THEME))
+
+theme = merge_theme({
+    "accent_color": ("#2563EB", "#60A5FA"),
+    "danger_color": ("#B42318", "#F97066"),
+})</code></pre>
+        </div>
+      </section>
+
+      <section id="migration">
+        <h2>Migrating from 1.x</h2>
+        <hr class="section-hr">
+        <p>Version 2 is intentionally incompatible with the broad 1.x framework. Treat the migration as a move to a focused widget with application-owned integration.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>1.x concept</th><th>2.0 replacement</th></tr></thead>
+            <tbody>
+              <tr><td><code>from CTkKanBan import ...</code></td><td><code>from ctk_kanban import ...</code></td></tr>
+              <tr><td>Dynamic field definitions</td><td>The fixed card schema: title, description, priority, tags, and column.</td></tr>
+              <tr><td>Inline editing and generated forms</td><td>The explicit-save embedded editor, or <code>on_card_open</code> for your own editor.</td></tr>
+              <tr><td>Mutation-specific callbacks</td><td>One <code>on_change(event)</code> callback.</td></tr>
+              <tr><td>Built-in persistence/data sources</td><td>Your repository layer plus snapshots, row adapters, and <code>load_async()</code>.</td></tr>
+              <tr><td>Advanced filtering and sorting</td><td>Simple local search and manual order; transform data in your application when needed.</td></tr>
+              <tr><td>Many <code>enable_*</code> / <code>show_*</code> flags</td><td>A small constructor with toolbar, drag, dimensions, deletion confirmation, callbacks, and theme.</td></tr>
+              <tr><td>Extra custom record keys</td><td>Store them outside the board or map them into the fixed schema before loading.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code># Convert an application record before loading it.
+card = {
+    "id": row["task_id"],
+    "column": row["status_id"],
+    "title": row["summary"],
+    "description": row.get("notes", ""),
+    "priority": row.get("priority", ""),
+    "tags": row.get("labels", []),
+}</code></pre>
+        </div>
+      </section>
+
+      <section id="faq">
+        <h2>FAQ &amp; Troubleshooting</h2>
+        <hr class="section-hr">
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why does <code>import CTkKanBan</code> fail?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p><code>CTkKanBan</code> is the distribution name on PyPI. Version 2's module name is lowercase: <code>from ctk_kanban import CTkKanbanBoard</code>.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Can CTkKanban connect directly to PostgreSQL?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>No database driver is built in. Query with Psycopg or your preferred library, convert rows with <code>snapshot_from_rows()</code> or <code>rows_from_cursor()</code>, then call <code>set_data()</code> or return the snapshot from <code>load_async()</code>.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why does the window freeze while saving?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Your <code>on_change</code> callback runs on Tk's UI thread. Move slow SQL, network, retry, and conflict work to an application-owned worker or queue. Only deliver widget changes back on Tk's thread.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why is my priority rejected?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Priority is case-sensitive and must be exactly empty, <code>Low</code>, <code>Medium</code>, <code>High</code>, or <code>Critical</code>. Map database or API values before building the snapshot.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why can I not delete a column?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>The model protects nonempty columns by default. Move or delete their cards first, or explicitly call <code>delete_column(column_id, delete_cards=True)</code>. The built-in confirmed column menu uses the explicit cascade.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why can I not reorder search results?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Search hides nonmatching cards, so the visible position is not a reliable full-list index. Clear search before dragging or using Move up and Move down. Direct API movement remains available if your application supplies an unambiguous index.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Can cards contain custom fields?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Not inside the board record. Version 2 deliberately rejects unknown fields. Keep extended data in your application keyed by card ID, or map it into title, description, priority, and tags for display.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>How do I refresh from storage without firing a save?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Call <code>board.set_data(snapshot)</code>. Replacement validates and redraws but intentionally does not emit <code>on_change</code>.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why does my DB-API query report duplicate columns?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p><code>rows_from_cursor()</code> requires unique result names because duplicate keys cannot be represented safely in a dictionary. Alias joined columns in SQL, for example <code>cards.column_id AS column</code>.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Why are my tags rejected?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Tags must be an iterable of strings—not one comma-separated string. Each tag is trimmed, must remain nonblank, and cannot contain a comma. PostgreSQL <code>text[]</code> values already arrive in a suitable list form with Psycopg.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Can I update colors after the board is created?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Set CustomTkinter appearance and theme before constructing the board, and pass per-board overrides through <code>theme</code>. Existing child widgets are not rebuilt automatically when the original mapping changes; recreate or deliberately rebuild the board for a completely new palette.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Is <code>load_async()</code safe for Tkinter?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Yes, when the fetch callback only performs non-Tk work. Fetching and validation happen on a worker; snapshot application and callbacks happen through the board's Tk event loop. Do not access widgets inside <code>fetch_snapshot</code>.</p></div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q" type="button" aria-expanded="false"><span>Where should I report a bug?</span><span class="faq-icon">+</span></button>
+          <div class="faq-a"><p>Open an issue in the <a href="https://github.com/Harry-g25/CTkKanBan/issues" target="_blank" rel="noopener noreferrer">CTkKanban GitHub repository</a> with Python, CustomTkinter, and CTkKanban versions plus a minimal reproduction.</p></div>
+        </div>
+      </section>
+
+      <footer class="page-footer">
+        CTkKanban 2.0.0 documentation · MIT License ·
+        <a href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">Source</a>
+      </footer>
+    </main>
+  </div>
+
+  <a href="#hero" class="btt" id="btt" aria-label="Back to top">&#8593; Top</a>
+
+  <script>
+    (function () {
+      "use strict";
+
+      function fallbackCopy(text) {
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        var copied = document.execCommand("copy");
+        area.remove();
+        return Promise.resolve(copied);
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          return navigator.clipboard.writeText(text).then(function () { return true; });
+        }
+        return fallbackCopy(text);
+      }
+
+      function showCopied(button) {
+        var original = button.textContent;
+        button.textContent = "Copied!";
+        button.classList.add("ok");
+        window.setTimeout(function () {
+          button.textContent = original;
+          button.classList.remove("ok");
+        }, 2200);
+      }
+
+      document.querySelectorAll(".copy-btn").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var block = button.closest(".cb");
+          var code = block ? block.querySelector("pre code") : null;
+          if (!code) return;
+          copyText(code.innerText).then(function (copied) {
+            if (copied) showCopied(button);
+          }).catch(function () {});
+        });
+      });
+
+      var installCopy = document.getElementById("install-copy");
+      var installCommand = document.getElementById("install-cmd");
+      if (installCopy && installCommand) {
+        installCopy.addEventListener("click", function () {
+          copyText(installCommand.textContent || "").then(function (copied) {
+            if (copied) showCopied(installCopy);
+          }).catch(function () {});
+        });
+      }
+
+      var sidebar = document.getElementById("sidebar");
+      var hamburger = document.getElementById("hamburger");
+      var overlay = document.getElementById("overlay");
+
+      function closeSidebar() {
+        sidebar.classList.remove("open");
+        overlay.classList.remove("vis");
+        hamburger.setAttribute("aria-expanded", "false");
+      }
+
+      hamburger.addEventListener("click", function () {
+        var isOpen = sidebar.classList.toggle("open");
+        overlay.classList.toggle("vis", isOpen);
+        hamburger.setAttribute("aria-expanded", String(isOpen));
+      });
+      overlay.addEventListener("click", closeSidebar);
+      sidebar.querySelectorAll(".nav-item").forEach(function (link) {
+        link.addEventListener("click", closeSidebar);
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeSidebar();
+      });
+
+      document.querySelectorAll(".faq-q").forEach(function (button) {
+        button.addEventListener("click", function () {
+          var item = button.closest(".faq-item");
+          var isOpen = item.classList.toggle("open");
+          button.setAttribute("aria-expanded", String(isOpen));
+        });
+      });
+
+      var navLinks = Array.from(document.querySelectorAll(".nav-item"));
+      var sections = Array.from(document.querySelectorAll("section[id]"));
+      var currentActive = null;
+
+      if ("IntersectionObserver" in window) {
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            var id = "#" + entry.target.id;
+            if (id === currentActive) return;
+            currentActive = id;
+            navLinks.forEach(function (link) {
+              link.classList.toggle("active", link.getAttribute("href") === id);
+            });
+            var active = navLinks.find(function (link) {
+              return link.getAttribute("href") === id;
+            });
+            if (active) active.scrollIntoView({ block: "nearest" });
+          });
+        }, {
+          rootMargin: "-74px 0px -65% 0px",
+          threshold: 0
+        });
+        sections.forEach(function (section) { observer.observe(section); });
+      }
+
+      var backToTop = document.getElementById("btt");
+      function onScroll() {
+        backToTop.classList.toggle("vis", window.scrollY > 400);
+      }
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    }());
+  </script>
+</body>
+</html>

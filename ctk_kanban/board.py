@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import queue
+import threading
 import tkinter as tk
 from dataclasses import dataclass
 from functools import partial
 from math import hypot
 from tkinter import messagebox
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, cast
 from uuid import uuid4
 
 import customtkinter as ctk
@@ -17,11 +19,14 @@ from ._scrolling import ManagedScrollableFrame
 from .card import CTkKanbanCard
 from .column import CTkKanbanColumn
 from .editor import CardEditor
-from .model import BoardModel, BoardModelError
+from .model import BoardModel, BoardModelError, BoardSnapshot, CardRecord, ColumnRecord
 from .themes import merge_theme
 
 ChangeCallback = Callable[[dict[str, Any]], Any]
 CardOpenCallback = Callable[[dict[str, Any]], Any]
+BoardFetchCallback = Callable[[], Mapping[str, Any]]
+BoardLoadSuccessCallback = Callable[[BoardSnapshot], Any]
+BoardLoadErrorCallback = Callable[[Exception], Any]
 
 
 @dataclass(slots=True)
@@ -53,7 +58,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         theme: Mapping[str, Any] | None = None,
         show_toolbar: bool = True,
         enable_drag: bool = True,
-        column_width: int = 288,
+        column_width: int = 320,
         column_height: int = 500,
         confirm_delete: bool = True,
         **kwargs: Any,
@@ -85,6 +90,13 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._empty_widget: ctk.CTkFrame | None = None
         self._active_menu: tk.Menu | None = None
         self._editor: CardEditor | None = None
+        self._rendered_column_slots = 0
+        self._editor_reserved = False
+        self._loading = False
+        self.load_error: Exception | None = None
+        self._load_generation = 0
+        self._pending_load_after: str | None = None
+        self._destroyed = False
 
         self.grid_rowconfigure(1 if self.show_toolbar else 0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -99,39 +111,68 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def _build_toolbar(self) -> None:
         self.toolbar = ctk.CTkFrame(
             self,
-            height=48,
+            height=66,
+            corner_radius=12,
             fg_color=self.theme["toolbar_fg_color"],
         )
-        self.toolbar.grid(row=0, column=0, padx=12, pady=(12, 0), sticky="ew")
-        self.toolbar.grid_columnconfigure(0, weight=1)
+        self.toolbar.grid(row=0, column=0, padx=18, pady=(16, 0), sticky="ew")
+        self.toolbar.grid_columnconfigure(4, weight=1)
+
+        heading = ctk.CTkFrame(self.toolbar, fg_color="transparent")
+        heading.grid(row=0, column=0, padx=(16, 18), pady=10, sticky="w")
+        self.board_title_label = ctk.CTkLabel(
+            heading,
+            text="Board",
+            anchor="w",
+            font=ctk.CTkFont(size=17, weight="bold"),
+            text_color=self.theme["text_color"],
+        )
+        self.board_title_label.pack(anchor="w")
+
+        self.summary_label = ctk.CTkLabel(
+            heading,
+            text="",
+            anchor="w",
+            height=15,
+            font=ctk.CTkFont(size=10),
+            text_color=self.theme["muted_text_color"],
+        )
+        self.summary_label.pack(anchor="w")
 
         self.search_entry = ctk.CTkEntry(
             self.toolbar,
-            placeholder_text="Search cards",
-            width=260,
+            placeholder_text="Search cards\u2026",
+            width=220,
+            height=36,
+            corner_radius=9,
+            border_color=self.theme["input_border_color"],
         )
-        self.search_entry.grid(row=0, column=0, padx=10, pady=9, sticky="w")
+        self.search_entry.grid(row=0, column=1, padx=(0, 8), pady=12, sticky="w")
         self.search_entry.bind("<KeyRelease>", self._on_search_changed, add="+")
 
-        self.summary_label = ctk.CTkLabel(
-            self.toolbar,
-            text="",
-            text_color=self.theme["muted_text_color"],
-        )
-        self.summary_label.grid(row=0, column=1, padx=8)
-
-        ctk.CTkButton(
+        self.add_column_button = ctk.CTkButton(
             self.toolbar,
             text="Add column",
             width=94,
+            height=36,
+            corner_radius=9,
+            fg_color="transparent",
+            border_width=1,
+            border_color=self.theme["column_border_color"],
+            hover_color=self.theme["control_hover_color"],
+            text_color=self.theme["text_color"],
             command=self.open_add_column_dialog,
-        ).grid(row=0, column=2, padx=4, pady=8)
-        ctk.CTkButton(
+        )
+        self.add_column_button.grid(row=0, column=2, padx=4, pady=12)
+        self.add_card_button = ctk.CTkButton(
             self.toolbar,
-            text="Add card",
-            width=84,
+            text="+  Add card",
+            width=96,
+            height=36,
+            corner_radius=9,
             command=self.open_add_card_editor,
-        ).grid(row=0, column=3, padx=(4, 10), pady=8)
+        )
+        self.add_card_button.grid(row=0, column=3, padx=(4, 12), pady=12)
 
     def _build_board_area(self) -> None:
         row = 1 if self.show_toolbar else 0
@@ -142,7 +183,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
             scrollbar_button_color=self.theme["scrollbar_color"],
             scrollbar_button_hover_color=self.theme["scrollbar_hover_color"],
         )
-        self.board_area.grid(row=row, column=0, padx=12, pady=12, sticky="nsew")
+        self.board_area.grid(row=row, column=0, padx=18, pady=(12, 16), sticky="nsew")
+        self.board_area.grid_columnconfigure(0, weight=1)
+        self.board_area.grid_rowconfigure(0, weight=1)
+        self.column_track = ctk.CTkFrame(self.board_area, fg_color="transparent")
+        self.column_track.grid(row=0, column=0, sticky="ns")
+        self.column_track.grid_rowconfigure(0, weight=1, minsize=self.column_height)
         if hasattr(self.board_area, "_scrollbar"):
             self.board_area._scrollbar.configure(height=8)
 
@@ -165,6 +211,9 @@ class CTkKanbanBoard(ctk.CTkFrame):
         if self._empty_widget is not None:
             self._empty_widget.destroy()
             self._empty_widget = None
+        for index in range(self._rendered_column_slots):
+            self.column_track.grid_columnconfigure(index, minsize=0, weight=0)
+        self._rendered_column_slots = 0
 
         columns = self.model.get_columns()
         if not columns:
@@ -174,16 +223,20 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return
 
         for index, column_data in enumerate(columns):
+            accent_palette = self.theme["column_accent_colors"]
             column = CTkKanbanColumn(
-                self.board_area,
+                self.column_track,
                 column_data,
                 self.theme,
                 width=self.column_width,
                 height=self.column_height,
+                accent_color=accent_palette[index % len(accent_palette)],
                 on_add=self.open_add_card_editor,
                 on_menu=self._show_column_menu,
             )
-            column.grid(row=0, column=index, padx=6, pady=2, sticky="n")
+            self.column_track.grid_columnconfigure(index, minsize=self.column_width)
+            column.grid(row=0, column=index, padx=7, pady=2, sticky="nsew")
+            self._rendered_column_slots += 1
             self._column_widgets[column_data["id"]] = column
 
             cards = [
@@ -242,6 +295,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
     ) -> None:
         horizontal, vertical = positions
         self.update_idletasks()
+        self.board_area.fit_content_to_canvas()
         try:
             self.board_area._parent_canvas.xview_moveto(horizontal)
         except (AttributeError, tk.TclError):
@@ -313,24 +367,51 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._restore_scroll_positions(scroll_positions)
 
     def _render_empty_board(self) -> None:
-        self._empty_widget = ctk.CTkFrame(self.board_area, fg_color="transparent")
-        self._empty_widget.grid(row=0, column=0, padx=40, pady=80)
+        self._empty_widget = ctk.CTkFrame(
+            self.column_track,
+            width=340,
+            height=210,
+            corner_radius=12,
+            fg_color=self.theme["column_fg_color"],
+            border_width=1,
+            border_color=self.theme["column_border_color"],
+        )
+        self._empty_widget.grid(row=0, column=0, padx=40, pady=60)
+        self._empty_widget.grid_propagate(False)
+        ctk.CTkLabel(
+            self._empty_widget,
+            text="+",
+            width=48,
+            height=48,
+            corner_radius=24,
+            fg_color=self.theme["empty_icon_fg_color"],
+            text_color=self.theme["accent_color"],
+            font=ctk.CTkFont(size=25, weight="bold"),
+        ).pack(pady=(30, 8))
         ctk.CTkLabel(
             self._empty_widget,
             text="No columns yet",
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(size=18, weight="bold"),
-        ).pack(pady=(0, 10))
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack()
+        ctk.CTkLabel(
+            self._empty_widget,
+            text="Create a column to start planning",
+            text_color=self.theme["muted_text_color"],
+            font=ctk.CTkFont(size=11),
+        ).pack(pady=(2, 12))
         ctk.CTkButton(
             self._empty_widget,
             text="Create first column",
+            height=32,
+            corner_radius=8,
             command=self.open_add_column_dialog,
         ).pack()
 
     # ------------------------------------------------------------------
     # Public data API
     # ------------------------------------------------------------------
-    def get_data(self) -> dict[str, list[dict[str, Any]]]:
+    def get_data(self) -> BoardSnapshot:
         return self.model.snapshot()
 
     def set_data(self, data: Mapping[str, Any]) -> None:
@@ -342,26 +423,153 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 self._selected_card_id = None
         self.refresh(preserve_scroll=False)
 
-    def get_card(self, card_id: Any) -> dict[str, Any] | None:
+    @property
+    def is_loading(self) -> bool:
+        """Whether an asynchronous board load is currently pending."""
+
+        return self._loading
+
+    def set_loading(self, loading: bool) -> None:
+        """Set the board's loading presentation without changing its data."""
+
+        if not isinstance(loading, bool):
+            raise TypeError("loading must be a bool")
+        if self._loading == loading:
+            return
+        self._loading = loading
+        if not self.show_toolbar:
+            return
+        state = "disabled" if loading else "normal"
+        self.search_entry.configure(state=state)
+        self.add_column_button.configure(state=state)
+        self.add_card_button.configure(state=state)
+        if loading:
+            self.summary_label.configure(text="Loading\u2026")
+        else:
+            self._update_summary()
+
+    def load_async(
+        self,
+        fetch_snapshot: BoardFetchCallback,
+        *,
+        on_success: BoardLoadSuccessCallback | None = None,
+        on_error: BoardLoadErrorCallback | None = None,
+        clear_on_error: bool = False,
+    ) -> threading.Thread:
+        """Load and validate a snapshot off-thread, then apply it on Tk's thread."""
+
+        if self._destroyed:
+            raise RuntimeError("Cannot start an async load after the board is destroyed.")
+        if not callable(fetch_snapshot):
+            raise TypeError("fetch_snapshot must be callable")
+        for callback_name, callback in {
+            "on_success": on_success,
+            "on_error": on_error,
+        }.items():
+            if callback is not None and not callable(callback):
+                raise TypeError(f"{callback_name} must be callable")
+        if not isinstance(clear_on_error, bool):
+            raise TypeError("clear_on_error must be a bool")
+
+        if self._pending_load_after is not None:
+            try:
+                self.after_cancel(self._pending_load_after)
+            except tk.TclError:
+                pass
+            self._pending_load_after = None
+        self._load_generation += 1
+        generation = self._load_generation
+        self.load_error = None
+        self.set_loading(True)
+        result_queue: queue.Queue[tuple[str, BoardSnapshot | Exception]] = queue.Queue(
+            maxsize=1
+        )
+
+        def run() -> None:
+            try:
+                raw_snapshot = fetch_snapshot()
+                validated = BoardModel()
+                validated.load(raw_snapshot)
+                result_queue.put(("success", validated.snapshot()))
+            except Exception as error:
+                result_queue.put(("error", error))
+
+        thread = threading.Thread(target=run, daemon=True, name="ctk-kanban-loader")
+        thread.start()
+        self._pending_load_after = self.after(
+            10,
+            lambda: self._poll_async_result(
+                generation,
+                result_queue,
+                on_success,
+                on_error,
+                clear_on_error,
+            ),
+        )
+        return thread
+
+    def _poll_async_result(
+        self,
+        generation: int,
+        result_queue: queue.Queue[tuple[str, BoardSnapshot | Exception]],
+        on_success: BoardLoadSuccessCallback | None,
+        on_error: BoardLoadErrorCallback | None,
+        clear_on_error: bool,
+    ) -> None:
+        if self._destroyed or generation != self._load_generation:
+            return
+        try:
+            status, payload = result_queue.get_nowait()
+        except queue.Empty:
+            self._pending_load_after = self.after(
+                10,
+                lambda: self._poll_async_result(
+                    generation,
+                    result_queue,
+                    on_success,
+                    on_error,
+                    clear_on_error,
+                ),
+            )
+            return
+
+        self._pending_load_after = None
+        if status == "success":
+            snapshot = cast(BoardSnapshot, payload)
+            self.set_data(snapshot)
+            self.set_loading(False)
+            if on_success is not None:
+                on_success(self.get_data())
+            return
+
+        error = cast(Exception, payload)
+        self.load_error = error
+        if clear_on_error:
+            self.set_data({"columns": [], "cards": []})
+        self.set_loading(False)
+        if on_error is not None:
+            on_error(error)
+
+    def get_card(self, card_id: Any) -> CardRecord | None:
         try:
             return self.model.get_card(card_id)
         except BoardModelError:
             return None
 
-    def get_cards(self, column_id: Any | None = None) -> list[dict[str, Any]]:
+    def get_cards(self, column_id: Any | None = None) -> list[CardRecord]:
         return self.model.get_cards(column_id)
 
-    def get_columns(self) -> list[dict[str, Any]]:
+    def get_columns(self) -> list[ColumnRecord]:
         return self.model.get_columns()
 
-    def add_card(self, card: Mapping[str, Any], *, index: int | None = None) -> dict[str, Any]:
+    def add_card(self, card: Mapping[str, Any], *, index: int | None = None) -> CardRecord:
         before = self.model.snapshot()
         created = self.model.add_card(card, index=index)
         self._sync_card_columns([created["column"]])
         self._emit_change("card_added", before=before, card=created)
         return created
 
-    def update_card(self, card_id: Any, updates: Mapping[str, Any]) -> dict[str, Any]:
+    def update_card(self, card_id: Any, updates: Mapping[str, Any]) -> CardRecord:
         before = self.model.snapshot()
         previous = self.model.get_card(card_id)
         updated = self.model.update_card(card_id, updates)
@@ -374,7 +582,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._emit_change("card_updated", before=before, card=updated, previous=previous)
         return updated
 
-    def delete_card(self, card_id: Any) -> dict[str, Any]:
+    def delete_card(self, card_id: Any) -> CardRecord:
         before = self.model.snapshot()
         deleted = self.model.delete_card(card_id)
         if self._selected_card_id == card_id:
@@ -388,7 +596,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         card_id: Any,
         column_id: Any,
         index: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> CardRecord:
         before = self.model.snapshot()
         previous = self.model.get_card(card_id)
         moved = self.model.move_card(card_id, column_id, index=index)
@@ -402,14 +610,14 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._emit_change("card_moved", before=before, card=moved, previous=previous)
         return moved
 
-    def add_column(self, column: Mapping[str, Any], *, index: int | None = None) -> dict[str, Any]:
+    def add_column(self, column: Mapping[str, Any], *, index: int | None = None) -> ColumnRecord:
         before = self.model.snapshot()
         created = self.model.add_column(column, index=index)
         self.refresh()
         self._emit_change("column_added", before=before, column=created)
         return created
 
-    def update_column(self, column_id: Any, updates: Mapping[str, Any]) -> dict[str, Any]:
+    def update_column(self, column_id: Any, updates: Mapping[str, Any]) -> ColumnRecord:
         before = self.model.snapshot()
         previous = next((item for item in self.model.get_columns() if item["id"] == column_id), None)
         updated = self.model.update_column(column_id, updates)
@@ -419,7 +627,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._emit_change("column_updated", before=before, column=updated, previous=previous)
         return updated
 
-    def delete_column(self, column_id: Any, *, delete_cards: bool = False) -> dict[str, Any]:
+    def delete_column(self, column_id: Any, *, delete_cards: bool = False) -> ColumnRecord:
         before = self.model.snapshot()
         removed_card_ids = {
             card["id"] for card in before["cards"] if card["column"] == column_id
@@ -431,7 +639,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._emit_change("column_deleted", before=before, column=deleted)
         return deleted
 
-    def move_column(self, column_id: Any, index: int) -> dict[str, Any]:
+    def move_column(self, column_id: Any, index: int) -> ColumnRecord:
         before = self.model.snapshot()
         moved = self.model.move_column(column_id, index)
         if self.model.snapshot() == before:
@@ -509,18 +717,38 @@ class CTkKanbanBoard(ctk.CTkFrame):
             editor = self._editor
             self._editor = None
             editor.destroy()
-        self._editor = CardEditor(
-            self,
-            title=title,
-            initial=initial,
-            columns=list(columns),
-            on_save=on_save,
-            on_close=self._editor_closed,
-        )
+        self._set_editor_reserved(True)
+        try:
+            self._editor = CardEditor(
+                self,
+                title=title,
+                initial=initial,
+                columns=list(columns),
+                on_save=on_save,
+                on_close=self._editor_closed,
+                theme=self.theme,
+            )
+        except Exception:
+            self._set_editor_reserved(False)
+            raise
 
     def _editor_closed(self, editor: CardEditor) -> None:
         if self._editor is editor:
             self._editor = None
+            self._set_editor_reserved(False)
+
+    def _set_editor_reserved(self, reserved: bool) -> None:
+        """Keep the board and toolbar clear of the overlaid inspector."""
+
+        if self._editor_reserved == reserved:
+            return
+        self._editor_reserved = reserved
+        drawer_width = int(round(self._apply_widget_scaling(CardEditor.PANEL_WIDTH)))
+        right_padding = drawer_width + 18 if reserved else 18
+        self.board_area.grid_configure(padx=(18, right_padding))
+        if self.show_toolbar:
+            self.toolbar.grid_configure(padx=(18, right_padding))
+        self.after_idle(self.board_area.fit_content_to_canvas)
 
     def open_add_column_dialog(self) -> None:
         dialog = ctk.CTkInputDialog(text="Column name", title="Add column")
@@ -666,7 +894,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._selected_card_id = card_widget.card_id
         card_widget.set_selected(True)
 
-    def get_selected_card(self) -> dict[str, Any] | None:
+    def get_selected_card(self) -> CardRecord | None:
         if self._selected_card_id is None:
             return None
         return self.get_card(self._selected_card_id)
@@ -823,13 +1051,30 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def _update_summary(self) -> None:
         if not self.show_toolbar:
             return
+        if self._loading:
+            self.summary_label.configure(text="Loading\u2026")
+            return
         visible = len(self._card_widgets)
         total = len(self.model.get_cards())
-        self.summary_label.configure(text=f"{visible} of {total}" if self._search_query else f"{total} cards")
+        if self._search_query:
+            text = f"{visible} result{'s' if visible != 1 else ''} \u00b7 {total} total"
+        else:
+            text = f"{total} card{'s' if total != 1 else ''}"
+        self.summary_label.configure(text=text)
 
     def destroy(self) -> None:
         """Release menus, grabs, and scroll bindings before widget teardown."""
 
+        if self._destroyed:
+            return
+        self._destroyed = True
+        self._load_generation += 1
+        if self._pending_load_after is not None:
+            try:
+                self.after_cancel(self._pending_load_after)
+            except tk.TclError:
+                pass
+            self._pending_load_after = None
         if self._editor is not None:
             editor = self._editor
             self._editor = None

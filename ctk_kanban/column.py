@@ -12,7 +12,7 @@ from .card import CTkKanbanCard
 
 
 class CTkKanbanColumn(ctk.CTkFrame):
-    """A fixed-width column with a vertically scrollable card list."""
+    """A readable, full-height column with a vertically scrollable card list."""
 
     def __init__(
         self,
@@ -22,6 +22,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         *,
         width: int = 288,
         height: int = 600,
+        accent_color: Any | None = None,
         on_add: Callable[[Any], None] | None = None,
         on_menu: Callable[[Any, Any], None] | None = None,
     ) -> None:
@@ -32,20 +33,31 @@ class CTkKanbanColumn(ctk.CTkFrame):
             fg_color=theme["column_fg_color"],
             border_color=theme["column_border_color"],
             border_width=1,
+            corner_radius=12,
         )
         self.grid_propagate(False)
         self.column = dict(column)
         self.column_id = self.column["id"]
         self.theme = dict(theme)
+        self.accent_color = accent_color or self.theme["accent_color"]
+        self._on_add = on_add
         self.card_widgets: list[CTkKanbanCard] = []
         self._drop_active = False
         self._drop_index: int | None = None
 
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, padx=10, pady=(10, 6), sticky="ew")
+        self.accent_bar = ctk.CTkFrame(
+            self,
+            height=3,
+            corner_radius=2,
+            fg_color=self.accent_color,
+        )
+        self.accent_bar.grid(row=0, column=0, padx=12, pady=(10, 2), sticky="ew")
+
+        header = ctk.CTkFrame(self, fg_color=self.theme["column_header_fg_color"])
+        header.grid(row=1, column=0, padx=12, pady=(5, 8), sticky="ew")
         header.grid_columnconfigure(0, weight=1)
 
         self.title_label = ctk.CTkLabel(
@@ -53,35 +65,38 @@ class CTkKanbanColumn(ctk.CTkFrame):
             text=str(self.column["title"]),
             anchor="w",
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(size=15, weight="bold"),
         )
         self.title_label.grid(row=0, column=0, sticky="ew")
 
         self.count_label = ctk.CTkLabel(
             header,
             text="0",
-            width=28,
-            height=24,
-            corner_radius=8,
+            width=26,
+            height=22,
+            corner_radius=7,
             fg_color=self.theme["count_fg_color"],
             text_color=self.theme["muted_text_color"],
+            font=ctk.CTkFont(size=11, weight="bold"),
         )
-        self.count_label.grid(row=0, column=1, padx=(6, 4))
+        self.count_label.grid(row=0, column=1, padx=(8, 5))
 
         add_button = ctk.CTkButton(
             header,
             text="+",
             width=30,
-            height=28,
+            height=30,
+            corner_radius=8,
             command=lambda: on_add(self.column_id) if on_add is not None else None,
         )
         add_button.grid(row=0, column=2, padx=2)
 
         self.menu_button: ctk.CTkButton = ctk.CTkButton(
             header,
-            text="...",
+            text="\u22ef",
             width=30,
-            height=28,
+            height=30,
+            corner_radius=8,
             fg_color="transparent",
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
@@ -96,7 +111,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             scrollbar_button_color=self.theme["scrollbar_color"],
             scrollbar_button_hover_color=self.theme["scrollbar_hover_color"],
         )
-        self.body.grid(row=1, column=0, padx=7, pady=(0, 8), sticky="nsew")
+        self.body.grid(row=2, column=0, padx=7, pady=(0, 8), sticky="nsew")
         if hasattr(self.body, "_scrollbar"):
             self.body._scrollbar.configure(width=7)
 
@@ -107,22 +122,25 @@ class CTkKanbanColumn(ctk.CTkFrame):
             fg_color=self.theme["drop_indicator_color"],
         )
         self.empty_label: ctk.CTkLabel | None = None
+        self.empty_frame: ctk.CTkFrame | None = None
+
+    def _clear_empty(self) -> None:
+        if self.empty_frame is not None:
+            self.empty_frame.destroy()
+            self.empty_frame = None
+            self.empty_label = None
 
     def add_card(self, card: CTkKanbanCard) -> None:
-        if self.empty_label is not None:
-            self.empty_label.destroy()
-            self.empty_label = None
+        self._clear_empty()
         self.card_widgets.append(card)
-        card.pack(fill="x", padx=2, pady=5)
+        card.pack(fill="x", padx=3, pady=6)
         self.count_label.configure(text=str(len(self.card_widgets)))
 
     def set_cards(self, cards: list[CTkKanbanCard], *, empty_text: str = "No cards") -> None:
         """Arrange existing card widgets without rebuilding the scroll frame."""
 
         self.clear_drop_indicator()
-        if self.empty_label is not None:
-            self.empty_label.destroy()
-            self.empty_label = None
+        self._clear_empty()
         current: list[CTkKanbanCard] = []
         for card in self.card_widgets:
             try:
@@ -137,7 +155,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             if card in current:
                 card.pack_forget()
                 current.remove(card)
-            options = {"fill": "x", "padx": 2, "pady": 5}
+            options = {"fill": "x", "padx": 3, "pady": 6}
             if index < len(current):
                 card.pack(before=current[index], **options)
             else:
@@ -151,13 +169,50 @@ class CTkKanbanColumn(ctk.CTkFrame):
     def show_empty(self, text: str = "No cards") -> None:
         if self.card_widgets or self.empty_label is not None:
             return
+        self.empty_frame = ctk.CTkFrame(self.body, fg_color="transparent")
+        self.empty_frame.pack(fill="x", padx=12, pady=(54, 18))
+        is_search = "matching" in text.casefold()
+        ctk.CTkLabel(
+            self.empty_frame,
+            text="\u2315" if is_search else "+",
+            width=42,
+            height=42,
+            corner_radius=21,
+            fg_color=self.theme["empty_icon_fg_color"],
+            text_color=self.accent_color,
+            font=ctk.CTkFont(size=22, weight="bold"),
+        ).pack(pady=(0, 9))
         self.empty_label = ctk.CTkLabel(
-            self.body,
-            text=text,
-            height=80,
-            text_color=self.theme["muted_text_color"],
+            self.empty_frame,
+            text="No results" if is_search else "No cards yet",
+            text_color=self.theme["text_color"],
+            font=ctk.CTkFont(size=13, weight="bold"),
         )
-        self.empty_label.pack(fill="x", padx=8, pady=14)
+        self.empty_label.pack()
+        ctk.CTkLabel(
+            self.empty_frame,
+            text="Try another search" if is_search else "Add a card to get started",
+            text_color=self.theme["muted_text_color"],
+            font=ctk.CTkFont(size=11),
+        ).pack(pady=(2, 10))
+        if not is_search:
+            ctk.CTkButton(
+                self.empty_frame,
+                text="Add card",
+                width=92,
+                height=30,
+                corner_radius=8,
+                fg_color="transparent",
+                border_width=1,
+                border_color=self.theme["column_border_color"],
+                hover_color=self.theme["control_hover_color"],
+                text_color=self.theme["text_color"],
+                command=(
+                    lambda: self._on_add(self.column_id)
+                    if self._on_add is not None
+                    else None
+                ),
+            ).pack()
 
     def contains_point(self, root_x: int, root_y: int) -> bool:
         return (

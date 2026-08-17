@@ -10,6 +10,14 @@ confirm that matching distributions were published to PyPI.
 - Restored colored priority and tag pills on cards.
 - Made dragging and manual category changes update only the affected UI state.
 - Replaced the separate card editor window with an embedded right-side drawer.
+- Redesigned the responsive board, toolbar, columns, cards, empty states, and
+  card inspector, including a high-DPI-safe sticky action footer.
+- Added public DB-API and mapping-row adapters: `rows_from_cursor()`,
+  `snapshot_from_rows()`, and `snapshot_from_cursors()`.
+- Added background snapshot loading with Tk-thread delivery, stale-load
+  protection, loading state, success/error callbacks, and optional clearing.
+- Added public `BoardSnapshot`, `ColumnRecord`, and `CardRecord` typing shapes,
+  plus typed `Column.from_definition()` and `Card.from_definition()` helpers.
 
 ## 2.0.0 - 2026-08-06
 
