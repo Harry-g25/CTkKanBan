@@ -1,6 +1,24 @@
 # Changelog
 
+Historical note: the existing `v1.0.0` Git tag contains package version
+`0.3.0`. The older entries below describe repository milestones; they do not
+confirm that matching distributions were published to PyPI.
+
 ## Unreleased
+
+- Replaced the hard-coded blue board palette with the active CustomTkinter theme.
+- Restored colored priority and tag pills on cards.
+- Made dragging and manual category changes update only the affected UI state.
+- Replaced the separate card editor window with an embedded right-side drawer.
+
+## 2.0.0 - 2026-08-06
+
+- Rebuilt the project around a small Tk-free board model and one predictable rendering path.
+- Replaced inline editing with one explicit-save card editor.
+- Restricted card dragging to a visible handle and added dependable menu-based movement.
+- Replaced the callback and persistence framework with one `on_change` application boundary.
+- Removed advanced persistence, querying, generated forms, the legacy rendering framework, and configuration machinery.
+- Reduced the public package surface and made `ctk_kanban` the sole import name.
 
 ## 1.0.0 - 2026-07-24
 

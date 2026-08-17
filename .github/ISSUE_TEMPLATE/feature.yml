@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose a user-facing enhancement
+description: Propose a focused user-facing enhancement
 title: "[Feature]: "
 labels: [enhancement, triage]
 body:
@@ -7,7 +7,7 @@ body:
     id: problem
     attributes:
       label: User problem
-      description: Describe the workflow or usability problem, not only the proposed API.
+      description: Describe the interaction or workflow problem.
     validations:
       required: true
   - type: textarea
@@ -18,12 +18,6 @@ body:
     validations:
       required: true
   - type: textarea
-    id: database
-    attributes:
-      label: Database considerations
-      description: Explain expected query, transaction, conflict, paging, or migration behavior.
-  - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-

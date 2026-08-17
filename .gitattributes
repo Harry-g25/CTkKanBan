@@ -3,16 +3,10 @@
 .gitattributes text eol=lf
 .gitignore text eol=lf
 MANIFEST.in text eol=lf
-*.css text eol=lf
-*.html text eol=lf
 *.ini text eol=lf
-*.js text eol=lf
 *.json text eol=lf
 *.md text eol=lf
 *.py text eol=lf
 *.toml text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
-
-*.ico binary
-*.png binary

@@ -1,14 +1,5 @@
-include .gitattributes
-include CHANGELOG.md
-include CODE_OF_CONDUCT.md
-include CONTRIBUTING.md
-include LICENSE
-include README.md
-include SECURITY.md
-include example_all_features.py
-include example_sqlite.py
-include tests/gui_test_app.py
-include tox.ini
-recursive-include docs *
-recursive-include scripts *.py
-include ctk_kanban/py.typed
+include LICENSE README.md CHANGELOG.md
+include example.py
+recursive-include ctk_kanban *.py py.typed
+recursive-include tests *.py
+include docs/publishing.md

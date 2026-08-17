@@ -2,242 +2,61 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PYTHONUNBUFFERED: "1"
-
 jobs:
-  quality:
-    name: Quality gates
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install quality tools
-        run: python -m pip install -e ".[quality]"
-      - name: Lint Python
-        run: python -m ruff check ctk_kanban tests example_all_features.py example_sqlite.py scripts
-      - name: Type-check persistence API
-        run: python -m mypy
-      - name: Check documentation links
-        run: python scripts/check_docs.py
-      - name: Validate GitHub Actions syntax
-        run: python scripts/run_actionlint.py
-      - name: Lint workflow YAML
-        run: python -m yamllint .github
-      - name: Audit GitHub Actions security
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: zizmor --pedantic .github/workflows
-
   test:
-    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            python-version: "3.10"
-          - os: ubuntu-latest
-            python-version: "3.11"
-          - os: ubuntu-latest
-            python-version: "3.12"
-          - os: ubuntu-latest
-            python-version: "3.13"
-          - os: ubuntu-latest
-            python-version: "3.14"
-          - os: windows-latest
-            python-version: "3.10"
-          - os: windows-latest
-            python-version: "3.14"
-          - os: macos-latest
-            python-version: "3.10"
-          - os: macos-latest
-            python-version: "3.14"
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install Linux display server
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes xvfb
-      - name: Install package and tests
-        run: python -m pip install -e ".[test]"
-      - name: Run tests on Linux
-        if: runner.os == 'Linux'
-        run: xvfb-run -a python -m pytest -q
-      - name: Run tests on Windows or macOS
-        if: runner.os != 'Linux'
-        run: python -m pytest -q
-
-  customtkinter-compat:
-    name: CustomTkinter compatibility (${{ matrix.label }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: 5.2.2 minimum
-            constraint: customtkinter==5.2.2
-          - label: 6.x current major
-            constraint: customtkinter>=6,<7
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install Linux display server
-        run: sudo apt-get update && sudo apt-get install --yes xvfb
-      - name: Install package at compatibility boundary
-        env:
-          CUSTOMTKINTER_CONSTRAINT: ${{ matrix.constraint }}
-        run: |
-          python -c "import os, subprocess, sys; subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-e', '.[test]', os.environ['CUSTOMTKINTER_CONSTRAINT']])"
-          python -m pip check
-      - name: Run compatibility tests
-        run: xvfb-run -a python -m pytest -q
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install Linux display server
-        run: sudo apt-get update && sudo apt-get install --yes xvfb
-      - name: Install package and tests
-        run: python -m pip install -e ".[test]"
-      - name: Run tests with branch coverage
-        run: xvfb-run -a python -m pytest --cov=ctk_kanban --cov-report=term --cov-report=xml -q
-      - name: Upload coverage report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: coverage-report
-          path: coverage.xml
-          if-no-files-found: error
-          retention-days: 14
-
-  dependency-audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install runtime package and auditor
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install . pip-audit
-      - name: Audit installed dependencies
-        run: python -m pip_audit --local --skip-editable
-
-  package:
-    name: Build distributions
-    needs: [quality, test, customtkinter-compat, coverage, dependency-audit]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install release tools
-        run: python -m pip install ".[release]"
-      - name: Build wheel and source archive
-        run: python -m build
-      - name: Validate distributions
-        run: python scripts/validate_dist.py --dist dist
-      - name: Upload distributions
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: distributions
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14
-
-  installed-wheel:
-    name: Installed wheel (${{ matrix.os }})
-    needs: package
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.14"]
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
-          python-version: "3.14"
-      - name: Download distributions
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
-        with:
-          name: distributions
-          path: dist
-      - name: Install and validate the wheel artifact
+          python-version: ${{ matrix.python-version }}
+      - name: Install a virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes xvfb
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Test on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q
+      - name: Test on Windows or macOS
+        if: runner.os != 'Linux'
+        run: python -m pytest -q
+      - name: Quality and package checks
+        if: runner.os == 'Linux' && matrix.python-version == '3.14'
         run: |
-          python -m pip install --upgrade pip
-          python scripts/smoke_install.py --wheel-dir dist
+          python -m ruff check ctk_kanban tests example.py
+          python -m mypy ctk_kanban
+          python -m build
+          python -m twine check dist/*
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+      - name: Smoke-test the built wheel
+        if: runner.os == 'Linux' && matrix.python-version == '3.14'
+        working-directory: ${{ runner.temp }}
+        run: python -c "import ctk_kanban; print(ctk_kanban.__version__)"
+
+  minimum-customtkinter:
+    name: Ubuntu / CustomTkinter 5.2.2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.10"
+      - run: sudo apt-get update && sudo apt-get install --yes xvfb
+      - run: python -m pip install ".[test]" "customtkinter==5.2.2"
+      - run: xvfb-run -a python -m pytest -q

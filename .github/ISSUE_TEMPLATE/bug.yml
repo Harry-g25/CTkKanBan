@@ -3,33 +3,19 @@ description: Report reproducible incorrect behavior
 title: "[Bug]: "
 labels: [bug, triage]
 body:
-  - type: markdown
-    attributes:
-      value: Thanks for taking the time to report a problem.
   - type: textarea
     id: description
     attributes:
       label: What happened?
-      description: Include the expected behavior and the actual behavior.
+      description: Include the expected and actual behavior.
     validations:
       required: true
   - type: textarea
     id: reproduction
     attributes:
       label: Minimal reproduction
-      description: Provide the smallest runnable example and sample board data that reproduces the issue.
+      description: Provide the smallest runnable example and sample board data.
       render: python
-    validations:
-      required: true
-  - type: dropdown
-    id: persistence
-    attributes:
-      label: Persistence mode
-      options:
-        - In-memory only
-        - Built-in SQLite adapter
-        - Custom KanbanDataSource
-        - Legacy on_data_changed callback
     validations:
       required: true
   - type: input
@@ -37,7 +23,6 @@ body:
     attributes:
       label: Versions
       description: CTkKanban, Python, CustomTkinter, and operating-system versions.
-      placeholder: ctk-kanban 0.2.0, Python 3.14, CustomTkinter 5.2.2, Windows 11
     validations:
       required: true
   - type: textarea
@@ -52,6 +37,5 @@ body:
       options:
         - label: I searched existing issues for this problem.
           required: true
-        - label: I removed credentials and private database data from the report.
+        - label: I removed credentials and private data.
           required: true
-

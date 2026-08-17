@@ -1,14 +1,8 @@
 # CTkKanban
 
-[![CI](https://github.com/Harry-g25/CTkKanBan/actions/workflows/ci.yml/badge.svg)](https://github.com/Harry-g25/CTkKanBan/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/Harry-g25/CTkKanBan/actions/workflows/codeql.yml/badge.svg)](https://github.com/Harry-g25/CTkKanBan/actions/workflows/codeql.yml)
-[![PyPI](https://img.shields.io/pypi/v/CTkKanBan.svg)](https://pypi.org/project/CTkKanBan/)
-[![Python](https://img.shields.io/pypi/pyversions/CTkKanBan.svg)](https://pypi.org/project/CTkKanBan/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Harry-g25/CTkKanBan/blob/main/LICENSE)
-
-CTkKanban is a configurable Kanban widget for CustomTkinter desktop applications. It ships with a polished adaptive light/dark design, live inline card editing, generated forms, drag and drop, search, advanced filters, sorting, undo/redo, responsive columns, and database-backed operation.
-
-The built-in design uses layered surfaces, priority-accented cards, responsive metadata tiles, column color rails, active filter treatments, and database status pills. Every visual token remains overridable through `style` or `theme`.
+CTkKanban is a small Kanban widget for CustomTkinter. It focuses on predictable
+card editing and movement instead of trying to be a database framework or a
+complete project-management application.
 
 ## Install
 
@@ -16,113 +10,110 @@ The built-in design uses layered surfaces, priority-accented cards, responsive m
 python -m pip install CTkKanBan
 ```
 
-## In-memory board
+Import the package with its canonical lowercase name:
 
 ```python
 import customtkinter as ctk
-import CTkKanBan
 
-board_class = CTkKanBan.CTkKanbanBoard
+from ctk_kanban import CTkKanbanBoard
 
 app = ctk.CTk()
-board = board_class(
+app.geometry("1000x650")
+
+board = CTkKanbanBoard(
     app,
-    columns=[{"id": "todo", "title": "To Do"}, {"id": "done", "title": "Done"}],
-    cards=[{"id": 1, "column": "todo", "title": "Try CTkKanban"}],
-    completed_columns=["done"],
+    columns=[
+        {"id": "todo", "title": "To do"},
+        {"id": "doing", "title": "Doing"},
+        {"id": "done", "title": "Done"},
+    ],
+    cards=[
+        {
+            "id": 1,
+            "column": "todo",
+            "title": "Try the simplified board",
+            "description": "Drag only from the :: handle.",
+            "priority": "High",
+            "tags": ["demo"],
+        }
+    ],
+    on_change=lambda event: print(event["type"], event["data"]),
 )
 board.pack(fill="both", expand=True)
 app.mainloop()
 ```
 
-## Inline card editing
+## Interaction model
 
-Inline editing is enabled by default. Click any value rendered on a card—including an empty
-`show_on_card` field—to edit it without opening a dialog. Press Enter or click the check button to
-save, click away to autosave, or press Escape to cancel. Text areas use Ctrl+Enter to save so Enter
-can still insert a new line.
+- Click a card to select it.
+- Choose **Edit** to slide open the editor drawer from the right side of the board.
+- Save explicitly with **Save** or Enter; Escape cancels.
+- Drag cards only from their `::` handle.
+- Use the visible `...` menu for move and delete actions.
+- Columns use menu actions for left/right movement instead of column dragging.
 
-Edits use the same validation, callbacks, undo history, filtering, sorting, and persistence path as
-`update_card()`. Read-only and hidden fields are never editable. To keep the earlier popup/side-panel
-interaction, configure `enable_inline_card_editing=False`; `open_edit_card_form(card_id)` also remains
-available for an explicit full-card form.
+There is no inline editing, click-away autosave, whole-card dragging, floating
+drag preview, or window-wide drag binding. A local Tk grab makes sure a handle
+drag always receives its release event.
 
-```python
-board = CTkKanbanBoard(
-    app,
-    columns=columns,
-    cards=cards,
-    fields=fields,
-    enable_inline_card_editing=True,
-)
+## Styling
 
-# Keyboard-free or application-driven activation is also available.
-board.start_inline_card_edit(card_id=1, field_key="priority")
+Board surfaces, controls, text, hover states, and scrollbars follow the active
+CustomTkinter color theme. Call `ctk.set_default_color_theme(...)` before
+creating the board to use another built-in or custom theme. Priority and tag
+metadata remain visible as compact colored pills. The optional `theme` mapping
+can override individual board tokens when needed.
+
+## Data
+
+Columns contain `id` and `title`. Cards contain `id`, `column`, `title`, and the
+optional `description`, `priority`, and `tags` fields. IDs must be unique and
+must be nonblank strings or integers. Priorities are empty, `Low`, `Medium`,
+`High`, or `Critical`. Tags are trimmed, nonblank strings without commas.
+
+`get_data()` returns a detached snapshot for application-owned storage. Use
+string or integer IDs when the snapshot will be encoded as JSON.
+`set_data(snapshot)` replaces the displayed board without emitting an event.
+The optional `on_change` callback receives one event after each successful
+add, edit, move, or delete that changes board data; `event["data"]` contains
+the latest complete snapshot. Search also changes only the view and does not
+emit an event.
+
+Persistence, retries, paging, polling, and conflict handling intentionally live
+in the host application rather than the widget.
+
+Pass `on_card_open` when the host application owns card editing. Its callback
+receives the card snapshot and replaces the built-in drawer for the Edit
+action.
+
+## Main API
+
+```text
+get_data() / set_data(data)
+get_card(id) / get_cards(column_id=None) / get_columns()
+add_card() / update_card() / move_card() / delete_card()
+add_column() / update_column() / move_column() / delete_column()
+open_add_card_editor() / open_edit_card_editor(id)
+search(query)
 ```
 
-Automatic field hit targets are available with the default card renderer. Applications using a
-custom `card_renderer` retain the full-card edit flow and can build their own editing controls.
+The Tk-free `BoardModel` is also public for applications that want to validate
+or manipulate board data without creating a window.
 
-## SQLite board
+## Migrating from 1.x
 
-```python
-import customtkinter as ctk
-from ctk_kanban import CTkKanbanBoard, SQLiteKanbanDataSource
-
-app = ctk.CTk()
-source = SQLiteKanbanDataSource("kanban.db")
-source.seed_board("work", [{"id": "todo", "title": "To Do"}], [])
-
-board = CTkKanbanBoard(
-    app,
-    data_source=source,
-    board_id="work",
-    auto_load=True,
-    server_side_query=True,
-    poll_interval_ms=2000,
-)
-board.pack(fill="both", expand=True)
-app.mainloop()
-```
-
-Database work runs outside Tk's UI thread. Mutations carry event, transaction, actor, board, and expected-revision metadata. Adapters may return canonical records with generated IDs, timestamps, versions, and defaults. Failed network writes can be retried or held in the process-local offline queue until connectivity returns.
-
-The built-in SQLite adapter provides transactional writes, optimistic revisions, atomic batches, server-side search/filter/sort, paging, change polling, generated IDs, and automatic timestamps. The board shows saving, saved, offline, conflict, and error states; duplicate submissions are blocked while a mutation is pending.
-
-For an existing SQL, document, key-value, ORM, or API-backed repository, use
-`CRUDKanbanDataSource` instead of implementing the full adapter contract:
-
-```python
-from ctk_kanban import CRUDKanbanDataSource
-
-source = CRUDKanbanDataSource(
-    read=repository.read_board,
-    create=repository.create,
-    update=repository.update,
-    delete=repository.delete,
-    transaction=repository.transaction,  # Optional
-)
-```
-
-The four callbacks receive either `"card"` or `"column"`, the board ID, the record or ID, and a
-`CRUDContext`. The bridge translates moves, reorders, renames, batching, paging, search, filters, and
-canonical generated IDs. This keeps database-specific connection and query code in your application.
-
-Use only one durable writer: configure either `data_source` or the legacy `on_data_changed` callback, never both.
-
-See the [database integration guide](https://github.com/Harry-g25/CTkKanBan/blob/main/docs/database.md) for the adapter contract, event shape, conflict policies, paging, polling, and a production integration checklist.
-
-The example programs are included in the source repository and source distribution, not the installed wheel. From a [source checkout](https://github.com/Harry-g25/CTkKanBan), run `python example_all_features.py` for the UI showcase or `python example_sqlite.py` for the transactional database example.
-
-Use `python example_all_features.py --light`, `--dark`, or `--form` to inspect specific appearance and form states. Add `--diagnose` to print the exact package path and version being rendered.
+Version 2 is intentionally breaking. Remove dynamic field definitions, inline
+editing options, persistence adapters, advanced filter/sort options, and the
+large set of `enable_*`/`show_*` constructor flags. Replace mutation-specific
+callbacks with `on_change`, and import from `ctk_kanban` rather than
+`CTkKanBan`. Remove custom record keys before loading data; v2 rejects fields
+outside its small schema instead of silently discarding them.
 
 ## Development
 
 ```bash
 python -m pip install -e ".[dev]"
-tox -e lint,type,py314,ctk-min,ctk-current,package
+python -m pytest -q
+python -m ruff check .
+python -m mypy ctk_kanban
 ```
-
-CI tests Python 3.10 through 3.14 on Linux and the oldest/latest supported versions on Windows and macOS. It also checks branch coverage, installed-wheel behavior, SQLite persistence, dependency vulnerabilities, package metadata, and workflow security.
-
-See the [changelog](https://github.com/Harry-g25/CTkKanBan/blob/main/CHANGELOG.md), [contribution guide](https://github.com/Harry-g25/CTkKanBan/blob/main/CONTRIBUTING.md), [publishing runbook](https://github.com/Harry-g25/CTkKanBan/blob/main/docs/publishing.md), and [project documentation](https://harry-g25.github.io/CTkKanBan/).

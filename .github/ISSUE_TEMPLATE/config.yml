@@ -3,7 +3,3 @@ contact_links:
   - name: Security vulnerability
     url: https://github.com/Harry-g25/CTkKanBan/security/advisories/new
     about: Report vulnerabilities privately through GitHub Security Advisories.
-  - name: Documentation
-    url: https://harry-g25.github.io/CTkKanBan/
-    about: Read the user and database integration documentation.
-
