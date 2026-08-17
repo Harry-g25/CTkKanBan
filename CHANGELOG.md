@@ -6,6 +6,8 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
+## 2.0.1 - 2026-08-17
+
 - Replaced the hard-coded blue board palette with the active CustomTkinter theme.
 - Restored colored priority and tag pills on cards.
 - Made dragging and manual category changes update only the affected UI state.
@@ -18,6 +20,12 @@ confirm that matching distributions were published to PyPI.
   protection, loading state, success/error callbacks, and optional clearing.
 - Added public `BoardSnapshot`, `ColumnRecord`, and `CardRecord` typing shapes,
   plus typed `Column.from_definition()` and `Card.from_definition()` helpers.
+- Fixed scroll-binding cleanup on Python 3.10, where Tkinter does not provide
+  the newer private single-callback unbinding helper.
+- Changed PyPI publishing to run when a GitHub release is published, with a
+  manual tag-based recovery option for missed release events.
+- Limited ordinary push CI to `main` so release tags run the release workflow
+  instead of duplicating the full CI matrix.
 
 ## 2.0.0 - 2026-08-06
 

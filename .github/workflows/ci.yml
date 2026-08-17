@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,7 +39,8 @@ jobs:
       - name: Quality and package checks
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
         run: |
-          python -m ruff check ctk_kanban tests example.py
+          python scripts/run_actionlint.py
+          python -m ruff check ctk_kanban tests scripts example.py
           python -m mypy ctk_kanban
           python -m build
           python -m twine check dist/*

@@ -8,6 +8,22 @@ from typing import Any, Callable
 import customtkinter as ctk
 
 
+def _unbind_global_callback(root: tk.Misc, sequence: str, func_id: str) -> None:
+    """Remove one ``bind_all`` callback without clearing sibling bindings.
+
+    Tkinter only gained its equivalent ``Misc._unbind(..., func_id)`` helper
+    after Python 3.10.  Calling that private helper directly made board cleanup
+    fail on the oldest supported Python release.  Keep the small Tcl operation
+    local so cleanup behaves consistently across Python 3.10 and newer.
+    """
+
+    lines = str(root.tk.call("bind", "all", sequence) or "").splitlines()
+    prefix = f'if {{"[{func_id} '
+    remaining = "\n".join(line for line in lines if not line.startswith(prefix))
+    root.tk.call("bind", "all", sequence, remaining if remaining.strip() else "")
+    root.deletecommand(func_id)
+
+
 class ManagedScrollableFrame(ctk.CTkScrollableFrame):
     """Remove the ``bind_all`` callbacks installed by CTkScrollableFrame.
 
@@ -73,7 +89,7 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
         root = self._root()
         for sequence, func_id in self._managed_global_bindings:
             try:
-                root._unbind(("bind", "all", sequence), func_id)
+                _unbind_global_callback(root, sequence, func_id)
             except tk.TclError:
                 pass
         self._managed_global_bindings.clear()
