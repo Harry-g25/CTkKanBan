@@ -562,7 +562,7 @@ board = CTkKanbanBoard(
       <section id="tutorial-interaction">
         <h2>Tutorial 2: Board Interaction</h2>
         <hr class="section-hr">
-        <p>CTkKanban makes destructive and mutating actions visible and deliberate:</p>
+        <p>CTkKanban makes destructive and mutating actions visible and deliberate. Use <code>config["actions"]</code> or <code>allow_card_deletion=False</code> to remove operations that a particular application must not expose:</p>
         <ul>
           <li>Click a card body or its <strong>Edit</strong> action to select it and open the editor drawer.</li>
           <li>Save with <strong>Save changes</strong>, Enter outside the description box, or Ctrl+Enter anywhere in the editor.</li>
@@ -831,7 +831,7 @@ cursor.execute("""
 """)
 cards = rows_from_cursor(cursor)
 
-board.set_data(snapshot_from_rows(columns, cards))</code></pre>
+board.set_data(snapshot_from_rows(columns, cards, fields=fields))</code></pre>
         </div>
         <h3>Two executed cursors</h3>
         <div class="cb">
@@ -850,18 +850,34 @@ board.set_data(snapshot)</code></pre>
       <section id="feat-editor">
         <h2>Feature: Editor Drawer</h2>
         <hr class="section-hr">
-        <p>The built-in editor is an inspector-style drawer attached to the right side of the board. It keeps the board visible, reserves layout space at high display scaling, and only changes data after an explicit save.</p>
+        <p>The built-in editor is an inspector-style drawer attached to the right side of the board. It keeps the board visible, reserves layout space at high display scaling, and only changes data after an explicit save. Its controls are generated from the active field schema.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
             <tbody>
-              <tr><td>Title</td><td>Required. Empty or whitespace-only values display an inline validation message.</td></tr>
-              <tr><td>Description</td><td>Optional multiline plain text.</td></tr>
-              <tr><td>Priority</td><td>Empty, Low, Medium, High, or Critical.</td></tr>
+              <tr><td>Text and textarea</td><td>Single-line or multiline text with required and length validation.</td></tr>
+              <tr><td>Number and integer</td><td>Typed numeric values with optional minimum and maximum constraints.</td></tr>
+              <tr><td>Select and multiselect</td><td>Configured choices, including optional empty selection.</td></tr>
+              <tr><td>Checkbox</td><td>Boolean values.</td></tr>
+              <tr><td>Date and datetime</td><td>ISO values; date inputs use YYYY-MM-DD.</td></tr>
               <tr><td>Column</td><td>Moves the card when a different destination is saved.</td></tr>
               <tr><td>Tags</td><td>Add with Enter and remove from the visible tag pills.</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>fields = [
+    {"key": "title", "label": "Title", "type": "text",
+     "required": True, "card_role": "title", "show_on_card": True},
+    {"key": "client", "label": "Client", "type": "text",
+     "searchable": True, "card_role": "metadata", "show_on_card": True},
+    {"key": "estimate", "label": "Estimate", "type": "integer", "min": 0},
+    {"key": "blocked", "label": "Blocked", "type": "checkbox"},
+    {"key": "due_date", "label": "Due date", "type": "date"},
+]
+
+board = CTkKanbanBoard(app, columns=columns, cards=cards, fields=fields)</code></pre>
         </div>
         <h3>Keyboard controls</h3>
         <div class="tbl">
@@ -886,7 +902,7 @@ board.open_add_column_dialog()</code></pre>
       <section id="feat-search">
         <h2>Feature: Search</h2>
         <hr class="section-hr">
-        <p>The toolbar search performs a case-insensitive substring match across title, description, priority, and every tag. It filters only the rendered view; the underlying data and column counts stay intact.</p>
+        <p>The toolbar search performs a case-insensitive substring match across every field marked <code>searchable=True</code>. The default schema searches title, description, priority, and every tag. Search filters only the rendered view; the underlying data and column counts stay intact.</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>board.search("critical")
@@ -958,6 +974,7 @@ board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
               <tr><td><code>card_added</code></td><td><code>card</code></td><td><code>add_card()</code> or the add-card editor.</td></tr>
               <tr><td><code>card_updated</code></td><td><code>card</code>, <code>previous</code></td><td>A changed <code>update_card()</code> operation or editor save.</td></tr>
               <tr><td><code>card_deleted</code></td><td><code>card</code></td><td><code>delete_card()</code> or confirmed menu deletion.</td></tr>
+              <tr><td><code>fields_changed</code></td><td><code>fields</code></td><td><code>set_fields()</code> when type/default normalization changes stored card values.</td></tr>
               <tr><td><code>card_moved</code></td><td><code>card</code>, <code>previous</code></td><td>Drag, menu movement, or <code>move_card()</code>.</td></tr>
               <tr><td><code>column_added</code></td><td><code>column</code></td><td><code>add_column()</code> or the add-column dialog.</td></tr>
               <tr><td><code>column_updated</code></td><td><code>column</code>, <code>previous</code></td><td>A changed rename operation.</td></tr>
@@ -1096,6 +1113,11 @@ board = CTkKanbanBoard(
               <tr><td><code>priority_high_color</code></td><td>High-priority pill.</td></tr>
               <tr><td><code>priority_critical_color</code></td><td>Critical-priority pill.</td></tr>
               <tr><td><code>tag_pill_colors</code></td><td>Cycled palette for tag pills.</td></tr>
+              <tr><td><code>card_*_font</code>, <code>editor_*_font</code></td><td>Typography definitions supplied as <code>CTkFont</code> keyword mappings.</td></tr>
+              <tr><td><code>*_corner_radius</code>, <code>*_border_width</code></td><td>Card, column, editor-section, input, and pill geometry.</td></tr>
+              <tr><td><code>column_gap</code>, <code>card_gap</code>, editor padding/gap tokens</td><td>Component spacing and density.</td></tr>
+              <tr><td><code>card_description_max_chars</code>, <code>card_max_visible_tags</code></td><td>Compact-card content limits.</td></tr>
+              <tr><td><code>input_height</code>, <code>textbox_height</code>, <code>scrollbar_width</code></td><td>Control dimensions.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1118,11 +1140,17 @@ board = CTkKanbanBoard(
     on_change=None,
     on_card_open=None,
     theme=None,
-    show_toolbar=True,
-    enable_drag=True,
-    column_width=320,
-    column_height=500,
-    confirm_delete=True,
+    fields=None,
+    config=None,
+    show_toolbar=None,
+    enable_drag=None,
+    column_width=None,
+    column_height=None,
+    editor_width=None,
+    confirm_delete=None,
+    allow_card_deletion=None,
+    allow_column_deletion=None,
+    board_title=None,
     **kwargs,
 )</code></pre>
         </div>
@@ -1136,11 +1164,13 @@ board = CTkKanbanBoard(
               <tr><td><code>on_change</code></td><td><code>Callable | None</code></td><td>Receives one event dictionary after each changed mutation.</td></tr>
               <tr><td><code>on_card_open</code></td><td><code>Callable | None</code></td><td>Replaces the built-in existing-card editor and receives a detached card record.</td></tr>
               <tr><td><code>theme</code></td><td><code>Mapping | None</code></td><td>Partial overrides for known board theme tokens.</td></tr>
-              <tr><td><code>show_toolbar</code></td><td><code>bool = True</code></td><td>Shows title, card summary, search, add-column, and add-card controls.</td></tr>
-              <tr><td><code>enable_drag</code></td><td><code>bool = True</code></td><td>Enables handle-only card dragging.</td></tr>
-              <tr><td><code>column_width</code></td><td><code>int = 320</code></td><td>Column width in widget units. Minimum 220; booleans are rejected.</td></tr>
-              <tr><td><code>column_height</code></td><td><code>int = 500</code></td><td>Column height in widget units. Minimum 240; booleans are rejected.</td></tr>
-              <tr><td><code>confirm_delete</code></td><td><code>bool = True</code></td><td>Shows confirmation dialogs for delete actions initiated through built-in menus.</td></tr>
+              <tr><td><code>fields</code></td><td><code>Iterable[FieldDefinition] | None</code></td><td>Typed values used by model validation, the generated editor, compact cards, and search.</td></tr>
+              <tr><td><code>config</code></td><td><code>BoardConfig | Mapping | None</code></td><td>Structured action, layout, text, and deletion-confirmation configuration.</td></tr>
+              <tr><td><code>show_toolbar</code>, <code>enable_drag</code></td><td><code>bool | None</code></td><td>Optional direct overrides for the matching layout settings.</td></tr>
+              <tr><td><code>column_width</code>, <code>column_height</code>, <code>editor_width</code></td><td><code>int | None</code></td><td>Optional direct size overrides. Defaults are 320, 500, and 420.</td></tr>
+              <tr><td><code>confirm_delete</code></td><td><code>bool | None</code></td><td>Optional override for built-in menu confirmation.</td></tr>
+              <tr><td><code>allow_card_deletion</code>, <code>allow_column_deletion</code></td><td><code>bool | None</code></td><td>Convenience permission overrides; disabled card deletion also blocks non-empty column cascades.</td></tr>
+              <tr><td><code>board_title</code></td><td><code>str | None</code></td><td>Optional toolbar title override.</td></tr>
               <tr><td><code>**kwargs</code></td><td>CTkFrame options</td><td>Forwarded to <code>customtkinter.CTkFrame</code>, including size, corner radius, and root frame colors.</td></tr>
             </tbody>
           </table>
@@ -1161,6 +1191,8 @@ board = CTkKanbanBoard(
               <tr><td><code>get_card(card_id)</code></td><td><code>CardRecord | None</code></td><td>Detached card, or <code>None</code> when the ID is unknown.</td></tr>
               <tr><td><code>get_cards(column_id=None)</code></td><td><code>list[CardRecord]</code></td><td>All cards in board order, or cards in one existing column.</td></tr>
               <tr><td><code>get_columns()</code></td><td><code>list[ColumnRecord]</code></td><td>Detached columns in manual order.</td></tr>
+              <tr><td><code>get_fields()</code></td><td><code>list[dict]</code></td><td>Detached active field definitions.</td></tr>
+              <tr><td><code>set_fields(fields)</code></td><td><code>None</code></td><td>Atomically validate and replace the schema, cards, and an open editor; emits <code>fields_changed</code> if normalization changes data.</td></tr>
               <tr><td><code>get_selected_card()</code></td><td><code>CardRecord | None</code></td><td>Current selection snapshot.</td></tr>
               <tr><td><code>search(query)</code></td><td><code>None</code></td><td>Apply or clear the view-only card search.</td></tr>
             </tbody>
@@ -1215,7 +1247,7 @@ board = CTkKanbanBoard(
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>from ctk_kanban import BoardModel
 
-model = BoardModel(columns=columns, cards=cards)
+model = BoardModel(columns=columns, cards=cards, fields=fields)
 model.add_column({"id": "blocked", "title": "Blocked"})
 model.move_card(card_id=1, column_id="blocked", index=0)
 
@@ -1225,13 +1257,14 @@ validated_snapshot = model.snapshot()</code></pre>
           <table>
             <thead><tr><th>Method</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><code>BoardModel(columns=(), cards=())</code></td><td>Construct and validate initial state.</td></tr>
+              <tr><td><code>BoardModel(columns=(), cards=(), fields=None)</code></td><td>Construct and validate initial state with the default or supplied schema.</td></tr>
               <tr><td><code>snapshot()</code></td><td>Return detached serializable state.</td></tr>
               <tr><td><code>load(snapshot)</code></td><td>Atomically replace from a complete snapshot.</td></tr>
               <tr><td><code>load(columns=..., cards=...)</code></td><td>Atomically replace from explicit iterables.</td></tr>
               <tr><td><code>get_card(id)</code></td><td>Return a record; unlike the widget helper, an unknown ID raises <code>BoardModelError</code>.</td></tr>
               <tr><td><code>get_cards(column_id=None)</code></td><td>Return ordered card records.</td></tr>
               <tr><td><code>get_columns()</code></td><td>Return ordered column records.</td></tr>
+              <tr><td><code>get_fields()</code>, <code>set_fields(fields)</code></td><td>Inspect or atomically replace field definitions.</td></tr>
               <tr><td><code>add_card()</code>, <code>update_card()</code>, <code>move_card()</code>, <code>delete_card()</code></td><td>Mutate cards with validation and manual ordering.</td></tr>
               <tr><td><code>reorder_card(card_id, index)</code></td><td>Move within the card's current column.</td></tr>
               <tr><td><code>add_column()</code>, <code>update_column()</code>, <code>move_column()</code>, <code>delete_column()</code></td><td>Mutate columns. Model <code>update_column()</code> also accepts a title string directly.</td></tr>
@@ -1252,7 +1285,8 @@ validated_snapshot = model.snapshot()</code></pre>
               <tr><td><code>Column</code></td><td>Frozen dataclass</td><td>Typed input with <code>id</code> and <code>title</code>.</td></tr>
               <tr><td><code>Card</code></td><td>Frozen dataclass</td><td>Typed input; stores tags as <code>tuple[str, ...]</code>.</td></tr>
               <tr><td><code>ColumnRecord</code></td><td><code>TypedDict</code></td><td>Serializable column output shape.</td></tr>
-              <tr><td><code>CardRecord</code></td><td><code>TypedDict</code></td><td>Serializable card output shape with tag lists.</td></tr>
+              <tr><td><code>CardRecord</code></td><td><code>dict[str, Any]</code></td><td>Serializable flat card output with structural and arbitrary custom keys.</td></tr>
+              <tr><td><code>FieldDefinition</code></td><td><code>TypedDict</code></td><td>Editor, validation, search, and compact-display configuration for one value.</td></tr>
               <tr><td><code>BoardSnapshot</code></td><td><code>TypedDict</code></td><td>Complete <code>columns</code> and <code>cards</code> output shape.</td></tr>
               <tr><td><code>BoardModelError</code></td><td>Exception</td><td>Validation and model-operation failure.</td></tr>
             </tbody>
@@ -1336,13 +1370,13 @@ theme = merge_theme({
             <thead><tr><th>1.x concept</th><th>2.0 replacement</th></tr></thead>
             <tbody>
               <tr><td><code>from CTkKanBan import ...</code></td><td><code>from ctk_kanban import ...</code></td></tr>
-              <tr><td>Dynamic field definitions</td><td>The fixed card schema: title, description, priority, tags, and column.</td></tr>
-              <tr><td>Inline editing and generated forms</td><td>The explicit-save embedded editor, or <code>on_card_open</code> for your own editor.</td></tr>
+              <tr><td>Dynamic field definitions</td><td>The focused <code>fields</code> schema and generated explicit-save drawer.</td></tr>
+              <tr><td>Inline editing</td><td>The explicit-save embedded editor, or <code>on_card_open</code> for your own editor.</td></tr>
               <tr><td>Mutation-specific callbacks</td><td>One <code>on_change(event)</code> callback.</td></tr>
               <tr><td>Built-in persistence/data sources</td><td>Your repository layer plus snapshots, row adapters, and <code>load_async()</code>.</td></tr>
               <tr><td>Advanced filtering and sorting</td><td>Simple local search and manual order; transform data in your application when needed.</td></tr>
-              <tr><td>Many <code>enable_*</code> / <code>show_*</code> flags</td><td>A small constructor with toolbar, drag, dimensions, deletion confirmation, callbacks, and theme.</td></tr>
-              <tr><td>Extra custom record keys</td><td>Store them outside the board or map them into the fixed schema before loading.</td></tr>
+              <tr><td>Many <code>enable_*</code> / <code>show_*</code> flags</td><td>Structured <code>BoardConfig</code> actions, layout, text, callbacks, and theme.</td></tr>
+              <tr><td>Extra custom record keys</td><td>Preserved directly; add a field definition when the value should be validated, edited, searched, or displayed.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1396,7 +1430,7 @@ card = {
 
         <div class="faq-item">
           <button class="faq-q" type="button" aria-expanded="false"><span>Can cards contain custom fields?</span><span class="faq-icon">+</span></button>
-          <div class="faq-a"><p>Not inside the board record. Version 2 deliberately rejects unknown fields. Keep extended data in your application keyed by card ID, or map it into title, description, priority, and tags for display.</p></div>
+          <div class="faq-a"><p>Yes. Supply <code>fields</code> for typed validation and generated controls. Arbitrary keys without definitions are also preserved for private integration metadata but are not shown or searched.</p></div>
         </div>
 
         <div class="faq-item">

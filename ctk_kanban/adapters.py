@@ -54,22 +54,31 @@ def rows_from_cursor(cursor: Any) -> list[dict[str, Any]]:
 def snapshot_from_rows(
     columns: Iterable[Any],
     cards: Iterable[Any],
+    *,
+    fields: Iterable[Mapping[str, Any]] | None = None,
 ) -> BoardSnapshot:
     """Normalize and validate column/card row iterables as a board snapshot."""
 
     model = BoardModel(
         columns=normalize_rows(columns),
         cards=normalize_rows(cards),
+        fields=fields,
     )
     return model.snapshot()
 
 
-def snapshot_from_cursors(columns_cursor: Any, cards_cursor: Any) -> BoardSnapshot:
+def snapshot_from_cursors(
+    columns_cursor: Any,
+    cards_cursor: Any,
+    *,
+    fields: Iterable[Mapping[str, Any]] | None = None,
+) -> BoardSnapshot:
     """Build a validated board snapshot from two executed DB-API cursors."""
 
     return snapshot_from_rows(
         rows_from_cursor(columns_cursor),
         rows_from_cursor(cards_cursor),
+        fields=fields,
     )
 
 

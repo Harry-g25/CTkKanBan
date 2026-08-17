@@ -1,7 +1,8 @@
-"""Theme values derived from the active CustomTkinter color theme."""
+"""Visual tokens derived from the active CustomTkinter color theme."""
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Mapping
 
 import customtkinter as ctk
@@ -65,6 +66,77 @@ def _customtkinter_defaults() -> dict[str, Any]:
             ("#B54708", "#B54708"),
             ("#C11574", "#C11574"),
         ),
+        # Board and toolbar geometry/typography.
+        "board_padding_x": 18,
+        "board_padding_y": (12, 16),
+        "toolbar_height": 66,
+        "toolbar_corner_radius": 12,
+        "toolbar_padding_x": 18,
+        "toolbar_padding_y": (16, 0),
+        "toolbar_content_padding_y": 12,
+        "toolbar_title_font": {"size": 17, "weight": "bold"},
+        "toolbar_summary_font": {"size": 10},
+        "search_width": 220,
+        "button_height": 36,
+        "control_corner_radius": 8,
+        "small_control_size": 32,
+        # Column geometry/typography.
+        "column_corner_radius": 12,
+        "column_border_width": 1,
+        "column_gap": 7,
+        "column_accent_height": 3,
+        "column_header_padding_x": 12,
+        "column_title_font": {"size": 15, "weight": "bold"},
+        "column_count_font": {"size": 11, "weight": "bold"},
+        "column_empty_title_font": {"size": 13, "weight": "bold"},
+        "column_empty_body_font": {"size": 11},
+        "card_gap": 6,
+        # Card geometry/typography and compact-value limits.
+        "card_corner_radius": 10,
+        "card_border_width": 1,
+        "card_selected_border_width": 2,
+        "card_accent_width": 4,
+        "card_title_font": {"size": 14, "weight": "bold"},
+        "card_body_font": {"size": 11},
+        "card_metadata_font": {"size": 10},
+        "card_description_max_chars": 150,
+        "card_max_visible_tags": 4,
+        "pill_height": 21,
+        "pill_corner_radius": 7,
+        "pill_font": {"size": 10, "weight": "bold"},
+        # Editor geometry/typography.
+        "editor_border_width": 1,
+        "editor_header_padding_x": 20,
+        "editor_header_padding_y": (17, 15),
+        "editor_form_padding_x": (18, 10),
+        "editor_form_padding_y": (16, 8),
+        "editor_field_padding_x": 14,
+        "editor_field_gap": 13,
+        "editor_section_gap": 12,
+        "editor_section_corner_radius": 10,
+        "editor_section_border_width": 1,
+        "editor_section_title_padding_y": (14, 12),
+        "editor_slide_step": 70,
+        "editor_slide_interval_ms": 12,
+        "editor_eyebrow_font": {"size": 10, "weight": "bold"},
+        "editor_title_font": {"size": 21, "weight": "bold"},
+        "editor_status_font": {"size": 9, "weight": "bold"},
+        "section_title_font": {"size": 14, "weight": "bold"},
+        "field_label_font": {"size": 11, "weight": "bold"},
+        "help_text_font": {"size": 11},
+        "status_text_font": {"size": 11},
+        "input_height": 36,
+        "compact_input_height": 34,
+        "input_corner_radius": 9,
+        "input_border_width": 1,
+        "textbox_height": 105,
+        "scrollbar_width": 7,
+        "error_text_color": ("#B91C1C", "#FCA5A5"),
+        # Native Tk context-menu colors.
+        "menu_fg_color": _color(frame["fg_color"]),
+        "menu_text_color": _color(label["text_color"]),
+        "menu_hover_color": _color(dropdown["hover_color"]),
+        "menu_disabled_text_color": _color(entry["placeholder_text_color"]),
     }
 
 
@@ -80,7 +152,11 @@ def merge_theme(overrides: Mapping[str, Any] | None = None) -> dict[str, Any]:
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(f"Unknown theme keys: {names}")
-        theme.update(overrides)
+        for key, value in overrides.items():
+            try:
+                theme[key] = deepcopy(value)
+            except Exception:
+                theme[key] = value
     return theme
 
 

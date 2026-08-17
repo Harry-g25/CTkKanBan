@@ -61,14 +61,194 @@ Board surfaces, controls, text, hover states, and scrollbars follow the active
 CustomTkinter color theme. Call `ctk.set_default_color_theme(...)` before
 creating the board to use another built-in or custom theme. Priority and tag
 metadata remain visible as compact colored pills. The optional `theme` mapping
-can override individual board tokens when needed.
+can override individual board tokens when needed. `DEFAULT_THEME` contains the
+complete supported token set and unknown keys are rejected to catch spelling
+mistakes.
+
+Themes now cover colors as well as component radii, borders, spacing, control
+heights, scrollbar width, compact-card limits, animation timing, and font
+definitions:
+
+```python
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    theme={
+        "card_corner_radius": 16,
+        "card_title_font": {"size": 15, "weight": "bold"},
+        "card_description_max_chars": 220,
+        "column_gap": 10,
+        "editor_section_corner_radius": 14,
+    },
+)
+```
+
+Visual choices belong in `theme`; behavior, layout, and user-facing labels
+belong in `config`.
+
+## Configuration and permissions
+
+`config` accepts a `BoardConfig` instance or a nested mapping. It separates
+available actions, major layout choices, labels, and delete confirmation:
+
+```python
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    config={
+        "actions": {
+            "delete_cards": False,
+            "delete_columns": False,
+            "move_columns": False,
+        },
+        "layout": {
+            "show_toolbar": True,
+            "column_width": 340,
+            "column_height": 560,
+            "editor_width": 480,
+        },
+        "text": {
+            "board_title": "Release planning",
+            "add_card": "+ New work item",
+        },
+        "confirm_delete": True,
+    },
+)
+```
+
+The action switches are `add_cards`, `edit_cards`, `move_cards`,
+`delete_cards`, `add_columns`, `edit_columns`, `move_columns`, and
+`delete_columns`. They affect the visible controls and the corresponding public
+board mutation methods. When card deletion is disabled, a non-empty column
+cannot be deleted as a way around that restriction. `BoardModel` remains a
+configuration-free data structure, so applications should expose the board API
+rather than its model when these switches are being used as UI permissions.
+
+For the common deletion-only case, the convenience arguments are equivalent:
+
+```python
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    allow_card_deletion=False,
+    allow_column_deletion=False,
+)
+```
+
+Existing direct options such as `show_toolbar`, `enable_drag`, `column_width`,
+`column_height`, `editor_width`, `confirm_delete`, and `board_title` override
+the corresponding structured setting when explicitly supplied.
+
+## Configurable card fields
+
+Pass `fields` to define any number of typed card values. The built-in editor is
+generated from these definitions, card rendering uses their display roles, and
+search uses fields marked `searchable`. When `fields` is omitted, the existing
+title, description, priority, and tags behavior remains unchanged.
+
+```python
+fields = [
+    {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": True,
+        "show_on_card": True,
+        "searchable": True,
+        "card_role": "title",
+        "section": "Details",
+    },
+    {
+        "key": "client",
+        "label": "Client",
+        "type": "text",
+        "show_on_card": True,
+        "searchable": True,
+        "card_role": "metadata",
+        "section": "Details",
+    },
+    {
+        "key": "estimate",
+        "label": "Estimate",
+        "type": "integer",
+        "min": 0,
+        "max": 100,
+        "show_on_card": True,
+        "card_role": "metadata",
+        "section": "Planning",
+    },
+    {
+        "key": "blocked",
+        "label": "Blocked",
+        "type": "checkbox",
+        "section": "Planning",
+    },
+    {
+        "key": "stage",
+        "label": "Stage",
+        "type": "select",
+        "options": ["Discovery", "Delivery", "Review"],
+        "show_on_card": True,
+        "card_role": "badge",
+        "colors": {
+            "Discovery": ("#DBEAFE", "#1E3A5F"),
+            "Delivery": ("#DCFCE7", "#14532D"),
+        },
+    },
+    {
+        "key": "due_date",
+        "label": "Due date",
+        "type": "date",
+        "show_on_card": True,
+        "card_role": "metadata",
+    },
+]
+
+cards = [
+    {
+        "id": 1,
+        "column": "todo",
+        "title": "Prepare proposal",
+        "client": "Acme",
+        "estimate": 8,
+        "blocked": False,
+        "stage": "Delivery",
+        "due_date": "2026-08-28",
+    }
+]
+
+board = CTkKanbanBoard(app, columns=columns, cards=cards, fields=fields)
+```
+
+Supported types are `text`, `textarea`, `number`, `integer`, `select`,
+`multiselect`, `date`, `datetime`, `checkbox`, `tags`, and `hidden`. Dates and
+datetimes are normalized to ISO strings. Definitions can also specify
+`default`, `placeholder`, `show_in_editor`, `read_only`, `help_text`,
+`min_length`, `max_length`, `validator`, and `formatter`.
+
+Card display roles are `title`, `body`, `badge`, `tags`, `metadata`, and
+`hidden`. `id`, `column`, and `column_id` are reserved structural keys, and a
+title field is always retained. Additional card keys that are not in the schema
+are preserved in snapshots, which allows applications to round-trip private
+integration metadata without showing it in the editor.
+
+Use `get_fields()` to inspect the active definitions and `set_fields(fields)`
+to replace them at runtime. `set_fields()` validates existing cards atomically,
+rebuilds their compact views, and rebuilds an open editor with the new controls.
+If schema normalization changes stored card values, one `fields_changed` event
+is emitted so the host can persist the new snapshot.
 
 ## Data
 
-Columns contain `id` and `title`. Cards contain `id`, `column`, `title`, and the
-optional `description`, `priority`, and `tags` fields. IDs must be unique and
-must be nonblank strings or integers. Priorities are empty, `Low`, `Medium`,
-`High`, or `Critical`. Tags are trimmed, nonblank strings without commas.
+Columns contain `id` and `title`. With the default field schema, cards contain
+`id`, `column`, `title`, and the optional `description`, `priority`, and `tags`
+fields. Configured schemas may add any number of top-level values. IDs must be
+unique and must be nonblank strings or integers. Default priorities are empty,
+`Low`, `Medium`, `High`, or `Critical`. Tags are trimmed, nonblank strings
+without commas.
 
 `get_data()` returns a detached snapshot for application-owned storage. Use
 string or integer IDs when the snapshot will be encoded as JSON.
@@ -90,7 +270,7 @@ SQLAlchemy are accepted by `snapshot_from_rows()`:
 ```python
 from ctk_kanban import snapshot_from_rows
 
-snapshot = snapshot_from_rows(column_rows, card_rows)
+snapshot = snapshot_from_rows(column_rows, card_rows, fields=fields)
 board.set_data(snapshot)
 ```
 
@@ -168,7 +348,8 @@ open_add_card_editor() / open_edit_card_editor(id)
 search(query)
 set_loading(bool) / load_async(fetch_snapshot, ...)
 rows_from_cursor(cursor)
-snapshot_from_rows(columns, cards) / snapshot_from_cursors(columns_cursor, cards_cursor)
+snapshot_from_rows(columns, cards, fields=...) / snapshot_from_cursors(..., fields=...)
+get_fields() / set_fields(fields)
 ```
 
 The Tk-free `BoardModel` is also public for applications that want to validate
@@ -179,12 +360,11 @@ typing shapes.
 
 ## Migrating from 1.x
 
-Version 2 is intentionally breaking. Remove dynamic field definitions, inline
-editing options, persistence adapters, advanced filter/sort options, and the
-large set of `enable_*`/`show_*` constructor flags. Replace mutation-specific
-callbacks with `on_change`, and import from `ctk_kanban` rather than
-`CTkKanBan`. Remove custom record keys before loading data; v2 rejects fields
-outside its small schema instead of silently discarding them.
+Version 2 is intentionally breaking. Replace mutation-specific callbacks with
+`on_change`, and import from `ctk_kanban` rather than `CTkKanBan`. The focused
+2.0 API initially removed dynamic fields; the current schema API restores that
+capability without restoring the former persistence, filtering, sorting, and
+large constructor-flag frameworks. Custom record keys are now preserved.
 
 ## Development
 

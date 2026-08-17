@@ -6,7 +6,7 @@ import logging
 import queue
 import threading
 import tkinter as tk
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from math import hypot
 from tkinter import messagebox
@@ -18,6 +18,7 @@ import customtkinter as ctk
 from ._scrolling import ManagedScrollableFrame
 from .card import CTkKanbanCard
 from .column import CTkKanbanColumn
+from .config import ActionConfig, BoardConfig, merge_config
 from .editor import CardEditor
 from .model import BoardModel, BoardModelError, BoardSnapshot, CardRecord, ColumnRecord
 from .themes import merge_theme
@@ -56,30 +57,67 @@ class CTkKanbanBoard(ctk.CTkFrame):
         on_change: ChangeCallback | None = None,
         on_card_open: CardOpenCallback | None = None,
         theme: Mapping[str, Any] | None = None,
-        show_toolbar: bool = True,
-        enable_drag: bool = True,
-        column_width: int = 320,
-        column_height: int = 500,
-        confirm_delete: bool = True,
+        fields: Iterable[Mapping[str, Any]] | None = None,
+        config: BoardConfig | Mapping[str, Any] | None = None,
+        show_toolbar: bool | None = None,
+        enable_drag: bool | None = None,
+        column_width: int | None = None,
+        column_height: int | None = None,
+        editor_width: int | None = None,
+        confirm_delete: bool | None = None,
+        allow_card_deletion: bool | None = None,
+        allow_column_deletion: bool | None = None,
+        board_title: str | None = None,
         **kwargs: Any,
     ) -> None:
-        if not isinstance(column_width, int) or isinstance(column_width, bool) or column_width < 220:
-            raise ValueError("column_width must be an integer of at least 220")
-        if not isinstance(column_height, int) or isinstance(column_height, bool) or column_height < 240:
-            raise ValueError("column_height must be an integer of at least 240")
+        resolved = merge_config(config)
+        actions = resolved.actions
+        layout = resolved.layout
+        text = resolved.text
+        if show_toolbar is not None:
+            layout = replace(layout, show_toolbar=show_toolbar)
+        if enable_drag is not None:
+            layout = replace(layout, enable_drag=enable_drag)
+        if column_width is not None:
+            layout = replace(layout, column_width=column_width)
+        if column_height is not None:
+            layout = replace(layout, column_height=column_height)
+        if editor_width is not None:
+            layout = replace(layout, editor_width=editor_width)
+        if allow_card_deletion is not None:
+            actions = replace(actions, delete_cards=allow_card_deletion)
+        if allow_column_deletion is not None:
+            actions = replace(actions, delete_columns=allow_column_deletion)
+        if board_title is not None:
+            text = replace(text, board_title=board_title)
+        resolved = merge_config(
+            BoardConfig(
+                actions=actions,
+                layout=layout,
+                text=text,
+                confirm_delete=(resolved.confirm_delete if confirm_delete is None else confirm_delete),
+            )
+        )
 
-        self.model = BoardModel(columns=columns, cards=cards)
+        self.model = BoardModel(columns=columns, cards=cards, fields=fields)
+        self.fields = self.model.get_fields()
         self.theme = merge_theme(theme)
         kwargs.setdefault("fg_color", self.theme["board_fg_color"])
         super().__init__(master, **kwargs)
 
         self.on_change = on_change
         self.on_card_open = on_card_open
-        self.show_toolbar = bool(show_toolbar)
-        self.enable_drag = bool(enable_drag)
-        self.column_width = column_width
-        self.column_height = column_height
-        self.confirm_delete = bool(confirm_delete)
+        self.config = resolved
+        self.actions: ActionConfig = resolved.actions
+        self.text = resolved.text
+        self.show_toolbar = resolved.layout.show_toolbar
+        self.enable_drag = resolved.layout.enable_drag and self.actions.move_cards
+        self.column_width = resolved.layout.column_width
+        self.column_height = resolved.layout.column_height
+        self.editor_width = resolved.layout.editor_width
+        self.confirm_delete = resolved.confirm_delete
+        self.allow_card_deletion = self.actions.delete_cards
+        self.allow_column_deletion = self.actions.delete_columns
 
         self._logger = logging.getLogger("ctk_kanban")
         self._search_query = ""
@@ -111,20 +149,26 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def _build_toolbar(self) -> None:
         self.toolbar = ctk.CTkFrame(
             self,
-            height=66,
-            corner_radius=12,
+            height=self.theme["toolbar_height"],
+            corner_radius=self.theme["toolbar_corner_radius"],
             fg_color=self.theme["toolbar_fg_color"],
         )
-        self.toolbar.grid(row=0, column=0, padx=18, pady=(16, 0), sticky="ew")
+        self.toolbar.grid(
+            row=0,
+            column=0,
+            padx=self.theme["toolbar_padding_x"],
+            pady=self.theme["toolbar_padding_y"],
+            sticky="ew",
+        )
         self.toolbar.grid_columnconfigure(4, weight=1)
 
         heading = ctk.CTkFrame(self.toolbar, fg_color="transparent")
         heading.grid(row=0, column=0, padx=(16, 18), pady=10, sticky="w")
         self.board_title_label = ctk.CTkLabel(
             heading,
-            text="Board",
+            text=self.text.board_title,
             anchor="w",
-            font=ctk.CTkFont(size=17, weight="bold"),
+            font=ctk.CTkFont(**self.theme["toolbar_title_font"]),
             text_color=self.theme["text_color"],
         )
         self.board_title_label.pack(anchor="w")
@@ -134,17 +178,17 @@ class CTkKanbanBoard(ctk.CTkFrame):
             text="",
             anchor="w",
             height=15,
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(**self.theme["toolbar_summary_font"]),
             text_color=self.theme["muted_text_color"],
         )
         self.summary_label.pack(anchor="w")
 
         self.search_entry = ctk.CTkEntry(
             self.toolbar,
-            placeholder_text="Search cards\u2026",
-            width=220,
-            height=36,
-            corner_radius=9,
+            placeholder_text=self.text.search_placeholder,
+            width=self.theme["search_width"],
+            height=self.theme["button_height"],
+            corner_radius=self.theme["input_corner_radius"],
             border_color=self.theme["input_border_color"],
         )
         self.search_entry.grid(row=0, column=1, padx=(0, 8), pady=12, sticky="w")
@@ -152,10 +196,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
         self.add_column_button = ctk.CTkButton(
             self.toolbar,
-            text="Add column",
+            text=self.text.add_column,
             width=94,
-            height=36,
-            corner_radius=9,
+            height=self.theme["button_height"],
+            corner_radius=self.theme["input_corner_radius"],
             fg_color="transparent",
             border_width=1,
             border_color=self.theme["column_border_color"],
@@ -163,15 +207,19 @@ class CTkKanbanBoard(ctk.CTkFrame):
             text_color=self.theme["text_color"],
             command=self.open_add_column_dialog,
         )
+        if not self.actions.add_columns:
+            self.add_column_button.configure(state="disabled")
         self.add_column_button.grid(row=0, column=2, padx=4, pady=12)
         self.add_card_button = ctk.CTkButton(
             self.toolbar,
-            text="+  Add card",
+            text=self.text.add_card,
             width=96,
-            height=36,
-            corner_radius=9,
+            height=self.theme["button_height"],
+            corner_radius=self.theme["input_corner_radius"],
             command=self.open_add_card_editor,
         )
+        if not self.actions.add_cards:
+            self.add_card_button.configure(state="disabled")
         self.add_card_button.grid(row=0, column=3, padx=(4, 12), pady=12)
 
     def _build_board_area(self) -> None:
@@ -183,14 +231,20 @@ class CTkKanbanBoard(ctk.CTkFrame):
             scrollbar_button_color=self.theme["scrollbar_color"],
             scrollbar_button_hover_color=self.theme["scrollbar_hover_color"],
         )
-        self.board_area.grid(row=row, column=0, padx=18, pady=(12, 16), sticky="nsew")
+        self.board_area.grid(
+            row=row,
+            column=0,
+            padx=self.theme["board_padding_x"],
+            pady=self.theme["board_padding_y"],
+            sticky="nsew",
+        )
         self.board_area.grid_columnconfigure(0, weight=1)
         self.board_area.grid_rowconfigure(0, weight=1)
         self.column_track = ctk.CTkFrame(self.board_area, fg_color="transparent")
         self.column_track.grid(row=0, column=0, sticky="ns")
         self.column_track.grid_rowconfigure(0, weight=1, minsize=self.column_height)
         if hasattr(self.board_area, "_scrollbar"):
-            self.board_area._scrollbar.configure(height=8)
+            self.board_area._scrollbar.configure(height=self.theme["scrollbar_width"] + 1)
 
     def refresh(self, *, preserve_scroll: bool = True) -> None:
         """Rebuild structural board state while preserving its viewport.
@@ -231,11 +285,28 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 width=self.column_width,
                 height=self.column_height,
                 accent_color=accent_palette[index % len(accent_palette)],
-                on_add=self.open_add_card_editor,
-                on_menu=self._show_column_menu,
+                on_add=self.open_add_card_editor if self.actions.add_cards else None,
+                on_menu=(
+                    self._show_column_menu
+                    if any(
+                        (
+                            self.actions.edit_columns,
+                            self.actions.move_columns,
+                            self.actions.delete_columns,
+                        )
+                    )
+                    else None
+                ),
+                text=self.text,
             )
             self.column_track.grid_columnconfigure(index, minsize=self.column_width)
-            column.grid(row=0, column=index, padx=7, pady=2, sticky="nsew")
+            column.grid(
+                row=0,
+                column=index,
+                padx=self.theme["column_gap"],
+                pady=2,
+                sticky="nsew",
+            )
             self._rendered_column_slots += 1
             self._column_widgets[column_data["id"]] = column
 
@@ -262,11 +333,26 @@ class CTkKanbanBoard(ctk.CTkFrame):
             column.body,
             card_data,
             self.theme,
+            fields=self.fields,
             width=self.column_width - 22,
             drag_enabled=self.enable_drag and not self._search_query,
             on_select=self._select_card_widget,
-            on_edit=lambda widget: self.open_edit_card_editor(widget.card_id),
-            on_menu=self._show_card_menu,
+            on_edit=(
+                (lambda widget: self.open_edit_card_editor(widget.card_id))
+                if self.actions.edit_cards
+                else None
+            ),
+            on_menu=(
+                self._show_card_menu
+                if any(
+                    (
+                        self.actions.edit_cards,
+                        self.actions.move_cards,
+                        self.actions.delete_cards,
+                    )
+                )
+                else None
+            ),
             on_drag_press=self._on_drag_press,
             on_drag_motion=self._on_drag_motion,
             on_drag_release=self._on_drag_release,
@@ -371,9 +457,9 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self.column_track,
             width=340,
             height=210,
-            corner_radius=12,
+            corner_radius=self.theme["column_corner_radius"],
             fg_color=self.theme["column_fg_color"],
-            border_width=1,
+            border_width=self.theme["column_border_width"],
             border_color=self.theme["column_border_color"],
         )
         self._empty_widget.grid(row=0, column=0, padx=40, pady=60)
@@ -390,23 +476,24 @@ class CTkKanbanBoard(ctk.CTkFrame):
         ).pack(pady=(30, 8))
         ctk.CTkLabel(
             self._empty_widget,
-            text="No columns yet",
+            text=self.text.no_columns,
             text_color=self.theme["text_color"],
             font=ctk.CTkFont(size=16, weight="bold"),
         ).pack()
         ctk.CTkLabel(
             self._empty_widget,
-            text="Create a column to start planning",
+            text=self.text.no_columns_help,
             text_color=self.theme["muted_text_color"],
             font=ctk.CTkFont(size=11),
         ).pack(pady=(2, 12))
-        ctk.CTkButton(
-            self._empty_widget,
-            text="Create first column",
-            height=32,
-            corner_radius=8,
-            command=self.open_add_column_dialog,
-        ).pack()
+        if self.actions.add_columns:
+            ctk.CTkButton(
+                self._empty_widget,
+                text="Create first column",
+                height=32,
+                corner_radius=self.theme["control_corner_radius"],
+                command=self.open_add_column_dialog,
+            ).pack()
 
     # ------------------------------------------------------------------
     # Public data API
@@ -441,8 +528,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return
         state = "disabled" if loading else "normal"
         self.search_entry.configure(state=state)
-        self.add_column_button.configure(state=state)
-        self.add_card_button.configure(state=state)
+        self.add_column_button.configure(
+            state="disabled" if loading or not self.actions.add_columns else "normal"
+        )
+        self.add_card_button.configure(
+            state="disabled" if loading or not self.actions.add_cards else "normal"
+        )
         if loading:
             self.summary_label.configure(text="Loading\u2026")
         else:
@@ -488,7 +579,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         def run() -> None:
             try:
                 raw_snapshot = fetch_snapshot()
-                validated = BoardModel()
+                validated = BoardModel(fields=self.fields)
                 validated.load(raw_snapshot)
                 result_queue.put(("success", validated.snapshot()))
             except Exception as error:
@@ -562,7 +653,36 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def get_columns(self) -> list[ColumnRecord]:
         return self.model.get_columns()
 
+    def get_fields(self) -> list[dict[str, Any]]:
+        """Return detached card field definitions in display order."""
+
+        return self.model.get_fields()
+
+    def set_fields(self, fields: Iterable[Mapping[str, Any]]) -> None:
+        """Replace the schema and rebuild cards and any open editor."""
+
+        before = self.model.snapshot()
+        self.model.set_fields(fields)
+        self.fields = self.model.get_fields()
+        editor_initial: dict[str, Any] | None = None
+        if self._editor is not None:
+            editor = self._editor
+            editor_initial = dict(editor._initial)
+            self._editor = None
+            editor.destroy()
+        self.refresh(preserve_scroll=True)
+        if editor_initial is not None:
+            if "id" in editor_initial:
+                self.open_edit_card_editor(editor_initial["id"])
+            else:
+                self.open_add_card_editor(
+                    editor_initial.get("column", editor_initial.get("column_id"))
+                )
+        if self.model.snapshot() != before:
+            self._emit_change("fields_changed", before=before, fields=self.get_fields())
+
     def add_card(self, card: Mapping[str, Any], *, index: int | None = None) -> CardRecord:
+        self._require_action(self.actions.add_cards, "card creation is disabled")
         before = self.model.snapshot()
         created = self.model.add_card(card, index=index)
         self._sync_card_columns([created["column"]])
@@ -570,8 +690,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return created
 
     def update_card(self, card_id: Any, updates: Mapping[str, Any]) -> CardRecord:
+        self._require_action(self.actions.edit_cards, "card editing is disabled")
         before = self.model.snapshot()
         previous = self.model.get_card(card_id)
+        requested_column = updates.get("column", updates.get("column_id", previous["column"]))
+        if requested_column != previous["column"]:
+            self._require_action(self.actions.move_cards, "card movement is disabled")
         updated = self.model.update_card(card_id, updates)
         if self.model.snapshot() == before:
             return updated
@@ -583,6 +707,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return updated
 
     def delete_card(self, card_id: Any) -> CardRecord:
+        self._require_action(self.actions.delete_cards, "card deletion is disabled")
         before = self.model.snapshot()
         deleted = self.model.delete_card(card_id)
         if self._selected_card_id == card_id:
@@ -597,6 +722,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         column_id: Any,
         index: int | None = None,
     ) -> CardRecord:
+        self._require_action(self.actions.move_cards, "card movement is disabled")
         before = self.model.snapshot()
         previous = self.model.get_card(card_id)
         moved = self.model.move_card(card_id, column_id, index=index)
@@ -611,6 +737,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return moved
 
     def add_column(self, column: Mapping[str, Any], *, index: int | None = None) -> ColumnRecord:
+        self._require_action(self.actions.add_columns, "column creation is disabled")
         before = self.model.snapshot()
         created = self.model.add_column(column, index=index)
         self.refresh()
@@ -618,6 +745,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return created
 
     def update_column(self, column_id: Any, updates: Mapping[str, Any]) -> ColumnRecord:
+        self._require_action(self.actions.edit_columns, "column editing is disabled")
         before = self.model.snapshot()
         previous = next((item for item in self.model.get_columns() if item["id"] == column_id), None)
         updated = self.model.update_column(column_id, updates)
@@ -628,10 +756,16 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return updated
 
     def delete_column(self, column_id: Any, *, delete_cards: bool = False) -> ColumnRecord:
+        self._require_action(self.actions.delete_columns, "column deletion is disabled")
         before = self.model.snapshot()
         removed_card_ids = {
             card["id"] for card in before["cards"] if card["column"] == column_id
         }
+        if removed_card_ids and delete_cards:
+            self._require_action(
+                self.actions.delete_cards,
+                "cannot delete a non-empty column while card deletion is disabled",
+            )
         deleted = self.model.delete_column(column_id, delete_cards=delete_cards)
         if self._selected_card_id in removed_card_ids:
             self._selected_card_id = None
@@ -640,6 +774,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return deleted
 
     def move_column(self, column_id: Any, index: int) -> ColumnRecord:
+        self._require_action(self.actions.move_columns, "column movement is disabled")
         before = self.model.snapshot()
         moved = self.model.move_column(column_id, index)
         if self.model.snapshot() == before:
@@ -652,9 +787,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
     # Explicit editors and menus
     # ------------------------------------------------------------------
     def open_add_card_editor(self, column_id: Any | None = None) -> None:
+        if not self.actions.add_cards:
+            return
         columns = self.model.get_columns()
         if not columns:
-            self.open_add_column_dialog()
+            if self.actions.add_columns:
+                self.open_add_column_dialog()
             columns = self.model.get_columns()
             if not columns:
                 return
@@ -677,6 +815,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
 
     def open_edit_card_editor(self, card_id: Any) -> None:
+        if not self.actions.edit_cards:
+            return
         card = self.get_card(card_id)
         if card is None:
             return
@@ -727,6 +867,9 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 on_save=on_save,
                 on_close=self._editor_closed,
                 theme=self.theme,
+                fields=self.fields,
+                panel_width=self.editor_width,
+                allow_column_change=self.actions.move_cards,
             )
         except Exception:
             self._set_editor_reserved(False)
@@ -743,14 +886,17 @@ class CTkKanbanBoard(ctk.CTkFrame):
         if self._editor_reserved == reserved:
             return
         self._editor_reserved = reserved
-        drawer_width = int(round(self._apply_widget_scaling(CardEditor.PANEL_WIDTH)))
-        right_padding = drawer_width + 18 if reserved else 18
-        self.board_area.grid_configure(padx=(18, right_padding))
+        drawer_width = int(round(self._apply_widget_scaling(self.editor_width)))
+        base_padding = self.theme["board_padding_x"]
+        right_padding = drawer_width + base_padding if reserved else base_padding
+        self.board_area.grid_configure(padx=(base_padding, right_padding))
         if self.show_toolbar:
-            self.toolbar.grid_configure(padx=(18, right_padding))
+            self.toolbar.grid_configure(padx=(base_padding, right_padding))
         self.after_idle(self.board_area.fit_content_to_canvas)
 
     def open_add_column_dialog(self) -> None:
+        if not self.actions.add_columns:
+            return
         dialog = ctk.CTkInputDialog(text="Column name", title="Add column")
         title = dialog.get_input()
         if title is None or not title.strip():
@@ -758,6 +904,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.add_column({"id": str(uuid4()), "title": title.strip()})
 
     def _rename_column(self, column_id: Any) -> None:
+        if not self.actions.edit_columns:
+            return
         current = next((item for item in self.model.get_columns() if item["id"] == column_id), None)
         if current is None:
             return
@@ -771,36 +919,39 @@ class CTkKanbanBoard(ctk.CTkFrame):
         current = self.get_card(card_id)
         if current is None:
             return
-        menu = tk.Menu(self, tearoff=False)
-        menu.add_command(label="Edit", command=lambda: self.open_edit_card_editor(card_id))
+        menu = self._new_menu(self)
+        if self.actions.edit_cards:
+            menu.add_command(label="Edit", command=lambda: self.open_edit_card_editor(card_id))
         column_id = current["column"]
         cards = self.model.get_cards(column_id)
         current_index = next(index for index, item in enumerate(cards) if item["id"] == card_id)
-        menu.add_command(
-            label="Move up",
-            state="normal" if not self._search_query and current_index > 0 else "disabled",
-            command=lambda: self.move_card(card_id, column_id, current_index - 1),
-        )
-        menu.add_command(
-            label="Move down",
-            state=(
-                "normal"
-                if not self._search_query and current_index < len(cards) - 1
-                else "disabled"
-            ),
-            command=lambda: self.move_card(card_id, column_id, current_index + 1),
-        )
-        move_menu = tk.Menu(menu, tearoff=False)
-        for column in self.model.get_columns():
-            target_id = column["id"]
-            move_menu.add_command(
-                label=str(column["title"]),
-                state="disabled" if target_id == column_id else "normal",
-                command=partial(self.move_card, card_id, target_id),
+        if self.actions.move_cards:
+            menu.add_command(
+                label="Move up",
+                state="normal" if not self._search_query and current_index > 0 else "disabled",
+                command=lambda: self.move_card(card_id, column_id, current_index - 1),
             )
-        menu.add_cascade(label="Move to column", menu=move_menu)
-        menu.add_separator()
-        menu.add_command(label="Delete", command=lambda: self._request_delete_card(card_id))
+            menu.add_command(
+                label="Move down",
+                state=(
+                    "normal"
+                    if not self._search_query and current_index < len(cards) - 1
+                    else "disabled"
+                ),
+                command=lambda: self.move_card(card_id, column_id, current_index + 1),
+            )
+            move_menu = self._new_menu(menu)
+            for column in self.model.get_columns():
+                target_id = column["id"]
+                move_menu.add_command(
+                    label=str(column["title"]),
+                    state="disabled" if target_id == column_id else "normal",
+                    command=partial(self.move_card, card_id, target_id),
+                )
+            menu.add_cascade(label="Move to column", menu=move_menu)
+        if self.actions.delete_cards:
+            menu.add_separator()
+            menu.add_command(label="Delete", command=lambda: self._request_delete_card(card_id))
         self._popup_menu(menu, card_widget.menu_button)
 
     def _show_column_menu(self, column_id: Any, button: Any) -> None:
@@ -808,21 +959,46 @@ class CTkKanbanBoard(ctk.CTkFrame):
         index = next((i for i, item in enumerate(columns) if item["id"] == column_id), -1)
         if index < 0:
             return
-        menu = tk.Menu(self, tearoff=False)
-        menu.add_command(label="Rename", command=lambda: self._rename_column(column_id))
-        menu.add_command(
-            label="Move left",
-            state="normal" if index > 0 else "disabled",
-            command=lambda: self.move_column(column_id, index - 1),
-        )
-        menu.add_command(
-            label="Move right",
-            state="normal" if index < len(columns) - 1 else "disabled",
-            command=lambda: self.move_column(column_id, index + 1),
-        )
-        menu.add_separator()
-        menu.add_command(label="Delete", command=lambda: self._request_delete_column(column_id))
+        menu = self._new_menu(self)
+        if self.actions.edit_columns:
+            menu.add_command(label="Rename", command=lambda: self._rename_column(column_id))
+        if self.actions.move_columns:
+            menu.add_command(
+                label="Move left",
+                state="normal" if index > 0 else "disabled",
+                command=lambda: self.move_column(column_id, index - 1),
+            )
+            menu.add_command(
+                label="Move right",
+                state="normal" if index < len(columns) - 1 else "disabled",
+                command=lambda: self.move_column(column_id, index + 1),
+            )
+        if self.actions.delete_columns:
+            menu.add_separator()
+            state = (
+                "normal"
+                if self.actions.delete_cards or not self.model.get_cards(column_id)
+                else "disabled"
+            )
+            menu.add_command(
+                label="Delete",
+                state=cast(Any, state),
+                command=lambda: self._request_delete_column(column_id),
+            )
         self._popup_menu(menu, button)
+
+    def _new_menu(self, master: Any) -> tk.Menu:
+        return tk.Menu(
+            master,
+            tearoff=False,
+            background=self._apply_appearance_mode(self.theme["menu_fg_color"]),
+            foreground=self._apply_appearance_mode(self.theme["menu_text_color"]),
+            activebackground=self._apply_appearance_mode(self.theme["menu_hover_color"]),
+            activeforeground=self._apply_appearance_mode(self.theme["menu_text_color"]),
+            disabledforeground=self._apply_appearance_mode(
+                self.theme["menu_disabled_text_color"]
+            ),
+        )
 
     def _popup_menu(self, menu: tk.Menu, button: Any) -> None:
         self._destroy_active_menu()
@@ -857,6 +1033,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self._destroy_menu(self._active_menu)
 
     def _request_delete_card(self, card_id: Any) -> None:
+        if not self.actions.delete_cards:
+            return
         card = self.get_card(card_id)
         if card is None:
             return
@@ -869,10 +1047,14 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.delete_card(card_id)
 
     def _request_delete_column(self, column_id: Any) -> None:
+        if not self.actions.delete_columns:
+            return
         column = next((item for item in self.model.get_columns() if item["id"] == column_id), None)
         if column is None:
             return
         card_count = len(self.model.get_cards(column_id))
+        if card_count and not self.actions.delete_cards:
+            return
         message = f"Delete '{column['title']}'?"
         if card_count:
             message += f" This also deletes {card_count} card(s)."
@@ -918,12 +1100,15 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def _card_matches_search(self, card: Mapping[str, Any]) -> bool:
         if not self._search_query:
             return True
-        values = [
-            card.get("title", ""),
-            card.get("description", ""),
-            card.get("priority", ""),
-            *(card.get("tags") or []),
-        ]
+        values: list[Any] = []
+        for field in self.fields:
+            if not field.get("searchable"):
+                continue
+            value = card.get(field["key"], "")
+            if isinstance(value, (list, tuple, set)):
+                values.extend(value)
+            else:
+                values.append(value)
         return self._search_query in " ".join(str(value) for value in values).casefold()
 
     def _on_drag_press(self, card_widget: CTkKanbanCard, event: Any) -> None:
@@ -1039,6 +1224,11 @@ class CTkKanbanBoard(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Event boundary
     # ------------------------------------------------------------------
+    @staticmethod
+    def _require_action(enabled: bool, message: str) -> None:
+        if not enabled:
+            raise BoardModelError(message)
+
     def _emit_change(self, event_type: str, **payload: Any) -> None:
         if self.on_change is None:
             return

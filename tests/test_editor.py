@@ -59,3 +59,47 @@ def test_failed_save_stays_open_and_cancel_never_saves(tk_root: Any) -> None:
 
     assert len(calls) == 1
     assert not editor.winfo_exists()
+
+
+def test_custom_field_schema_generates_typed_controls_and_values(tk_root: Any) -> None:
+    saved: list[dict[str, Any]] = []
+    editor = CardEditor(
+        tk_root,
+        title="Edit card",
+        initial={
+            "column": "todo",
+            "title": "Flexible",
+            "estimate": 3,
+            "blocked": False,
+            "stage": "Discovery",
+        },
+        columns=[{"id": "todo", "title": "To do"}],
+        fields=[
+            {"key": "title", "label": "Title", "type": "text"},
+            {"key": "estimate", "label": "Estimate", "type": "integer"},
+            {"key": "blocked", "label": "Blocked", "type": "checkbox"},
+            {
+                "key": "stage",
+                "label": "Stage",
+                "type": "select",
+                "options": ["Discovery", "Delivery"],
+            },
+        ],
+        on_save=lambda value: saved.append(value),
+    )
+    tk_root.update()
+
+    editor._variables["estimate"].set("8")
+    editor._variables["blocked"].set(True)
+    editor._variables["stage"].set("Delivery")
+    editor.save()
+
+    assert saved == [
+        {
+            "title": "Flexible",
+            "estimate": 8,
+            "blocked": True,
+            "stage": "Delivery",
+            "column": "todo",
+        }
+    ]

@@ -6,6 +6,22 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
+- Added schema-driven card fields with generated editor controls for text,
+  textarea, number, integer, select, multiselect, checkbox, tags, date,
+  datetime, and hidden values.
+- Added arbitrary custom card-data round-tripping, typed validation, defaults,
+  ranges, options, custom validators/formatters, schema-aware search, and
+  configurable compact-card display roles.
+- Added `get_fields()` and atomic runtime `set_fields()` support, including a
+  `fields_changed` event when schema normalization changes stored values.
+- Added `allow_card_deletion` and structured action permissions, including
+  protection against cascading card deletion through a non-empty column.
+- Added `BoardConfig`, `ActionConfig`, `LayoutConfig`, and `TextConfig` for
+  behavior, layout, and user-facing labels.
+- Expanded theme coverage to typography, spacing, borders, radii, control
+  dimensions, compact-card limits, menu colors, scrollbars, and editor motion.
+- Extended row and cursor snapshot adapters to validate against custom fields.
+
 ## 2.0.1 - 2026-08-17
 
 - Replaced the hard-coded blue board palette with the active CustomTkinter theme.

@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from ctk_kanban import CTkKanbanBoard
+from ctk_kanban import BoardModelError, CTkKanbanBoard
 from ctk_kanban.editor import CardEditor
 
 
@@ -485,3 +485,161 @@ def test_refresh_preserves_viewports_and_global_binding_count(tk_root: Any) -> N
 
     assert binding_count(tk_root, "<MouseWheel>") == baseline_bindings
     assert binding_ids.isdisjoint(set(tk_root._tclCommands or ()))
+
+
+def test_card_deletion_can_be_disabled_without_a_column_cascade_loophole(
+    monkeypatch: Any,
+    tk_root: Any,
+) -> None:
+    captured: list[tk.Menu] = []
+    board = make_board(tk_root, allow_card_deletion=False)
+    monkeypatch.setattr(board, "_popup_menu", lambda menu, _button: captured.append(menu))
+
+    board._show_card_menu(board._card_widgets[1])
+    menu = captured[0]
+    labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
+
+    assert "Delete" not in labels
+    with pytest.raises(BoardModelError, match="card deletion is disabled"):
+        board.delete_card(1)
+    with pytest.raises(BoardModelError, match="non-empty column"):
+        board.delete_column("todo", delete_cards=True)
+    assert board.get_card(1) is not None
+    menu.destroy()
+
+
+def test_schema_drives_card_rendering_search_and_sidebar_updates(tk_root: Any) -> None:
+    fields = [
+        {
+            "key": "title",
+            "label": "Title",
+            "type": "text",
+            "show_on_card": True,
+            "searchable": True,
+            "card_role": "title",
+        },
+        {
+            "key": "client",
+            "label": "Client",
+            "type": "text",
+            "show_on_card": True,
+            "searchable": True,
+            "card_role": "metadata",
+        },
+        {
+            "key": "estimate",
+            "label": "Estimate",
+            "type": "integer",
+            "min": 0,
+            "show_on_card": True,
+            "card_role": "metadata",
+        },
+        {"key": "blocked", "label": "Blocked", "type": "checkbox"},
+    ]
+    board = make_board(
+        tk_root,
+        show_toolbar=True,
+        fields=fields,
+        cards=[
+            {
+                "id": 1,
+                "column": "todo",
+                "title": "Proposal",
+                "client": "Acme",
+                "estimate": 5,
+                "blocked": False,
+            },
+            {
+                "id": 2,
+                "column": "todo",
+                "title": "Internal",
+                "client": "Example",
+                "estimate": 2,
+                "blocked": False,
+            },
+        ],
+    )
+
+    assert [pill.cget("text") for pill in board._card_widgets[1].metadata_pills] == [
+        "Client: Acme",
+        "Estimate: 5",
+    ]
+    board.search("acme")
+    assert set(board._card_widgets) == {1}
+    board.search("")
+
+    board.open_edit_card_editor(1)
+    editor = board._editor
+    assert editor is not None
+    assert set(editor._field_widgets) == {"title", "client", "estimate", "blocked"}
+    editor._variables["client"].set("Globex")
+    editor._variables["estimate"].set("8")
+    editor.save()
+
+    assert board.get_card(1)["client"] == "Globex"
+    assert board.get_card(1)["estimate"] == 8
+
+    board.open_edit_card_editor(1)
+    previous_editor = board._editor
+    assert previous_editor is not None
+    board.set_fields(
+        [
+            *fields,
+            {"key": "due_date", "label": "Due date", "type": "date"},
+        ]
+    )
+    assert board._editor is not None
+    assert board._editor is not previous_editor
+    assert "due_date" in board._editor._field_widgets
+
+
+def test_structured_config_and_extended_theme_tokens_are_applied(tk_root: Any) -> None:
+    board = make_board(
+        tk_root,
+        show_toolbar=None,
+        config={
+            "actions": {"delete_cards": False},
+            "layout": {"show_toolbar": True, "editor_width": 480},
+            "text": {"board_title": "Release planning"},
+        },
+        theme={
+            "card_corner_radius": 18,
+            "card_description_max_chars": 40,
+            "column_gap": 11,
+        },
+    )
+
+    assert board.show_toolbar
+    assert board.board_title_label.cget("text") == "Release planning"
+    assert board.editor_width == 480
+    assert not board.actions.delete_cards
+    assert board._card_widgets[1].cget("corner_radius") == 18
+
+    no_add = make_board(
+        tk_root,
+        show_toolbar=None,
+        config={"actions": {"add_cards": False}, "layout": {"show_toolbar": True}},
+    )
+    no_add.set_loading(True)
+    no_add.set_loading(False)
+    assert no_add.add_card_button.cget("state") == "disabled"
+
+
+def test_runtime_schema_emits_when_it_normalizes_existing_values(tk_root: Any) -> None:
+    events: list[dict[str, Any]] = []
+    board = make_board(
+        tk_root,
+        cards=[{"id": 1, "column": "todo", "title": "Card", "estimate": "5"}],
+        on_change=events.append,
+    )
+
+    board.set_fields(
+        [
+            {"key": "title", "label": "Title", "type": "text"},
+            {"key": "estimate", "label": "Estimate", "type": "integer"},
+        ]
+    )
+
+    assert board.get_card(1)["estimate"] == 5
+    assert [event["type"] for event in events] == ["fields_changed"]
+    assert events[0]["fields"] == board.get_fields()

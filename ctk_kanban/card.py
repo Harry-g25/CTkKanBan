@@ -1,17 +1,20 @@
-"""Compact card widget for the Kanban board."""
+"""Compact, schema-driven card widget for the Kanban board."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Callable, Mapping
 
 import customtkinter as ctk
+
+from .fields import format_field_value, normalize_fields
 
 CardCallback = Callable[["CTkKanbanCard"], None]
 PointerCallback = Callable[["CTkKanbanCard", Any], None]
 
 
 class CTkKanbanCard(ctk.CTkFrame):
-    """Render one card with an open action, menu, and handle-only dragging."""
+    """Render one card using schema display roles and handle-only dragging."""
 
     def __init__(
         self,
@@ -19,6 +22,7 @@ class CTkKanbanCard(ctk.CTkFrame):
         card: Mapping[str, Any],
         theme: Mapping[str, Any],
         *,
+        fields: Sequence[Mapping[str, Any]] | None = None,
         on_select: CardCallback | None = None,
         on_edit: CardCallback | None = None,
         on_menu: CardCallback | None = None,
@@ -34,60 +38,51 @@ class CTkKanbanCard(ctk.CTkFrame):
             height=1,
             fg_color=theme["card_fg_color"],
             border_color=theme["card_border_color"],
-            border_width=1,
-            corner_radius=10,
+            border_width=theme["card_border_width"],
+            corner_radius=theme["card_corner_radius"],
         )
         self.card = dict(card)
         self.card_id = self.card["id"]
         self.theme = dict(theme)
+        self.fields = normalize_fields(fields)
         self._on_select = on_select
         self._on_edit = on_edit
         self._on_menu = on_menu
         self._selected = False
         self._dragging = False
         self._hovered = False
-
         self.grid_columnconfigure(1, weight=1)
 
-        priority = str(self.card.get("priority") or "").strip()
-        priority_key = priority.casefold()
-        strip_color = (
-            self.theme.get(f"priority_{priority_key}_color", self.theme["accent_color"])
-            if priority
-            else self.theme["accent_color"]
-        )
+        accent_field, accent_value = self._accent_value()
+        strip_color = self._value_color(accent_field, accent_value, self.theme["accent_color"])
         self.priority_strip = ctk.CTkFrame(
             self,
-            width=4,
+            width=self.theme["card_accent_width"],
             height=1,
-            corner_radius=2,
+            corner_radius=max(1, self.theme["card_accent_width"] // 2),
             fg_color=strip_color,
         )
         self.priority_strip.grid(
             row=0,
             column=0,
-            rowspan=3,
+            rowspan=100,
             padx=(8, 0),
             pady=10,
             sticky="ns",
         )
 
+        title_field = next(field for field in self.fields if field["card_role"] == "title")
+        title = format_field_value(title_field, self.card.get(title_field["key"]), self.card)
         self.title_label = ctk.CTkLabel(
             self,
-            text=str(self.card.get("title") or "Untitled"),
+            text=title or "Untitled",
             anchor="w",
             justify="left",
             wraplength=max(140, width - 104),
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(**self.theme["card_title_font"]),
         )
-        self.title_label.grid(
-            row=0,
-            column=1,
-            padx=(12, 4),
-            pady=(11, 3),
-            sticky="ew",
-        )
+        self.title_label.grid(row=0, column=1, padx=(12, 4), pady=(11, 3), sticky="ew")
 
         self.drag_handle = ctk.CTkLabel(
             self,
@@ -106,39 +101,38 @@ class CTkKanbanCard(ctk.CTkFrame):
             text="⋯",
             width=30,
             height=26,
-            corner_radius=8,
+            corner_radius=self.theme["control_corner_radius"],
             fg_color="transparent",
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
             command=self._menu,
         )
-        self.menu_button.grid(row=0, column=3, padx=(0, 8), pady=(8, 2), sticky="n")
+        if on_menu is not None:
+            self.menu_button.grid(row=0, column=3, padx=(0, 8), pady=(8, 2), sticky="n")
 
-        # Compatibility for integrations that invoked the former visible edit
-        # button directly. The card surface is now the visible open action.
-        self.edit_button = ctk.CTkButton(
-            self,
-            text="",
-            width=1,
-            height=1,
-            command=self._edit,
-        )
+        # Kept as a non-gridded compatibility command surface.
+        self.edit_button = ctk.CTkButton(self, text="", width=1, height=1, command=self._edit)
 
+        interactive: list[Any] = [self, self.priority_strip, self.title_label]
         next_row = 1
-        description = str(self.card.get("description") or "").strip()
-        if description:
-            if len(description) > 150:
-                description = f"{description[:149].rstrip()}…"
-            self.description_label = ctk.CTkLabel(
+        self.body_labels: list[ctk.CTkLabel] = []
+        for field in self._visible_fields("body"):
+            value = format_field_value(field, self.card.get(field["key"]), self.card)
+            if not value:
+                continue
+            limit = int(self.theme["card_description_max_chars"])
+            if len(value) > limit:
+                value = f"{value[: limit - 1].rstrip()}…"
+            label = ctk.CTkLabel(
                 self,
-                text=description,
+                text=value,
                 anchor="w",
                 justify="left",
                 wraplength=max(160, width - 48),
                 text_color=self.theme["muted_text_color"],
-                font=ctk.CTkFont(size=11),
+                font=ctk.CTkFont(**self.theme["card_body_font"]),
             )
-            self.description_label.grid(
+            label.grid(
                 row=next_row,
                 column=1,
                 columnspan=3,
@@ -146,16 +140,22 @@ class CTkKanbanCard(ctk.CTkFrame):
                 pady=(1, 7),
                 sticky="ew",
             )
+            self.body_labels.append(label)
+            if field["key"] == "description":
+                self.description_label = label
+            interactive.append(label)
             next_row += 1
 
-        raw_tags = self.card.get("tags") or []
-        if isinstance(raw_tags, str):
-            tags = [item.strip() for item in raw_tags.split(",") if item.strip()]
-        else:
-            tags = [str(item).strip() for item in raw_tags if str(item).strip()]
         self.priority_pill: ctk.CTkLabel | None = None
         self.tag_pills: list[ctk.CTkLabel] = []
-        if priority or tags:
+        self.metadata_pills: list[ctk.CTkLabel] = []
+        self.all_pills: list[ctk.CTkLabel] = []
+        metadata_fields = [
+            *self._visible_fields("badge"),
+            *self._visible_fields("tags"),
+            *self._visible_fields("metadata"),
+        ]
+        if any(self._has_display_value(field) for field in metadata_fields):
             self.metadata_frame = ctk.CTkFrame(self, height=1, fg_color="transparent")
             self.metadata_frame.grid(
                 row=next_row,
@@ -165,32 +165,46 @@ class CTkKanbanCard(ctk.CTkFrame):
                 pady=(0, 11),
                 sticky="ew",
             )
-            pills: list[tuple[str, Any, bool]] = []
-            if priority:
-                color = self.theme.get(
-                    f"priority_{priority.casefold()}_color",
-                    self.theme["accent_color"],
-                )
-                pills.append((priority, color, True))
+            pills: list[tuple[str, Any, str]] = []
+            for field in self._visible_fields("badge"):
+                badge_value = self.card.get(field["key"])
+                display = format_field_value(field, badge_value, self.card)
+                if display:
+                    kind = "priority" if field["key"] == "priority" else "metadata"
+                    pills.append((display, self._value_color(field, badge_value), kind))
             palette = self.theme["tag_pill_colors"]
-            for tag in tags[:4]:
-                display = tag if len(tag) <= 18 else f"{tag[:17]}…"
-                color_index = sum(ord(character) for character in tag) % len(palette)
-                pills.append((f"#{display}", palette[color_index], False))
+            for field in self._visible_fields("tags"):
+                values = self.card.get(field["key"]) or []
+                if isinstance(values, str):
+                    values = [item.strip() for item in values.split(",") if item.strip()]
+                for item in list(values)[: int(self.theme["card_max_visible_tags"])]:
+                    display = str(item)
+                    if len(display) > 18:
+                        display = f"{display[:17]}…"
+                    color_index = sum(ord(character) for character in str(item)) % len(palette)
+                    pills.append((f"#{display}", palette[color_index], "tag"))
+            for field in self._visible_fields("metadata"):
+                metadata_value = self.card.get(field["key"])
+                display = format_field_value(field, metadata_value, self.card)
+                if display:
+                    pills.append(
+                        (
+                            f"{field['label']}: {display}",
+                            self._value_color(
+                                field, metadata_value, self.theme["count_fg_color"]
+                            ),
+                            "metadata",
+                        )
+                    )
             self._build_pill_rows(pills, max_width=max(160, width - 48))
-        elif not description:
+            interactive.append(self.metadata_frame)
+            interactive.extend(self.all_pills)
+        elif not self.body_labels:
             self.title_label.grid_configure(pady=(11, 11))
 
-        interactive: list[Any] = [self, self.priority_strip, self.title_label]
-        if hasattr(self, "description_label"):
-            interactive.append(self.description_label)
-        if hasattr(self, "metadata_frame"):
-            interactive.append(self.metadata_frame)
-        interactive.extend(pill for pill in [self.priority_pill, *self.tag_pills] if pill is not None)
         for widget in interactive:
             self._bind_select(widget)
             self._bind_hover(widget)
-
         if drag_enabled:
             self.drag_handle.bind(
                 "<ButtonPress-1>",
@@ -208,6 +222,43 @@ class CTkKanbanCard(ctk.CTkFrame):
                 add="+",
             )
 
+    def _visible_fields(self, role: str) -> list[Mapping[str, Any]]:
+        return [
+            field
+            for field in self.fields
+            if field["show_on_card"] and field["card_role"] == role
+        ]
+
+    def _has_display_value(self, field: Mapping[str, Any]) -> bool:
+        value = self.card.get(field["key"])
+        return value is not None and value != "" and value != [] and value != ()
+
+    def _accent_value(self) -> tuple[Mapping[str, Any] | None, Any]:
+        for field in self._visible_fields("badge"):
+            value = self.card.get(field["key"])
+            if value not in (None, ""):
+                return field, value
+        return None, None
+
+    def _value_color(
+        self,
+        field: Mapping[str, Any] | None,
+        value: Any,
+        fallback: Any | None = None,
+    ) -> Any:
+        fallback = self.theme["accent_color"] if fallback is None else fallback
+        if field is None:
+            return fallback
+        colors = field.get("colors", {})
+        try:
+            if value in colors:
+                return colors[value]
+        except TypeError:
+            pass
+        if field["key"] == "priority" and value:
+            return self.theme.get(f"priority_{str(value).casefold()}_color", fallback)
+        return fallback
+
     def _bind_select(self, widget: Any) -> None:
         widget.bind("<ButtonRelease-1>", lambda _event: self._select(), add="+")
 
@@ -215,10 +266,10 @@ class CTkKanbanCard(ctk.CTkFrame):
         widget.bind("<Enter>", lambda _event: self._set_hovered(True), add="+")
         widget.bind("<Leave>", lambda _event: self._set_hovered(False), add="+")
 
-    def _build_pill_rows(self, pills: list[tuple[str, Any, bool]], *, max_width: int) -> None:
+    def _build_pill_rows(self, pills: list[tuple[str, Any, str]], *, max_width: int) -> None:
         row: ctk.CTkFrame | None = None
         row_width = 0
-        for text, color, is_priority in pills:
+        for text, color, kind in pills:
             pill_width = max(42, 18 + len(text) * 6)
             if row is None or row_width + pill_width > max_width:
                 has_previous_row = row is not None
@@ -229,17 +280,20 @@ class CTkKanbanCard(ctk.CTkFrame):
                 row,
                 text=text,
                 width=pill_width,
-                height=21,
-                corner_radius=7,
+                height=self.theme["pill_height"],
+                corner_radius=self.theme["pill_corner_radius"],
                 fg_color=color,
                 text_color=self.theme["pill_text_color"],
-                font=ctk.CTkFont(size=10, weight="bold"),
+                font=ctk.CTkFont(**self.theme["pill_font"]),
             )
             pill.pack(side="left", padx=(0, 5))
-            if is_priority:
+            self.all_pills.append(pill)
+            if kind == "priority":
                 self.priority_pill = pill
-            else:
+            elif kind == "tag":
                 self.tag_pills.append(pill)
+            else:
+                self.metadata_pills.append(pill)
             row_width += pill_width + 5
 
     def _select(self) -> None:
@@ -263,7 +317,11 @@ class CTkKanbanCard(ctk.CTkFrame):
     def set_selected(self, selected: bool) -> None:
         self._selected = bool(selected)
         self.configure(
-            border_width=2 if self._selected else 1,
+            border_width=(
+                self.theme["card_selected_border_width"]
+                if self._selected
+                else self.theme["card_border_width"]
+            ),
             border_color=(
                 self.theme["selected_border_color"]
                 if self._selected

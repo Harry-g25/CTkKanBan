@@ -124,3 +124,23 @@ def test_snapshot_from_cursors_builds_the_exact_board_shape() -> None:
 
     assert snapshot["cards"][0]["column"] == "todo"
     assert snapshot["cards"][0]["tags"] == ["database"]
+
+
+def test_snapshot_helpers_accept_custom_field_schema() -> None:
+    snapshot = snapshot_from_rows(
+        [{"id": "todo", "title": "To do"}],
+        [
+            {
+                "id": 1,
+                "column": "todo",
+                "title": "Database card",
+                "estimate": "5",
+            }
+        ],
+        fields=[
+            {"key": "title", "label": "Title", "type": "text"},
+            {"key": "estimate", "label": "Estimate", "type": "integer"},
+        ],
+    )
+
+    assert snapshot["cards"][0]["estimate"] == 5

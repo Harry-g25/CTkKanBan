@@ -8,6 +8,8 @@ from .adapters import (
     snapshot_from_rows,
 )
 from .board import CTkKanbanBoard
+from .config import ActionConfig, BoardConfig, LayoutConfig, TextConfig, merge_config
+from .fields import DEFAULT_FIELDS, FieldDefinition, FieldType
 from .model import (
     BoardModel,
     BoardModelError,
@@ -22,14 +24,22 @@ from .version import __version__
 
 __all__ = [
     "CTkKanbanBoard",
+    "ActionConfig",
     "BoardModel",
     "BoardModelError",
     "BoardSnapshot",
+    "BoardConfig",
     "Card",
     "CardRecord",
     "Column",
     "ColumnRecord",
+    "DEFAULT_FIELDS",
     "DEFAULT_THEME",
+    "FieldDefinition",
+    "FieldType",
+    "LayoutConfig",
+    "TextConfig",
+    "merge_config",
     "merge_theme",
     "normalize_row",
     "normalize_rows",

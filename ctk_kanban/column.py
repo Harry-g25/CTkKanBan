@@ -9,6 +9,7 @@ import customtkinter as ctk
 
 from ._scrolling import ManagedScrollableFrame
 from .card import CTkKanbanCard
+from .config import TextConfig
 
 
 class CTkKanbanColumn(ctk.CTkFrame):
@@ -25,6 +26,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         accent_color: Any | None = None,
         on_add: Callable[[Any], None] | None = None,
         on_menu: Callable[[Any, Any], None] | None = None,
+        text: TextConfig | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -32,8 +34,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
             height=height,
             fg_color=theme["column_fg_color"],
             border_color=theme["column_border_color"],
-            border_width=1,
-            corner_radius=12,
+            border_width=theme["column_border_width"],
+            corner_radius=theme["column_corner_radius"],
         )
         self.grid_propagate(False)
         self.column = dict(column)
@@ -41,6 +43,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.theme = dict(theme)
         self.accent_color = accent_color or self.theme["accent_color"]
         self._on_add = on_add
+        self.text = text or TextConfig()
         self.card_widgets: list[CTkKanbanCard] = []
         self._drop_active = False
         self._drop_index: int | None = None
@@ -50,14 +53,26 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
         self.accent_bar = ctk.CTkFrame(
             self,
-            height=3,
+            height=self.theme["column_accent_height"],
             corner_radius=2,
             fg_color=self.accent_color,
         )
-        self.accent_bar.grid(row=0, column=0, padx=12, pady=(10, 2), sticky="ew")
+        self.accent_bar.grid(
+            row=0,
+            column=0,
+            padx=self.theme["column_header_padding_x"],
+            pady=(10, 2),
+            sticky="ew",
+        )
 
         header = ctk.CTkFrame(self, fg_color=self.theme["column_header_fg_color"])
-        header.grid(row=1, column=0, padx=12, pady=(5, 8), sticky="ew")
+        header.grid(
+            row=1,
+            column=0,
+            padx=self.theme["column_header_padding_x"],
+            pady=(5, 8),
+            sticky="ew",
+        )
         header.grid_columnconfigure(0, weight=1)
 
         self.title_label = ctk.CTkLabel(
@@ -65,7 +80,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             text=str(self.column["title"]),
             anchor="w",
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=ctk.CTkFont(**self.theme["column_title_font"]),
         )
         self.title_label.grid(row=0, column=0, sticky="ew")
 
@@ -77,11 +92,11 @@ class CTkKanbanColumn(ctk.CTkFrame):
             corner_radius=7,
             fg_color=self.theme["count_fg_color"],
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(**self.theme["column_count_font"]),
         )
         self.count_label.grid(row=0, column=1, padx=(8, 5))
 
-        add_button = ctk.CTkButton(
+        self.add_button = ctk.CTkButton(
             header,
             text="+",
             width=30,
@@ -89,7 +104,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
             corner_radius=8,
             command=lambda: on_add(self.column_id) if on_add is not None else None,
         )
-        add_button.grid(row=0, column=2, padx=2)
+        if on_add is not None:
+            self.add_button.grid(row=0, column=2, padx=2)
 
         self.menu_button: ctk.CTkButton = ctk.CTkButton(
             header,
@@ -103,7 +119,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         )
         if on_menu is not None:
             self.menu_button.configure(command=lambda: on_menu(self.column_id, self.menu_button))
-        self.menu_button.grid(row=0, column=3, padx=(2, 0))
+            self.menu_button.grid(row=0, column=3, padx=(2, 0))
 
         self.body: Any = ManagedScrollableFrame(
             self,
@@ -113,7 +129,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         )
         self.body.grid(row=2, column=0, padx=7, pady=(0, 8), sticky="nsew")
         if hasattr(self.body, "_scrollbar"):
-            self.body._scrollbar.configure(width=7)
+            self.body._scrollbar.configure(width=self.theme["scrollbar_width"])
 
         self.drop_indicator = ctk.CTkFrame(
             self.body,
@@ -133,7 +149,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
     def add_card(self, card: CTkKanbanCard) -> None:
         self._clear_empty()
         self.card_widgets.append(card)
-        card.pack(fill="x", padx=3, pady=6)
+        card.pack(fill="x", padx=3, pady=self.theme["card_gap"])
         self.count_label.configure(text=str(len(self.card_widgets)))
 
     def set_cards(self, cards: list[CTkKanbanCard], *, empty_text: str = "No cards") -> None:
@@ -155,7 +171,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
             if card in current:
                 card.pack_forget()
                 current.remove(card)
-            options = {"fill": "x", "padx": 3, "pady": 6}
+            options = {"fill": "x", "padx": 3, "pady": self.theme["card_gap"]}
             if index < len(current):
                 card.pack(before=current[index], **options)
             else:
@@ -184,18 +200,18 @@ class CTkKanbanColumn(ctk.CTkFrame):
         ).pack(pady=(0, 9))
         self.empty_label = ctk.CTkLabel(
             self.empty_frame,
-            text="No results" if is_search else "No cards yet",
+            text=self.text.no_results if is_search else self.text.no_cards,
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(**self.theme["column_empty_title_font"]),
         )
         self.empty_label.pack()
         ctk.CTkLabel(
             self.empty_frame,
-            text="Try another search" if is_search else "Add a card to get started",
+            text=self.text.no_results_help if is_search else self.text.no_cards_help,
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(**self.theme["column_empty_body_font"]),
         ).pack(pady=(2, 10))
-        if not is_search:
+        if not is_search and self._on_add is not None:
             ctk.CTkButton(
                 self.empty_frame,
                 text="Add card",

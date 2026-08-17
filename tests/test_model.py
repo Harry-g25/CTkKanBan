@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from ctk_kanban.model import BoardModel, BoardModelError, Card, Column
@@ -167,16 +169,16 @@ def test_load_is_snapshot_round_trip_and_atomic_on_failure() -> None:
         model.load({"columns": None, "cards": None})
     assert model.snapshot() == saved
 
-    with pytest.raises(BoardModelError, match="cannot update card field"):
-        model.load(
-            {
-                "columns": [{"id": "todo", "title": "To do"}],
-                "cards": [
-                    {"id": 1, "column": "todo", "title": "Card", "custom": "lost"}
-                ],
-            }
-        )
-    assert model.snapshot() == saved
+    model.load(
+        {
+            "columns": [{"id": "todo", "title": "To do"}],
+            "cards": [
+                {"id": 1, "column": "todo", "title": "Card", "custom": "retained"}
+            ],
+        }
+    )
+    assert model.get_card(1)["custom"] == "retained"
+    custom_saved = model.snapshot()
 
     with pytest.raises(BoardModelError, match="unknown column"):
         model.load(
@@ -185,7 +187,7 @@ def test_load_is_snapshot_round_trip_and_atomic_on_failure() -> None:
                 "cards": [{"id": 99, "column_id": "missing", "title": "Bad"}],
             }
         )
-    assert model.snapshot() == saved
+    assert model.snapshot() == custom_saved
 
 
 def test_card_crud_and_input_validation() -> None:
@@ -253,3 +255,86 @@ def test_column_crud_ordering_delete_guard_and_clear() -> None:
 
     model.clear()
     assert model.snapshot() == {"columns": [], "cards": []}
+
+
+def test_configured_fields_normalize_types_validate_and_preserve_unknown_data() -> None:
+    fields = [
+        {
+            "key": "title",
+            "label": "Title",
+            "type": "text",
+            "required": True,
+            "card_role": "title",
+            "show_on_card": True,
+        },
+        {
+            "key": "estimate",
+            "label": "Estimate",
+            "type": "integer",
+            "min": 0,
+            "max": 20,
+            "show_on_card": True,
+            "card_role": "metadata",
+        },
+        {"key": "blocked", "label": "Blocked", "type": "checkbox"},
+        {"key": "due_date", "label": "Due date", "type": "date"},
+        {
+            "key": "stage",
+            "label": "Stage",
+            "type": "select",
+            "options": ["Discovery", "Delivery"],
+        },
+    ]
+    nested = {"owners": ["Ada"]}
+    model = BoardModel(
+        columns=[{"id": "todo", "title": "To do"}],
+        cards=[
+            {
+                "id": 1,
+                "column": "todo",
+                "title": "  Flexible card  ",
+                "estimate": "8",
+                "blocked": False,
+                "due_date": date(2026, 8, 28),
+                "stage": "Delivery",
+                "integration_data": nested,
+            }
+        ],
+        fields=fields,
+    )
+    nested["owners"].append("Changed outside")
+
+    card = model.get_card(1)
+    assert card["title"] == "Flexible card"
+    assert card["estimate"] == 8
+    assert card["blocked"] is False
+    assert card["due_date"] == "2026-08-28"
+    assert card["integration_data"] == {"owners": ["Ada"]}
+
+    card["integration_data"]["owners"].append("Changed copy")
+    assert model.get_card(1)["integration_data"] == {"owners": ["Ada"]}
+    with pytest.raises(BoardModelError, match="Estimate"):
+        model.update_card(1, estimate=21)
+    with pytest.raises(BoardModelError, match="Stage"):
+        model.update_card(1, stage="Unknown")
+    with pytest.raises(BoardModelError, match="YYYY-MM-DD"):
+        model.update_card(1, due_date="28/08/2026")
+
+
+def test_field_schema_can_be_replaced_atomically() -> None:
+    model = BoardModel(
+        columns=[{"id": "todo", "title": "To do"}],
+        cards=[{"id": 1, "column": "todo", "title": "Card", "score": 5}],
+    )
+    original_fields = model.get_fields()
+
+    with pytest.raises(BoardModelError, match="at most"):
+        model.set_fields(
+            [
+                {"key": "title", "label": "Title", "type": "text"},
+                {"key": "score", "label": "Score", "type": "integer", "max": 2},
+            ]
+        )
+
+    assert model.get_fields() == original_fields
+    assert model.get_card(1)["score"] == 5
