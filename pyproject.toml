@@ -39,6 +39,9 @@ dev = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/Harry-g25/CTkKanBan"
+Documentation = "https://harry-g25.github.io/CTkKanBan/"
+Changelog = "https://github.com/Harry-g25/CTkKanBan/blob/main/CHANGELOG.md"
 Source = "https://github.com/Harry-g25/CTkKanBan"
 Issues = "https://github.com/Harry-g25/CTkKanBan/issues"
 

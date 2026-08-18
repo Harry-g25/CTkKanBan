@@ -344,7 +344,7 @@
 
   <nav class="topnav" aria-label="Primary">
     <a class="nav-title" href="#hero">CTkKanban</a>
-    <span class="nav-ver">v2.0.1 Docs</span>
+    <span class="nav-ver">v2.1.0 Docs</span>
     <div class="nav-spacer"></div>
     <a class="nav-a" href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a class="nav-a" href="https://pypi.org/project/CTkKanBan/" target="_blank" rel="noopener noreferrer">PyPI</a>
@@ -358,7 +358,7 @@
           <div class="nav-group-title">Overview</div>
           <a class="nav-item" href="#hero">Introduction</a>
           <a class="nav-item" href="#installation">Installation</a>
-          <a class="nav-item" href="#release-200">Release 2.0.0</a>
+          <a class="nav-item" href="#release-210">Release 2.1.0</a>
           <a class="nav-item" href="#quick-start">Quick Start</a>
         </div>
         <div class="nav-group">
@@ -373,6 +373,7 @@
           <a class="nav-item" href="#data-schema">Data Schema</a>
           <a class="nav-item nav-sub" href="#data-columns">Columns</a>
           <a class="nav-item nav-sub" href="#data-cards">Cards</a>
+          <a class="nav-item" href="#field-schema">Card Field Schema</a>
           <a class="nav-item" href="#data-snapshots">Snapshots</a>
           <a class="nav-item" href="#data-database">Database Rows</a>
         </div>
@@ -385,6 +386,7 @@
           <a class="nav-item" href="#feat-events">Change Events</a>
           <a class="nav-item" href="#feat-external-editor">External Editor</a>
           <a class="nav-item" href="#feat-loading">Loading &amp; Async</a>
+          <a class="nav-item" href="#feat-config">Configuration &amp; Permissions</a>
           <a class="nav-item" href="#feat-styling">Styling &amp; Themes</a>
         </div>
         <div class="nav-group">
@@ -395,6 +397,7 @@
           <a class="nav-item" href="#api-records">Records &amp; Types</a>
           <a class="nav-item" href="#api-adapters">Data Adapters</a>
           <a class="nav-item" href="#api-theme">Theme API</a>
+          <a class="nav-item" href="#api-errors">Errors &amp; Lifecycle</a>
         </div>
         <div class="nav-group">
           <div class="nav-group-title">Help</div>
@@ -409,7 +412,7 @@
         <div class="hero">
           <div class="hero-eyebrow">&#10022; CustomTkinter Widget</div>
           <h1>CTkKanban</h1>
-          <p class="hero-sub">A focused Kanban board for CustomTkinter. Build desktop workflows with explicit editing, dependable card movement, application-owned persistence, and a small typed API.</p>
+          <p class="hero-sub">A focused Kanban board for CustomTkinter. Build desktop workflows with schema-driven card data, explicit editing, granular permissions, dependable movement, application-owned persistence, and a typed API.</p>
           <div class="hero-install">
             <span class="pr">$</span>
             <span id="install-cmd">python -m pip install --upgrade CTkKanBan</span>
@@ -432,7 +435,7 @@
           <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>python -m pip install --upgrade CTkKanBan</code></pre>
         </div>
-        <p>CTkKanban 2.0.1 supports Python 3.10 through 3.14 and CustomTkinter 5.2.2 through the current 6.x line.</p>
+        <p>CTkKanban requires Python 3.10 or newer. Its package metadata accepts CustomTkinter 5.2.2 or newer below major version 7.</p>
         <p>Although the distribution name uses capitals, import the package with its canonical lowercase module name:</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
@@ -443,40 +446,54 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>from ctk_kanban import (
+    ActionConfig,
+    BoardConfig,
     BoardModel,
     BoardModelError,
+    BoardSnapshot,
     Card,
+    CardRecord,
     Column,
+    ColumnRecord,
+    DEFAULT_FIELDS,
     DEFAULT_THEME,
+    FieldDefinition,
+    FieldType,
+    LayoutConfig,
+    TextConfig,
+    merge_config,
+    merge_theme,
     normalize_row,
     normalize_rows,
     rows_from_cursor,
     snapshot_from_cursors,
     snapshot_from_rows,
+    __version__,
 )</code></pre>
         </div>
       </section>
 
-      <section id="release-200">
-        <h2>Release 2.0.0 Highlights</h2>
+      <section id="release-210">
+        <h2>Release 2.1.0 Highlights</h2>
         <hr class="section-hr">
-        <p>Version 2 is a deliberate reset around a smaller and more predictable board API.</p>
+        <p>Version 2.1 keeps the focused 2.x board API while adding the flexibility needed by real applications.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Area</th><th>What changed</th></tr></thead>
             <tbody>
-              <tr><td>Editing</td><td>One embedded side drawer with explicit save and cancel behavior.</td></tr>
-              <tr><td>Movement</td><td>Card dragging is restricted to a visible handle; menus provide dependable alternatives.</td></tr>
-              <tr><td>Persistence</td><td>One <code>on_change</code> boundary returns complete snapshots to the host application.</td></tr>
-              <tr><td>Data</td><td>A Tk-free <code>BoardModel</code>, typed record shapes, and strict validation.</td></tr>
-              <tr><td>Databases</td><td>Helpers for DB-API cursors, mapping rows, SQLAlchemy rows, and asynchronous fetching.</td></tr>
-              <tr><td>Appearance</td><td>A responsive toolbar, centered columns, polished cards, empty states, and theme tokens.</td></tr>
+              <tr><td>Custom fields</td><td>Any number of schema-defined text, numeric, choice, date, boolean, tag, or hidden values now drive validation, the editor, compact cards, and search.</td></tr>
+              <tr><td>Runtime schemas</td><td><code>get_fields()</code> and atomic <code>set_fields()</code> support safe schema inspection and replacement.</td></tr>
+              <tr><td>Configuration</td><td>Structured action permissions, layout settings, customizable text, and delete-confirmation policy replace scattered flags.</td></tr>
+              <tr><td>Deletion control</td><td>Card and column deletion can be disabled independently, including protection against bypass through a non-empty column cascade.</td></tr>
+              <tr><td>Appearance</td><td>The closed theme surface now covers 97 color, typography, spacing, geometry, limit, scrollbar, menu, and motion tokens.</td></tr>
+              <tr><td>Data integration</td><td>Arbitrary card metadata round-trips safely and row/cursor snapshot adapters validate against the active field schema.</td></tr>
+              <tr><td>Documentation</td><td>The README, browser guide, maintainer runbooks, and automated drift checks now cover the complete public contract.</td></tr>
             </tbody>
           </table>
         </div>
-        <div class="callout c-warn">
-          <div class="callout-t">Breaking release</div>
-          <p>Version 2 removes the 1.x field-definition, persistence, filtering, sorting, and generated-form systems. Read <a href="#migration">Migrating from 1.x</a> before upgrading an older application.</p>
+        <div class="callout c-info">
+          <div class="callout-t">Compatibility</div>
+          <p>The default title, description, priority, and tags behavior remains available when <code>fields</code> and <code>config</code> are omitted. Applications still on 1.x should read <a href="#migration">Migrating from 1.x</a> because the focused 2.x architecture remains intentionally different.</p>
         </div>
       </section>
 
@@ -565,7 +582,7 @@ board = CTkKanbanBoard(
         <p>CTkKanban makes destructive and mutating actions visible and deliberate. Use <code>config["actions"]</code> or <code>allow_card_deletion=False</code> to remove operations that a particular application must not expose:</p>
         <ul>
           <li>Click a card body or its <strong>Edit</strong> action to select it and open the editor drawer.</li>
-          <li>Save with <strong>Save changes</strong>, Enter outside the description box, or Ctrl+Enter anywhere in the editor.</li>
+          <li>Save with <strong>Save changes</strong>, Enter outside a multiline textbox, or Ctrl+Enter anywhere in the editor.</li>
           <li>Press Escape or choose <strong>Cancel</strong> to close the drawer without saving.</li>
           <li>Drag from the handle in the card's upper-right corner. A six-pixel threshold prevents accidental drags.</li>
           <li>Use card menus to move up, move down, move between columns, edit, or delete.</li>
@@ -745,7 +762,7 @@ app.mainloop()</code></pre>
     ],
 }</code></pre>
         </div>
-        <p>Unknown fields are rejected rather than silently ignored. Loading is atomic: if any column or card is invalid, the current model remains unchanged.</p>
+        <p>Unknown top-level snapshot keys and unknown column keys are rejected. Card mappings are intentionally extensible: schema-defined keys are normalized and other top-level card keys are deep-copied for round-tripping. Loading is atomic, so any invalid column, card, or relationship leaves the current model unchanged.</p>
       </section>
 
       <section id="data-columns">
@@ -779,7 +796,131 @@ app.mainloop()</code></pre>
             </tbody>
           </table>
         </div>
-        <p>Cards are serialized in column order and then in their manual top-to-bottom order. IDs should be stable database keys; use strings or integers when snapshots will be JSON encoded.</p>
+        <p>The fields above are the default schema. A custom schema may add any number of top-level values, while undeclared integration values are preserved without being edited, displayed, validated, formatted, or searched. Cards are serialized in column order and then in their manual top-to-bottom order. IDs should be stable database keys; use strings or integers when snapshots will be JSON encoded.</p>
+      </section>
+
+      <section id="field-schema">
+        <h2>Card Field Schema</h2>
+        <hr class="section-hr">
+        <p>Pass <code>fields</code> to the board, model, or snapshot adapters to describe any number of card data points. One ordered definition controls normalization, generated editor controls, drawer grouping, local search, compact-card placement, custom validation, and display formatting.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>fields = [
+    {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "required": True,
+        "searchable": True,
+        "show_on_card": True,
+        "card_role": "title",
+    },
+    {
+        "key": "estimate",
+        "label": "Estimate",
+        "type": "integer",
+        "min": 0,
+        "max": 100,
+        "section": "Planning",
+        "show_on_card": True,
+        "card_role": "metadata",
+        "formatter": lambda value, _card: (
+            "" if value is None else f"{value} pts"
+        ),
+    },
+    {
+        "key": "stage",
+        "label": "Stage",
+        "type": "select",
+        "options": ["Discovery", "Delivery", "Review"],
+        "show_on_card": True,
+        "card_role": "badge",
+        "colors": {"Delivery": ("#DCFCE7", "#14532D")},
+    },
+]
+
+board = CTkKanbanBoard(
+    app, columns=columns, cards=cards, fields=fields
+)</code></pre>
+        </div>
+
+        <h3>Supported types</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Type</th><th>Editor control</th><th>Normalized value</th></tr></thead>
+            <tbody>
+              <tr><td><code>text</code></td><td>Single-line entry</td><td>Trimmed <code>str</code>; <code>None</code> becomes empty text.</td></tr>
+              <tr><td><code>textarea</code></td><td>Multiline textbox</td><td>Trimmed <code>str</code>; <code>None</code> becomes empty text.</td></tr>
+              <tr><td><code>number</code></td><td>Entry</td><td><code>float | None</code>; booleans are rejected.</td></tr>
+              <tr><td><code>integer</code></td><td>Entry</td><td><code>int | None</code>; fractional float input is rejected.</td></tr>
+              <tr><td><code>select</code></td><td>Option menu</td><td>One value; non-empty <code>options</code> are enforced.</td></tr>
+              <tr><td><code>multiselect</code></td><td>Add/remove pills</td><td>Deduplicated <code>list</code>; non-empty <code>options</code> are enforced on save.</td></tr>
+              <tr><td><code>date</code></td><td>Entry</td><td>ISO <code>YYYY-MM-DD</code> or empty text; accepts <code>date</code> input.</td></tr>
+              <tr><td><code>datetime</code></td><td>Entry</td><td>ISO date-time or empty text; accepts <code>datetime</code> and trailing <code>Z</code> input.</td></tr>
+              <tr><td><code>checkbox</code></td><td>Checkbox</td><td>Strict <code>bool</code>.</td></tr>
+              <tr><td><code>tags</code></td><td>Add/remove tag pills</td><td>Deduplicated <code>list[str]</code>; trimmed, nonblank, comma-free items.</td></tr>
+              <tr><td><code>hidden</code></td><td>Hidden by default</td><td>Deep-copied application value for schema-controlled data without UI.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout c-info">
+          <div class="callout-t">Control behavior</div>
+          <p>Date and date-time controls are text entries and validate on save. Multiselect is a compact add/remove input rather than a large checklist. Supply <code>options</code> for useful select editor choices; an empty sequence only means programmatic validation is unrestricted.</p>
+        </div>
+
+        <h3>Definition options</h3>
+        <p>Each mapping requires a unique, nonblank <code>key</code> and <code>label</code>. Unknown options are rejected.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>type</code></td><td><code>"text"</code></td><td>One of the eleven supported type strings.</td></tr>
+              <tr><td><code>required</code></td><td><code>False</code></td><td>Reject <code>None</code>, empty text, and empty lists.</td></tr>
+              <tr><td><code>default</code></td><td>Type-dependent</td><td>Deep-copied when a configured key is absent. New controls use list <code>[]</code>, checkbox <code>False</code>, numeric <code>None</code>, or empty text when no explicit default exists.</td></tr>
+              <tr><td><code>placeholder</code></td><td>Empty</td><td>Entry hint; list inputs fall back to “Add a value”.</td></tr>
+              <tr><td><code>options</code></td><td><code>()</code></td><td>Allowed sequence for select/multiselect. Empty means no model-level restriction.</td></tr>
+              <tr><td><code>show_on_card</code></td><td>Role-dependent</td><td>Render on compact cards; true unless the inferred role is hidden.</td></tr>
+              <tr><td><code>show_in_editor</code></td><td>Type-dependent</td><td>Generate a drawer control; false by default only for hidden fields.</td></tr>
+              <tr><td><code>searchable</code></td><td><code>False</code></td><td>Include the field in case-insensitive substring search.</td></tr>
+              <tr><td><code>read_only</code></td><td><code>False</code></td><td>Disable the generated control while retaining its value.</td></tr>
+              <tr><td><code>section</code></td><td><code>"Details"</code></td><td>Drawer group; groups follow first appearance. Column selection lives in <code>Organisation</code>.</td></tr>
+              <tr><td><code>card_role</code></td><td><code>metadata</code> or <code>hidden</code></td><td>Compact-card presentation role.</td></tr>
+              <tr><td><code>help_text</code></td><td>Empty</td><td>Supporting copy; for checkbox controls it becomes the checkbox label.</td></tr>
+              <tr><td><code>min</code>, <code>max</code></td><td>Unset</td><td>Inclusive numeric limits.</td></tr>
+              <tr><td><code>min_length</code>, <code>max_length</code></td><td>Unset</td><td>Inclusive string character or list item limits.</td></tr>
+              <tr><td><code>validator</code></td><td>Unset</td><td><code>(value, card) -&gt; bool | str | None</code>. False produces a generic error; a string is the error message.</td></tr>
+              <tr><td><code>formatter</code></td><td>Unset</td><td><code>(value, card) -&gt; str</code> for compact display only; storage is unchanged.</td></tr>
+              <tr><td><code>colors</code></td><td><code>{}</code></td><td>Exact value-to-color mapping for badge/accent or metadata pills.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>min</code> cannot exceed <code>max</code>; length bounds are nonnegative and ordered. Validators run in field order during construction, loading, updates, editor save, and schema replacement, so keep them fast and side-effect free. A required read-only field should define a default so new cards can be created.</p>
+
+        <h3>Compact-card roles</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Role</th><th>Presentation</th></tr></thead>
+            <tbody>
+              <tr><td><code>title</code></td><td>Main heading. Exactly one definition uses this role and its key must be <code>title</code>.</td></tr>
+              <tr><td><code>body</code></td><td>Wrapped body line, truncated by <code>card_description_max_chars</code>. Multiple body fields are allowed.</td></tr>
+              <tr><td><code>badge</code></td><td>Colored pill; the first non-empty visible badge also colors the accent strip.</td></tr>
+              <tr><td><code>tags</code></td><td>One <code>#value</code> pill per item, capped per field by <code>card_max_visible_tags</code>.</td></tr>
+              <tr><td><code>metadata</code></td><td>Pill formatted as <code>Label: value</code>.</td></tr>
+              <tr><td><code>hidden</code></td><td>No compact-card output.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Only <code>show_on_card=True</code> fields render, and empty values are omitted. A field <code>colors</code> match takes precedence; the built-in priority field otherwise uses priority theme tokens. <code>formatter</code> affects display text only.</p>
+
+        <h3>Structural rules and runtime replacement</h3>
+        <ul>
+          <li><code>id</code>, <code>column</code>, and <code>column_id</code> are reserved and cannot be field keys.</li>
+          <li>If <code>title</code> is omitted, the default title definition is inserted first.</li>
+          <li>Title must be text or textarea and is forced to required, visible-on-card, and the sole title role.</li>
+          <li>Fields omitted from a loaded card are only materialized when they have an explicit default or are required; a new editor presents type defaults.</li>
+          <li>Undeclared card keys are preserved as private application metadata.</li>
+        </ul>
+        <p><code>get_fields()</code> returns detached normalized definitions. <code>set_fields(fields)</code> validates every existing card before committing, rebuilds cards and an open drawer, and leaves the old schema/data untouched on failure. It emits one <code>fields_changed</code> event only when normalization actually changes stored card data. Treat changes that add defaults, coerce types, or narrow choices as data migrations.</p>
       </section>
 
       <section id="data-snapshots">
@@ -794,6 +935,16 @@ snapshot["cards"].append({...})  # Does not change the widget.
 board.set_data(snapshot)         # Validates, replaces, and redraws.</code></pre>
         </div>
         <p><code>set_data()</code> does not emit <code>on_change</code>. This prevents a database refresh from being mistaken for a user edit and written straight back to storage.</p>
+        <h3>Copy, replacement, and ordering guarantees</h3>
+        <ul>
+          <li><code>get_data()</code>, model <code>snapshot()</code>, record getters, schema getters, and mutation return values are detached copies.</li>
+          <li><code>set_data()</code> validates the complete candidate first. Use <code>{"columns": [], "cards": []}</code> to clear the board.</li>
+          <li>Column order is left-to-right. Card order is top-to-bottom inside each column; global card output is grouped by current column order.</li>
+          <li>Insertion indices are zero-based and may range from zero through the destination size, inclusive. <code>None</code> appends.</li>
+          <li><code>update_card()</code> merges values rather than replacing the record. Changing its column appends; <code>move_card()</code> supports an exact position.</li>
+          <li>String and integer IDs are not coerced: <code>1</code> and <code>"1"</code> are distinct. A card reference must have the same type as its column ID.</li>
+          <li>Input <code>column_id</code> is normalized to <code>column</code> in every output. Conflicting aliases are rejected.</li>
+        </ul>
       </section>
 
       <section id="data-database">
@@ -860,6 +1011,7 @@ board.set_data(snapshot)</code></pre>
               <tr><td>Select and multiselect</td><td>Configured choices, including optional empty selection.</td></tr>
               <tr><td>Checkbox</td><td>Boolean values.</td></tr>
               <tr><td>Date and datetime</td><td>ISO values; date inputs use YYYY-MM-DD.</td></tr>
+              <tr><td>Hidden</td><td>No control by default; the model can still retain and validate the value.</td></tr>
               <tr><td>Column</td><td>Moves the card when a different destination is saved.</td></tr>
               <tr><td>Tags</td><td>Add with Enter and remove from the visible tag pills.</td></tr>
             </tbody>
@@ -884,8 +1036,8 @@ board = CTkKanbanBoard(app, columns=columns, cards=cards, fields=fields)</code><
           <table>
             <thead><tr><th>Key</th><th>Action</th></tr></thead>
             <tbody>
-              <tr><td><code>Enter</code></td><td>Saves while focus is inside the editor, except when focus is in the description field.</td></tr>
-              <tr><td><code>Ctrl+Enter</code></td><td>Saves from any field, including the multiline description.</td></tr>
+              <tr><td><code>Enter</code></td><td>Saves while focus is inside the editor, except when focus is in any multiline textbox.</td></tr>
+              <tr><td><code>Ctrl+Enter</code></td><td>Saves from any field, including multiline textboxes.</td></tr>
               <tr><td><code>Escape</code></td><td>Closes the drawer without applying unsaved changes.</td></tr>
             </tbody>
           </table>
@@ -983,7 +1135,11 @@ board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
             </tbody>
           </table>
         </div>
-        <p>All events also contain <code>before</code> and <code>data</code>. No event is sent for a no-op update, a no-op move, selection, search, loading presentation, or <code>set_data()</code>.</p>
+        <p>All events also contain detached <code>before</code> and <code>data</code> snapshots. A column cascade exposes removed cards through <code>before</code>. No event is sent for a no-op update/move, a schema replacement that leaves stored values identical, selection, search, rendering, loading presentation, or <code>set_data()</code>.</p>
+        <div class="callout c-warn">
+          <div class="callout-t">Persistence boundary</div>
+          <p>The board has already changed when <code>on_change</code> runs. Callback exceptions are logged and do not roll back automatically. Keep slow SQL/network work off the Tk thread; enqueue <code>event["data"]</code> to an application worker. If your policy requires immediate rollback, restore the detached <code>event["before"]</code> with <code>set_data()</code>.</p>
+        </div>
       </section>
 
       <section id="feat-external-editor">
@@ -1033,12 +1189,110 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
           <li><code>set_data()</code>, <code>on_success</code>, and <code>on_error</code> run on Tk's thread.</li>
           <li>Existing data stays visible after failure unless <code>clear_on_error=True</code>.</li>
           <li>Starting a newer load invalidates an older pending result so stale data cannot overwrite the newer request.</li>
+          <li>A new request clears <code>load_error</code>. A failed request stores the original exception before <code>on_error</code>.</li>
+          <li>Success applies data through <code>set_data()</code>, so loading does not emit <code>on_change</code>.</li>
+          <li>Invalidating an old result does not forcibly stop its Python worker; it only prevents delivery.</li>
           <li>The returned <code>threading.Thread</code> can be inspected or joined by non-UI test code, but do not join it from Tk's UI thread.</li>
         </ul>
         <div class="callout c-info">
           <div class="callout-t">Thread boundary</div>
           <p>The fetch callback may use database connections and pure Python conversion helpers. It must not read or configure Tk widgets. Use the success or error callback for UI updates.</p>
         </div>
+        <p>Manual <code>set_loading(True)</code> only changes toolbar presentation. It does not create a worker, prevent API mutations, or alter data. Destroying the board invalidates pending delivery; attempting a new load after destruction raises <code>RuntimeError</code>.</p>
+      </section>
+
+      <section id="feat-config">
+        <h2>Feature: Configuration &amp; Permissions</h2>
+        <hr class="section-hr">
+        <p><code>config</code> accepts a <code>BoardConfig</code> or a nested mapping. It keeps action availability, layout, user-facing labels, and confirmation policy separate from visual theme tokens.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    config={
+        "actions": {
+            "delete_cards": False,
+            "delete_columns": False,
+            "move_columns": False,
+        },
+        "layout": {
+            "show_toolbar": True,
+            "column_width": 340,
+            "column_height": 560,
+            "editor_width": 480,
+        },
+        "text": {
+            "board_title": "Release planning",
+            "add_card": "+ New work item",
+        },
+        "confirm_delete": True,
+    },
+)</code></pre>
+        </div>
+        <p>Nested mappings may be partial. Dataclass defaults fill omitted values, while unknown names are rejected. The equivalent typed form uses frozen <code>ActionConfig</code>, <code>LayoutConfig</code>, <code>TextConfig</code>, and <code>BoardConfig</code> instances. <code>merge_config()</code> validates either representation.</p>
+
+        <h3>Action permissions</h3>
+        <p>Every action defaults to enabled.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Setting</th><th>Built-in UI</th><th>Protected board API</th></tr></thead>
+            <tbody>
+              <tr><td><code>add_cards</code></td><td>Add-card buttons and drawer opening</td><td><code>add_card()</code></td></tr>
+              <tr><td><code>edit_cards</code></td><td>Card opening/edit commands, including <code>on_card_open</code></td><td><code>update_card()</code></td></tr>
+              <tr><td><code>move_cards</code></td><td>Drag handle, card move menus, and drawer column changes</td><td><code>move_card()</code>, plus column-changing <code>update_card()</code></td></tr>
+              <tr><td><code>delete_cards</code></td><td>Card delete command</td><td><code>delete_card()</code> and non-empty column cascades</td></tr>
+              <tr><td><code>add_columns</code></td><td>Add-column controls/dialog</td><td><code>add_column()</code></td></tr>
+              <tr><td><code>edit_columns</code></td><td>Rename command</td><td><code>update_column()</code></td></tr>
+              <tr><td><code>move_columns</code></td><td>Move-left/right commands</td><td><code>move_column()</code></td></tr>
+              <tr><td><code>delete_columns</code></td><td>Column delete command</td><td><code>delete_column()</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>A disabled public mutation raises <code>BoardModelError</code>; a disabled UI-opening helper simply returns. Disabling card deletion also blocks <code>delete_column(..., delete_cards=True)</code> when cards are present, so a cascade cannot bypass the policy.</p>
+        <div class="callout c-warn">
+          <div class="callout-t">Behavior control, not authorization</div>
+          <p>Permissions do not restrict <code>set_data()</code>, <code>set_fields()</code>, or direct <code>board.model</code> calls. <code>BoardModel</code> has no action policy. Keep real authorization in the host application and expose the board API rather than its model when UI policy matters.</p>
+        </div>
+
+        <h3>Layout and confirmation</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Setting</th><th>Default</th><th>Contract</th></tr></thead>
+            <tbody>
+              <tr><td><code>show_toolbar</code></td><td><code>True</code></td><td>Show title, summary, search, and add controls. Programmatic <code>search()</code> still works when hidden.</td></tr>
+              <tr><td><code>enable_drag</code></td><td><code>True</code></td><td>Enable handle dragging only when <code>move_cards</code> is also true. Menus/API remain available when only drag is off.</td></tr>
+              <tr><td><code>column_width</code></td><td><code>320</code></td><td>Integer at least 220.</td></tr>
+              <tr><td><code>column_height</code></td><td><code>500</code></td><td>Integer at least 240.</td></tr>
+              <tr><td><code>editor_width</code></td><td><code>420</code></td><td>Integer at least 320.</td></tr>
+              <tr><td><code>confirm_delete</code></td><td><code>True</code></td><td>Prompt only for built-in menu deletions. Direct deletion methods never prompt.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Customizable text</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Setting</th><th>Default</th></tr></thead>
+            <tbody>
+              <tr><td><code>board_title</code></td><td><code>"Board"</code></td></tr>
+              <tr><td><code>search_placeholder</code></td><td><code>"Search cards…"</code></td></tr>
+              <tr><td><code>add_card</code></td><td><code>"+  Add card"</code></td></tr>
+              <tr><td><code>add_column</code></td><td><code>"Add column"</code></td></tr>
+              <tr><td><code>no_columns</code></td><td><code>"No columns yet"</code></td></tr>
+              <tr><td><code>no_columns_help</code></td><td><code>"Create a column to start planning"</code></td></tr>
+              <tr><td><code>no_cards</code></td><td><code>"No cards yet"</code></td></tr>
+              <tr><td><code>no_cards_help</code></td><td><code>"Add a card to get started"</code></td></tr>
+              <tr><td><code>no_results</code></td><td><code>"No results"</code></td></tr>
+              <tr><td><code>no_results_help</code></td><td><code>"Try another search"</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>All text settings must be strings. Short mechanical labels inside menus and the editor are not currently configurable.</p>
+
+        <h3>Override precedence</h3>
+        <p>Direct constructor values override structured config only when explicitly supplied: <code>show_toolbar</code>, <code>enable_drag</code>, all three dimensions, <code>confirm_delete</code>, and <code>board_title</code>. <code>allow_card_deletion</code> and <code>allow_column_deletion</code> override the corresponding action settings. Remaining keyword arguments are forwarded to the outer <code>CTkFrame</code>.</p>
       </section>
 
       <section id="feat-styling">
@@ -1121,6 +1375,32 @@ board = CTkKanbanBoard(
             </tbody>
           </table>
         </div>
+        <h3>Complete 97-token index</h3>
+        <p><code>DEFAULT_THEME</code> exposes the exact current defaults. This index lists every accepted name so a misspelling never has to be discovered by trial and error.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Area</th><th>All accepted tokens</th></tr></thead>
+            <tbody>
+              <tr><td>Board surfaces</td><td><code>board_fg_color</code>, <code>toolbar_fg_color</code>, <code>column_fg_color</code>, <code>column_header_fg_color</code>, <code>column_border_color</code>, <code>column_accent_colors</code></td></tr>
+              <tr><td>Cards and drag</td><td><code>card_fg_color</code>, <code>card_hover_color</code>, <code>dragging_card_fg_color</code>, <code>card_border_color</code>, <code>selected_border_color</code>, <code>drop_indicator_color</code></td></tr>
+              <tr><td>Shared colors</td><td><code>text_color</code>, <code>muted_text_color</code>, <code>accent_color</code>, <code>control_hover_color</code>, <code>count_fg_color</code>, <code>empty_icon_fg_color</code>, <code>divider_color</code>, <code>danger_color</code></td></tr>
+              <tr><td>Editor/input/scroll colors</td><td><code>editor_fg_color</code>, <code>editor_section_fg_color</code>, <code>input_border_color</code>, <code>scrollbar_color</code>, <code>scrollbar_hover_color</code>, <code>error_text_color</code></td></tr>
+              <tr><td>Pills and priorities</td><td><code>pill_text_color</code>, <code>priority_low_color</code>, <code>priority_medium_color</code>, <code>priority_high_color</code>, <code>priority_critical_color</code>, <code>tag_pill_colors</code></td></tr>
+              <tr><td>Native menu colors</td><td><code>menu_fg_color</code>, <code>menu_text_color</code>, <code>menu_hover_color</code>, <code>menu_disabled_text_color</code></td></tr>
+              <tr><td>Board/toolbar geometry</td><td><code>board_padding_x</code>, <code>board_padding_y</code>, <code>toolbar_height</code>, <code>toolbar_corner_radius</code>, <code>toolbar_padding_x</code>, <code>toolbar_padding_y</code>, <code>toolbar_content_padding_y</code>, <code>search_width</code>, <code>button_height</code>, <code>control_corner_radius</code>, <code>small_control_size</code></td></tr>
+              <tr><td>Toolbar fonts</td><td><code>toolbar_title_font</code>, <code>toolbar_summary_font</code></td></tr>
+              <tr><td>Column geometry</td><td><code>column_corner_radius</code>, <code>column_border_width</code>, <code>column_gap</code>, <code>column_accent_height</code>, <code>column_header_padding_x</code>, <code>card_gap</code></td></tr>
+              <tr><td>Column fonts</td><td><code>column_title_font</code>, <code>column_count_font</code>, <code>column_empty_title_font</code>, <code>column_empty_body_font</code></td></tr>
+              <tr><td>Card geometry and limits</td><td><code>card_corner_radius</code>, <code>card_border_width</code>, <code>card_selected_border_width</code>, <code>card_accent_width</code>, <code>card_description_max_chars</code>, <code>card_max_visible_tags</code>, <code>pill_height</code>, <code>pill_corner_radius</code></td></tr>
+              <tr><td>Card fonts</td><td><code>card_title_font</code>, <code>card_body_font</code>, <code>card_metadata_font</code>, <code>pill_font</code></td></tr>
+              <tr><td>Editor layout</td><td><code>editor_border_width</code>, <code>editor_header_padding_x</code>, <code>editor_header_padding_y</code>, <code>editor_form_padding_x</code>, <code>editor_form_padding_y</code>, <code>editor_field_padding_x</code>, <code>editor_field_gap</code>, <code>editor_section_gap</code>, <code>editor_section_corner_radius</code>, <code>editor_section_border_width</code>, <code>editor_section_title_padding_y</code></td></tr>
+              <tr><td>Editor motion</td><td><code>editor_slide_step</code>, <code>editor_slide_interval_ms</code></td></tr>
+              <tr><td>Editor fonts</td><td><code>editor_eyebrow_font</code>, <code>editor_title_font</code>, <code>editor_status_font</code>, <code>section_title_font</code>, <code>field_label_font</code>, <code>help_text_font</code>, <code>status_text_font</code></td></tr>
+              <tr><td>Inputs and scrollbar</td><td><code>input_height</code>, <code>compact_input_height</code>, <code>input_corner_radius</code>, <code>input_border_width</code>, <code>textbox_height</code>, <code>scrollbar_width</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Color tokens accept CustomTkinter color strings or light/dark pairs. Font tokens are mappings passed to <code>ctk.CTkFont(**mapping)</code>. Padding tokens may be scalars or the tuples used by the defaults. <code>column_accent_colors</code> and <code>tag_pill_colors</code> must be non-empty sequences because rendering cycles through them.</p>
         <div class="callout c-warn">
           <div class="callout-t">Strict token names</div>
           <p>Unknown theme keys raise <code>ValueError</code>. Configure the complete appearance before constructing the board; changing a theme mapping later does not restyle widgets that already exist.</p>
@@ -1234,9 +1514,11 @@ board = CTkKanbanBoard(
               <tr><td><code>load_error</code></td><td><code>Exception | None</code></td><td>Most recent async load exception; reset when a new load starts.</td></tr>
               <tr><td><code>set_loading(loading)</code></td><td><code>None</code></td><td>Set loading presentation. Requires an actual boolean.</td></tr>
               <tr><td><code>load_async(fetch_snapshot, *, on_success=None, on_error=None, clear_on_error=False)</code></td><td><code>threading.Thread</code></td><td>Fetch and validate off-thread, then deliver through Tk.</td></tr>
+              <tr><td><code>destroy()</code></td><td><code>None</code></td><td>Invalidate pending delivery, close the drawer/menu, release drag/scroll bindings, and tear down safely; repeated calls are ignored.</td></tr>
             </tbody>
           </table>
         </div>
+        <p>Board mutation methods enforce <code>ActionConfig</code> and raise <code>BoardModelError</code> when disabled. They never show confirmation dialogs; <code>confirm_delete</code> applies only to built-in menu requests. No-op updates and moves return the normalized record without emitting an event.</p>
       </section>
 
       <section id="api-model">
@@ -1272,7 +1554,8 @@ validated_snapshot = model.snapshot()</code></pre>
             </tbody>
           </table>
         </div>
-        <p>Invalid records, unknown IDs, duplicate IDs, out-of-range indices, protected nonempty column deletion, and unsupported updates raise <code>BoardModelError</code>, a subclass of <code>ValueError</code>.</p>
+        <p><code>update_card(card_id, updates=None, **changes)</code> and <code>update_column(column_id, updates=None, **changes)</code> accept keyword changes in addition to a mapping; later keyword values win. Model <code>update_column()</code> also accepts a title string. <code>load(data)</code> requires exactly <code>columns</code> and <code>cards</code>, while <code>load(columns=..., cards=...)</code> is the explicit alternative; the two forms cannot be mixed.</p>
+        <p>The model returns detached records/snapshots, replaces data and schemas atomically, has no <code>BoardConfig</code> permissions, and emits no widget events. Invalid records, unknown IDs, duplicate IDs, out-of-range indices, protected nonempty column deletion, and unsupported updates raise <code>BoardModelError</code>, a subclass of <code>ValueError</code>.</p>
       </section>
 
       <section id="api-records">
@@ -1287,8 +1570,16 @@ validated_snapshot = model.snapshot()</code></pre>
               <tr><td><code>ColumnRecord</code></td><td><code>TypedDict</code></td><td>Serializable column output shape.</td></tr>
               <tr><td><code>CardRecord</code></td><td><code>dict[str, Any]</code></td><td>Serializable flat card output with structural and arbitrary custom keys.</td></tr>
               <tr><td><code>FieldDefinition</code></td><td><code>TypedDict</code></td><td>Editor, validation, search, and compact-display configuration for one value.</td></tr>
+              <tr><td><code>FieldType</code></td><td>Literal union</td><td>All supported field type strings.</td></tr>
+              <tr><td><code>DEFAULT_FIELDS</code></td><td>Tuple of mappings</td><td>Default title, description, priority, and tags definitions.</td></tr>
               <tr><td><code>BoardSnapshot</code></td><td><code>TypedDict</code></td><td>Complete <code>columns</code> and <code>cards</code> output shape.</td></tr>
               <tr><td><code>BoardModelError</code></td><td>Exception</td><td>Validation and model-operation failure.</td></tr>
+              <tr><td><code>ActionConfig</code></td><td>Frozen dataclass</td><td>Eight board mutation/action switches.</td></tr>
+              <tr><td><code>LayoutConfig</code></td><td>Frozen dataclass</td><td>Toolbar, drag, and board/editor dimensions.</td></tr>
+              <tr><td><code>TextConfig</code></td><td>Frozen dataclass</td><td>Stable application-facing board labels.</td></tr>
+              <tr><td><code>BoardConfig</code></td><td>Frozen dataclass</td><td>Actions, layout, text, and delete-confirmation policy.</td></tr>
+              <tr><td><code>DEFAULT_THEME</code></td><td>Dictionary</td><td>Import-time snapshot of all theme token defaults.</td></tr>
+              <tr><td><code>__version__</code></td><td>String</td><td>Installed CTkKanban package version.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1313,6 +1604,7 @@ assert column.title == "To do"
 assert card.column == "todo"
 assert card.tags == ("docs", "release")</code></pre>
         </div>
+        <p><code>Card</code> is intentionally a compatibility dataclass for the four default fields and cannot retain arbitrary schema keys. Use mapping records through <code>BoardModel(fields=...)</code> when custom values must survive normalization.</p>
       </section>
 
       <section id="api-adapters">
@@ -1325,8 +1617,8 @@ assert card.tags == ("docs", "release")</code></pre>
               <tr><td><code>normalize_row(row)</code></td><td><code>dict[str, Any]</code></td><td>Convert a mapping, SQLAlchemy-style <code>_mapping</code> row, or keys/index row into a plain dictionary.</td></tr>
               <tr><td><code>normalize_rows(rows)</code></td><td><code>list[dict[str, Any]]</code></td><td>Normalize an iterable of supported row objects.</td></tr>
               <tr><td><code>rows_from_cursor(cursor)</code></td><td><code>list[dict[str, Any]]</code></td><td>Consume a DB-API cursor and combine tuples with names from <code>cursor.description</code>.</td></tr>
-              <tr><td><code>snapshot_from_rows(columns, cards)</code></td><td><code>BoardSnapshot</code></td><td>Normalize and validate both row collections.</td></tr>
-              <tr><td><code>snapshot_from_cursors(columns_cursor, cards_cursor)</code></td><td><code>BoardSnapshot</code></td><td>Consume two executed cursors and validate the complete board.</td></tr>
+              <tr><td><code>snapshot_from_rows(columns, cards, *, fields=None)</code></td><td><code>BoardSnapshot</code></td><td>Normalize and validate both row collections against the default or supplied schema.</td></tr>
+              <tr><td><code>snapshot_from_cursors(columns_cursor, cards_cursor, *, fields=None)</code></td><td><code>BoardSnapshot</code></td><td>Consume two executed cursors and validate the complete board against the schema.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1334,6 +1626,7 @@ assert card.tags == ("docs", "release")</code></pre>
           <div class="callout-t">Cursor behavior</div>
           <p><code>rows_from_cursor()</code> calls <code>fetchall()</code>, so it consumes all remaining result rows. It raises <code>ValueError</code> when there is no result metadata or when output column names are duplicated.</p>
         </div>
+        <p>Adapters do not execute SQL, commit, close cursors, or own connections. Pass the same field schema as the board, and convert driver-specific JSON/array values in the repository layer when they are not already the expected Python values.</p>
       </section>
 
       <section id="api-theme">
@@ -1359,6 +1652,28 @@ theme = merge_theme({
     "danger_color": ("#B42318", "#F97066"),
 })</code></pre>
         </div>
+        <p><code>merge_theme()</code> deep-copies overrides where possible and rejects names outside <code>DEFAULT_THEME</code>. It does not type-check every visual value; malformed colors, font mappings, sizes, or empty palettes may be reported when CustomTkinter constructs the affected widget.</p>
+      </section>
+
+      <section id="api-errors">
+        <h2>API: Errors &amp; Lifecycle</h2>
+        <hr class="section-hr">
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Boundary</th><th>Failure behavior</th></tr></thead>
+            <tbody>
+              <tr><td>Board/model data and operations</td><td><code>BoardModelError</code>, a <code>ValueError</code> subclass, for invalid records, schemas, IDs, indices, relationships, unknown records, duplicate IDs, unsupported updates, protected deletion, and disabled board actions.</td></tr>
+              <tr><td>Configuration</td><td><code>TypeError</code> for incorrect kinds and <code>ValueError</code> for unknown options or invalid dimension bounds.</td></tr>
+              <tr><td>Theme names</td><td><code>ValueError</code> for unknown tokens; value-shape failures may come from CustomTkinter during construction.</td></tr>
+              <tr><td>Row adapters</td><td><code>TypeError</code> for an unsupported row, or <code>ValueError</code> for missing cursor metadata/duplicate result names; snapshot validation may raise <code>BoardModelError</code>.</td></tr>
+              <tr><td>Generated editor</td><td>Validation text appears in the drawer, focus moves to the failing control when possible, and unsaved data remains open.</td></tr>
+              <tr><td><code>on_change</code> / <code>on_card_open</code></td><td>Callback exceptions are logged under <code>ctk_kanban</code>; an already-applied mutation is not automatically rolled back.</td></tr>
+              <tr><td>Async fetch</td><td>The original exception is stored in <code>load_error</code> and delivered to <code>on_error</code>. Success/error callbacks should handle their own failures.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>All widget construction, normal methods, and UI callbacks belong on Tk's main thread. Only <code>load_async()</code>'s no-argument fetch callable runs on a daemon worker; it must not touch Tk. Applying its snapshot and invoking its callbacks happens via the board's Tk event loop.</p>
+        <p><code>destroy()</code> is idempotent. It increments the async generation so stale workers cannot deliver, cancels polling/editor animation callbacks, releases active menu and drag state, destroys managed scroll frames, and then tears down the outer widget. Starting <code>load_async()</code> after destruction raises <code>RuntimeError</code>.</p>
       </section>
 
       <section id="migration">
@@ -1454,7 +1769,7 @@ card = {
         </div>
 
         <div class="faq-item">
-          <button class="faq-q" type="button" aria-expanded="false"><span>Is <code>load_async()</code safe for Tkinter?</span><span class="faq-icon">+</span></button>
+          <button class="faq-q" type="button" aria-expanded="false"><span>Is <code>load_async()</code> safe for Tkinter?</span><span class="faq-icon">+</span></button>
           <div class="faq-a"><p>Yes, when the fetch callback only performs non-Tk work. Fetching and validation happen on a worker; snapshot application and callbacks happen through the board's Tk event loop. Do not access widgets inside <code>fetch_snapshot</code>.</p></div>
         </div>
 
@@ -1465,7 +1780,7 @@ card = {
       </section>
 
       <footer class="page-footer">
-        CTkKanban 2.0.1 documentation · MIT License ·
+        CTkKanban 2.1.0 documentation · MIT License ·
         <a href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">Source</a>
       </footer>
     </main>

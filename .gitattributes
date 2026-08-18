@@ -4,6 +4,7 @@
 .gitignore text eol=lf
 MANIFEST.in text eol=lf
 *.ini text eol=lf
+*.html text eol=lf
 *.json text eol=lf
 *.md text eol=lf
 *.py text eol=lf

@@ -2,4 +2,4 @@ include LICENSE README.md CHANGELOG.md
 include example.py
 recursive-include ctk_kanban *.py py.typed
 recursive-include tests *.py
-include docs/publishing.md
+recursive-include docs *.html *.md

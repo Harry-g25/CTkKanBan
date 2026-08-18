@@ -1,7 +1,9 @@
 """Minimal runnable CTkKanban example."""
+
 import customtkinter as ctk
 
 from ctk_kanban import CTkKanbanBoard
+
 
 def main() -> None:
     app = ctk.CTk()

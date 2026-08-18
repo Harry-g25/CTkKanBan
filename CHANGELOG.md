@@ -6,6 +6,10 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
+No unreleased changes yet.
+
+## 2.1.0 - 2026-08-18
+
 - Added schema-driven card fields with generated editor controls for text,
   textarea, number, integer, select, multiselect, checkbox, tags, date,
   datetime, and hidden values.
@@ -21,6 +25,10 @@ confirm that matching distributions were published to PyPI.
 - Expanded theme coverage to typography, spacing, borders, radii, control
   dimensions, compact-card limits, menu colors, scrollbars, and editor motion.
 - Extended row and cursor snapshot adapters to validate against custom fields.
+- Expanded the README and browser documentation into complete references for
+  field schemas, configuration, permissions, event payloads, data/ordering
+  guarantees, database adapters, async loading, all theme tokens, errors, and
+  lifecycle behavior; added automated documentation drift checks.
 
 ## 2.0.1 - 2026-08-17
 
