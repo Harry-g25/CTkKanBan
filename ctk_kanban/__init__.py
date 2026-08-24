@@ -9,7 +9,15 @@ from .adapters import (
 )
 from .board import CTkKanbanBoard
 from .config import ActionConfig, BoardConfig, LayoutConfig, TextConfig, merge_config
-from .fields import DEFAULT_FIELDS, CardField, Field, FieldDefinition, FieldInput, FieldType
+from .fields import (
+    DEFAULT_FIELDS,
+    CardField,
+    CardFieldData,
+    Field,
+    FieldDefinition,
+    FieldInput,
+    FieldType,
+)
 from .model import (
     BoardModel,
     BoardModelError,
@@ -31,6 +39,7 @@ __all__ = [
     "BoardConfig",
     "Card",
     "CardField",
+    "CardFieldData",
     "CardRecord",
     "Column",
     "ColumnRecord",

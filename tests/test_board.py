@@ -829,6 +829,114 @@ def test_existing_on_card_open_callback_still_replaces_edit_drawer(tk_root: Any)
     assert board._editor is None
 
 
+def test_get_field_data_combines_schema_values_defaults_and_detaches(tk_root: Any) -> None:
+    board = make_board(
+        tk_root,
+        cards=[
+            {
+                "id": 1,
+                "column": "todo",
+                "title": "One",
+                "status": "Doing",
+                "labels": ["api"],
+                "private_reference": "external-17",
+            }
+        ],
+        fields=[
+            {"key": "title", "label": "Task", "type": "text"},
+            {
+                "key": "status",
+                "label": "Status",
+                "type": "select",
+                "options": ["To do", "Doing", "Done"],
+                "read_only": True,
+            },
+            {"key": "estimate", "label": "Estimate", "type": "integer"},
+            {"key": "blocked", "label": "Blocked", "type": "checkbox"},
+            {"key": "labels", "label": "Labels", "type": "tags"},
+            {"key": "notes", "label": "Notes", "type": "textarea"},
+        ],
+    )
+
+    data = board.get_field_data(1)
+
+    assert list(data) == ["title", "status", "estimate", "blocked", "labels", "notes"]
+    assert data["status"]["value"] == "Doing"
+    assert data["status"]["options"] == ("To do", "Doing", "Done")
+    assert data["status"]["read_only"] is True
+    assert data["estimate"]["value"] is None
+    assert data["blocked"]["value"] is False
+    assert data["labels"]["value"] == ["api"]
+    assert data["notes"]["value"] == ""
+    assert "private_reference" not in data
+
+    data["status"]["label"] = "Changed copy"
+    data["labels"]["value"].append("changed copy")
+
+    fresh = board.get_field_data(1)
+    assert fresh["status"]["label"] == "Status"
+    assert fresh["labels"]["value"] == ["api"]
+    assert board.get_card(1)["private_reference"] == "external-17"
+
+    with pytest.raises(BoardModelError, match="unknown card"):
+        board.get_field_data(99)
+
+
+def test_update_field_reuses_card_validation_events_and_permissions(tk_root: Any) -> None:
+    events: list[dict[str, Any]] = []
+    board = make_board(
+        tk_root,
+        on_change=events.append,
+        fields=[
+            {"key": "title", "label": "Task", "type": "text"},
+            {
+                "key": "status",
+                "label": "Status",
+                "type": "select",
+                "options": ["To do", "Doing", "Done"],
+                "default": "To do",
+                "read_only": True,
+            },
+            {
+                "key": "estimate",
+                "label": "Estimate",
+                "type": "integer",
+                "min": 0,
+            },
+        ],
+    )
+
+    updated = board.update_field(1, "estimate", "7")
+
+    assert updated["key"] == "estimate"
+    assert updated["value"] == 7
+    assert board.get_card(1)["estimate"] == 7
+    assert events[-1]["type"] == "card_updated"
+    assert events[-1]["data"]["cards"][0]["estimate"] == 7
+
+    # ``read_only`` controls generated form presentation, not public mutations.
+    assert board.update_field(1, "status", "Done")["value"] == "Done"
+    event_count = len(events)
+    board.update_field(1, "status", "Done")
+    assert len(events) == event_count
+
+    with pytest.raises(BoardModelError, match="at least 0"):
+        board.update_field(1, "estimate", -1)
+    with pytest.raises(BoardModelError, match="unknown card field"):
+        board.update_field(1, "missing", "value")
+    with pytest.raises(BoardModelError, match="unknown card field"):
+        board.update_field(1, "column", "done")
+    with pytest.raises(BoardModelError, match="nonblank"):
+        board.update_field(1, " ", "value")
+
+    locked = make_board(
+        tk_root,
+        config={"actions": {"edit_cards": False}},
+    )
+    with pytest.raises(BoardModelError, match="editing is disabled"):
+        locked.update_field(1, "title", "Blocked")
+
+
 def test_add_editor_rejects_a_stale_column_id(tk_root: Any) -> None:
     board = make_board(tk_root)
 

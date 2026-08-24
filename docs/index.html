@@ -344,7 +344,7 @@
 
   <nav class="topnav" aria-label="Primary">
     <a class="nav-title" href="#hero">CTkKanban</a>
-    <span class="nav-ver">v2.2.1 Docs</span>
+    <span class="nav-ver">v2.3.0 Docs</span>
     <div class="nav-spacer"></div>
     <a class="nav-a" href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a class="nav-a" href="https://pypi.org/project/CTkKanBan/" target="_blank" rel="noopener noreferrer">PyPI</a>
@@ -358,7 +358,7 @@
           <div class="nav-group-title">Overview</div>
           <a class="nav-item" href="#hero">Introduction</a>
           <a class="nav-item" href="#installation">Installation</a>
-          <a class="nav-item" href="#release-221">Release 2.2.1</a>
+          <a class="nav-item" href="#release-230">Release 2.3.0</a>
           <a class="nav-item" href="#quick-start">Quick Start</a>
           <a class="nav-item" href="#examples">Runnable Examples</a>
         </div>
@@ -454,6 +454,7 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
     BoardSnapshot,
     Card,
     CardField,
+    CardFieldData,
     CardRecord,
     Column,
     ColumnRecord,
@@ -477,28 +478,27 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
         </div>
       </section>
 
-      <section id="release-221">
-        <h2>Release 2.2.1 Highlights</h2>
+      <section id="release-230">
+        <h2>Release 2.3.0 Highlights</h2>
         <hr class="section-hr">
-        <p>Version 2.2.1 includes the 2.2 feature set and restores wheel routing on CustomTkinter 6.0 without relying on version-specific private methods.</p>
+        <p>Version 2.3.0 makes application-owned forms schema-aware, completes the move to CustomTkinter 6, and reduces unnecessary widget and snapshot work during normal interaction.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Area</th><th>What changed</th></tr></thead>
             <tbody>
-              <tr><td>Concise fields</td><td><code>Field</code>, <code>CardField</code>, string shorthand, and custom title keys make database columns easy to expose without verbose schema dictionaries.</td></tr>
-              <tr><td>Database setup</td><td><code>CTkKanbanBoard.from_rows()</code> accepts row iterables or executed cursors plus explicit source-key mappings.</td></tr>
-              <tr><td>Custom forms</td><td>A simple <code>on_card_open(card)</code> callback and <code>use_builtin_editor=False</code> let the host application own card editing.</td></tr>
-              <tr><td>Responsive layout</td><td><code>fill_columns</code> shares surplus width equally; editor close restores centred columns and columns retain their vertical fill.</td></tr>
-              <tr><td>Scrolling</td><td>Thicker scrollbars, coalesced geometry updates, resize-aware horizontal ranges, and axis-aware wheel input improve navigation.</td></tr>
-              <tr><td>Rendering</td><td>Normalized schemas and fonts are reused, unused per-card widgets are removed, and search reuses existing card widgets.</td></tr>
-              <tr><td>Compatibility</td><td>Wheel containment is owned by CTkKanban, and CustomTkinter 6.0.0 is now the minimum supported release.</td></tr>
-              <tr><td>Examples</td><td>Focused runnable programs now cover normal setup, every input type, SQLite, custom editors, and asynchronous loading.</td></tr>
+              <tr><td>Custom forms</td><td><code>get_field_data()</code>, <code>update_field()</code>, and <code>CardFieldData</code> provide a small schema-aware read/write contract for application-owned editors.</td></tr>
+              <tr><td>Menus and selects</td><td>Card/column menus and select controls use theme-aware CustomTkinter surfaces, including nested move choices and right-click access.</td></tr>
+              <tr><td>Card density</td><td>Compact, normal, and large presets are available through configuration, the toolbar, and <code>set_card_size()</code>.</td></tr>
+              <tr><td>Editor presentation</td><td>The generated editor opens immediately over the exact right half and uses consistent DPI-aware CustomTkinter typography and controls.</td></tr>
+              <tr><td>Incremental updates</td><td>Column mutations retain unaffected widgets; no-op revisions, snapshots, scroll work, search text, and drag lookup avoid unnecessary work.</td></tr>
+              <tr><td>Compatibility</td><td>Python 3.10+ remains supported; CustomTkinter 6.0.0 is now the minimum and major version 7 remains excluded.</td></tr>
+              <tr><td>Guides</td><td>The custom-editor documentation and runnable example now cover dynamic controls, column IDs, read-only values, validation, and bulk saves.</td></tr>
             </tbody>
           </table>
         </div>
         <div class="callout c-info">
           <div class="callout-t">Compatibility</div>
-          <p>The default title, description, priority, and tags behavior remains available when <code>fields</code> and <code>config</code> are omitted. Applications still on 1.x should read <a href="#migration">Migrating from 1.x</a> because the focused 2.x architecture remains intentionally different.</p>
+          <p>The default title, description, priority, and tags behavior remains available when <code>fields</code> and <code>config</code> are omitted. Applications on CustomTkinter 5 must upgrade to 6.0.0 or newer before installing this release.</p>
         </div>
       </section>
 
@@ -563,7 +563,7 @@ python examples/basic_board.py</code></pre>
               <tr><td>Build a normal board</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/basic_board.py" target="_blank" rel="noopener noreferrer"><code>basic_board.py</code></a></td><td>Minimal data, equal-width columns, editing, dragging, search, and change events.</td></tr>
               <tr><td>Put database fields on cards</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_fields.py" target="_blank" rel="noopener noreferrer"><code>custom_fields.py</code></a></td><td>Every generated input type, custom title keys, display roles, validation, formatting, and visibility.</td></tr>
               <tr><td>Load and save real rows</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/sqlite_board.py" target="_blank" rel="noopener noreferrer"><code>sqlite_board.py</code></a></td><td>SQLite cursors, key mappings, typed fields, and update/move persistence.</td></tr>
-              <tr><td>Own the card form</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_editor.py" target="_blank" rel="noopener noreferrer"><code>custom_editor.py</code></a></td><td>Disabled built-in editor, simple card callback, host-owned window, and <code>update_card()</code>.</td></tr>
+              <tr><td>Own the card form</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_editor.py" target="_blank" rel="noopener noreferrer"><code>custom_editor.py</code></a></td><td>Schema-driven controls using <code>get_field_data()</code>, column choices, validation, and a bulk <code>update_card()</code>.</td></tr>
               <tr><td>Fetch without freezing Tk</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/async_loading.py" target="_blank" rel="noopener noreferrer"><code>async_loading.py</code></a></td><td>Background fetching, snapshots, loading state, and success/error delivery.</td></tr>
               <tr><td>Explore everything together</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/example.py" target="_blank" rel="noopener noreferrer"><code>example.py</code></a></td><td>Raw schemas, runtime field replacement, permissions, layout, text, theming, events, and snapshots.</td></tr>
             </tbody>
@@ -1185,22 +1185,109 @@ board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
       <section id="feat-external-editor">
         <h2>Feature: External Card Editor</h2>
         <hr class="section-hr">
-        <p>Pass <code>on_card_open</code> to run a function when a card is clicked. It receives one detached card dictionary. Set <code>use_builtin_editor=False</code> when the callback should run without CTkKanban opening its generated overlay.</p>
+        <p>Set <code>use_builtin_editor=False</code> and pass <code>on_card_open</code> when the application should own the editor window. The callback receives a complete detached card record. Its <code>id</code> targets the form-ready field data for that card.</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>def card_clicked(card):
-    open_my_form(card)
+    field_data = board.get_field_data(card["id"])
+    open_my_form(card, field_data)
 
 
 board = CTkKanbanBoard(
     app,
     columns=columns,
     cards=cards,
+    fields=fields,
     use_builtin_editor=False,
     on_card_open=card_clicked,
 )</code></pre>
         </div>
-        <p>Providing <code>on_card_open</code> also replaces the edit overlay when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas, fonts, and search text are shared across compact cards; static text uses lightweight appearance-aware Tk primitives; the accent strip, action buttons, and pooled pills use anti-aliased native CustomTkinter widgets; search reuses existing card widgets; column mutations retain their widget trees; and all board scroll frames share one routed wheel binding.</p>
+        <p>Providing <code>on_card_open</code> also replaces the edit overlay when <code>use_builtin_editor=True</code>. The callback and the widgets it creates run on Tk's main thread. Callback exceptions are logged under <code>ctk_kanban</code> so the originating click can finish.</p>
+
+        <h3>Get definitions and current values together</h3>
+        <p><code>get_field_data(card_id)</code> returns an ordered <code>dict[str, CardFieldData]</code> keyed by each configured field's stable <code>key</code>. Every <code>CardFieldData</code> contains the normalized <code>FieldDefinition</code> plus the card's detached <code>value</code>.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>fields = board.get_field_data(card_id=17)
+status = fields["status"]
+
+print(status["label"])       # Status
+print(status["type"])        # select
+print(status["value"])       # Doing
+print(status["options"])     # ("To do", "Doing", "Done")
+print(status["read_only"])   # False</code></pre>
+        </div>
+        <p>The nested mapping also includes required/default behavior, placeholder, visibility, searchability, section, display role, help text, options, limits, validator, formatter, and colors where configured. When a card omits an optional field, <code>value</code> uses the built-in editor default: an empty list for list controls, <code>False</code> for checkbox, <code>None</code> for numeric inputs, and an empty string for other controls unless the field supplies <code>default</code>.</p>
+        <div class="callout c-info">
+          <div class="callout-t">Detached and deliberately field-only</div>
+          <p>Changing returned field data cannot mutate the board. Only configured fields are included. Read structural <code>id</code>/<code>column</code> values and unconfigured private metadata from <code>get_card()</code>. Unlike the forgiving widget <code>get_card()</code>, <code>get_field_data()</code> raises <code>BoardModelError</code> for an invalid or unknown card ID.</p>
+        </div>
+
+        <h3>Target custom controls by key</h3>
+        <p>Use <code>field["key"]</code> as the control and update target. Labels and section headings are presentation text and need not be unique.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>controls = {}
+field_data = board.get_field_data(card["id"])
+
+for key, field in field_data.items():
+    if not field["show_in_editor"]:
+        continue
+    controls[key] = create_control(
+        label=field["label"],
+        field_type=field["type"],
+        value=field["value"],
+        options=field.get("options", ()),
+        disabled=field["read_only"],
+    )</code></pre>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Field type</th><th>Custom control should submit</th></tr></thead>
+            <tbody>
+              <tr><td><code>text</code>, <code>textarea</code>, <code>date</code>, <code>datetime</code></td><td>A string; date values use their documented ISO formats.</td></tr>
+              <tr><td><code>number</code>, <code>integer</code></td><td>A number, numeric entry string, or blank value.</td></tr>
+              <tr><td><code>select</code></td><td>The original selected option value, not only its display text.</td></tr>
+              <tr><td><code>multiselect</code></td><td>A list of original option values.</td></tr>
+              <tr><td><code>checkbox</code></td><td>A real <code>bool</code>.</td></tr>
+              <tr><td><code>tags</code></td><td>A list of nonblank strings without commas.</td></tr>
+              <tr><td><code>hidden</code></td><td>Normally no control; preserve or change it through application logic.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Column is structural rather than a configured field. Read the selected ID from <code>card["column"]</code>, build choices from <code>get_columns()</code>, and submit <code>"column"</code> only when <code>board.actions.move_cards</code> is true. Use IDs as option values because titles can be duplicated.</p>
+
+        <h3>Save one field</h3>
+        <p><code>update_field(card_id, field_key, value)</code> is the concise single-value mutation. It returns refreshed <code>CardFieldData</code> after normalization.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>try:
+    updated_status = board.update_field(17, "status", "Done")
+except BoardModelError as error:
+    show_error(str(error))
+else:
+    print(updated_status["value"])  # Done</code></pre>
+        </div>
+        <p>The method requires a configured key and rejects structural or unconfigured private keys. It delegates to <code>update_card()</code>, so normalization, validators, edit permission, redraw, and <code>card_updated</code> events remain identical. A no-op emits no event. <code>read_only</code> and <code>show_in_editor</code> control form presentation; application code may still update those values programmatically.</p>
+
+        <h3>Save a complete form once</h3>
+        <p>For a Save button, collect all editable controls and call <code>update_card()</code> once. This validates the completed card, redraws once, and emits at most one event.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>updates = {
+    key: control.get_value()
+    for key, control in controls.items()
+    if not field_data[key]["read_only"]
+}
+
+try:
+    board.update_card(card["id"], updates)
+except BoardModelError as error:
+    show_form_error(str(error))
+else:
+    close_form()</code></pre>
+        </div>
+        <p>Keep the custom form open after <code>BoardModelError</code> so required, type, option, limit, or custom-validator failures can be corrected. Successful saves continue through the application's normal <code>on_change</code> persistence boundary. The runnable <a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_editor.py" target="_blank" rel="noopener noreferrer"><code>custom_editor.py</code></a> builds CustomTkinter controls from this contract, includes columns and read-only values, and displays validation failures.</p>
       </section>
 
       <section id="feat-loading">
@@ -1524,6 +1611,7 @@ board = CTkKanbanBoard(
               <tr><td><code>get_cards(column_id=None)</code></td><td><code>list[CardRecord]</code></td><td>All cards in board order, or cards in one existing column.</td></tr>
               <tr><td><code>get_columns()</code></td><td><code>list[ColumnRecord]</code></td><td>Detached columns in manual order.</td></tr>
               <tr><td><code>get_fields()</code></td><td><code>list[dict]</code></td><td>Detached active field definitions.</td></tr>
+              <tr><td><code>get_field_data(card_id)</code></td><td><code>dict[str, CardFieldData]</code></td><td>Ordered definitions plus detached editor-ready values for one known card.</td></tr>
               <tr><td><code>set_fields(fields)</code></td><td><code>None</code></td><td>Atomically validate and replace the schema, cards, and an open editor; emits <code>fields_changed</code> if normalization changes data.</td></tr>
               <tr><td><code>get_selected_card()</code></td><td><code>CardRecord | None</code></td><td>Current selection snapshot.</td></tr>
               <tr><td><code>search(query)</code></td><td><code>None</code></td><td>Apply or clear the view-only card search.</td></tr>
@@ -1537,6 +1625,7 @@ board = CTkKanbanBoard(
             <tbody>
               <tr><td><code>add_card(card, *, index=None)</code></td><td><code>CardRecord</code></td><td>Add at a zero-based position in its column, or append.</td></tr>
               <tr><td><code>update_card(card_id, updates)</code></td><td><code>CardRecord</code></td><td>Update editable fields; <code>column</code> or <code>column_id</code> can also move it.</td></tr>
+              <tr><td><code>update_field(card_id, field_key, value)</code></td><td><code>CardFieldData</code></td><td>Validate and update one configured value, then return its refreshed definition and normalized value.</td></tr>
               <tr><td><code>move_card(card_id, column_id, index=None)</code></td><td><code>CardRecord</code></td><td>Move to a destination and insertion position, or append.</td></tr>
               <tr><td><code>delete_card(card_id)</code></td><td><code>CardRecord</code></td><td>Delete and return the removed record.</td></tr>
             </tbody>
@@ -1621,6 +1710,7 @@ validated_snapshot = model.snapshot()</code></pre>
               <tr><td><code>Card</code></td><td>Frozen dataclass</td><td>Typed input; stores tags as <code>tuple[str, ...]</code>.</td></tr>
               <tr><td><code>ColumnRecord</code></td><td><code>TypedDict</code></td><td>Serializable column output shape.</td></tr>
               <tr><td><code>CardRecord</code></td><td><code>dict[str, Any]</code></td><td>Serializable flat card output with structural and arbitrary custom keys.</td></tr>
+              <tr><td><code>CardFieldData</code></td><td><code>TypedDict</code></td><td>A normalized <code>FieldDefinition</code> plus one card's detached editor-ready <code>value</code>.</td></tr>
               <tr><td><code>CardField</code></td><td>Frozen dataclass</td><td>Concise typed definition with visible, editable, searchable defaults and <code>from_definition()</code>/<code>to_definition()</code> conversion.</td></tr>
               <tr><td><code>Field</code></td><td>Fluent mapping builder</td><td>Configures card input type, compact role, visibility, validation, and formatting; <code>build()</code> returns a <code>CardField</code>.</td></tr>
               <tr><td><code>FieldDefinition</code></td><td><code>TypedDict</code></td><td>Editor, validation, search, and compact-display configuration for one value.</td></tr>
@@ -1835,7 +1925,7 @@ card = {
       </section>
 
       <footer class="page-footer">
-        CTkKanban 2.2.1 documentation · MIT License ·
+        CTkKanban 2.3.0 documentation · MIT License ·
         <a href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">Source</a>
       </footer>
     </main>

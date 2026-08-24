@@ -51,7 +51,7 @@ jobs:
         run: python -c "import ctk_kanban; print(ctk_kanban.__version__)"
 
   minimum-customtkinter:
-    name: Ubuntu / CustomTkinter 5.2.2
+    name: Ubuntu / CustomTkinter 6.0.0
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -61,5 +61,5 @@ jobs:
         with:
           python-version: "3.10"
       - run: sudo apt-get update && sudo apt-get install --yes xvfb
-      - run: python -m pip install ".[test]" "customtkinter==5.2.2"
+      - run: python -m pip install ".[test]" "customtkinter==6.0.0"
       - run: xvfb-run -a python -m pytest -q

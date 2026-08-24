@@ -30,6 +30,7 @@ a format suited to package and repository viewers.
 - [Data contract and ordering](#data-contract-and-ordering)
 - [Change events and persistence](#change-events-and-persistence)
 - [Database rows](#database-rows)
+- [Custom editor forms](#custom-editor-forms)
 - [Asynchronous loading](#asynchronous-loading)
 - [API reference](#api-reference)
 - [Errors and lifecycle](#errors-and-lifecycle)
@@ -96,7 +97,7 @@ directly from the repository root after `python -m pip install -e ".[dev]"`.
 | Build a normal board | [`examples/basic_board.py`](examples/basic_board.py) | Minimal data, equal-width columns, editing, dragging, search, and `on_change`. |
 | Put database fields on cards | [`examples/custom_fields.py`](examples/custom_fields.py) | `Field`, `CardField`, custom title keys, all generated input types, display roles, validation, formatting, and visibility. |
 | Load and save real rows | [`examples/sqlite_board.py`](examples/sqlite_board.py) | In-memory SQLite, cursor loading, source-key mappings, typed columns, and persistence after edits or moves. |
-| Own the card form | [`examples/custom_editor.py`](examples/custom_editor.py) | `use_builtin_editor=False`, `on_card_open(card)`, a custom window, and `update_card()`. |
+| Own the card form | [`examples/custom_editor.py`](examples/custom_editor.py) | A schema-driven custom window using `get_field_data()`, column choices, validation, and bulk `update_card()`. |
 | Fetch without freezing Tk | [`examples/async_loading.py`](examples/async_loading.py) | `snapshot_from_rows()`, `load_async()`, loading state, and success/error delivery. |
 | Explore everything together | [`example.py`](example.py) | Low-level field mappings, runtime schema replacement, permissions, layout, text, theme tokens, and snapshots. |
 
@@ -747,6 +748,154 @@ forms; convert them to the expected Python list, boolean, number, or string in
 the query/repository layer when necessary. Neither adapter executes SQL,
 commits, closes a cursor, nor owns a connection.
 
+## Custom editor forms
+
+Set `use_builtin_editor=False` and pass `on_card_open` when the application
+should own the editor window. The callback receives a complete detached card
+record. Use its `id` to request the form-ready field data for that card:
+
+```python
+def card_clicked(card):
+    field_data = board.get_field_data(card["id"])
+    open_my_form(card, field_data)
+
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    fields=fields,
+    use_builtin_editor=False,
+    on_card_open=card_clicked,
+)
+```
+
+Providing `on_card_open` also replaces the edit overlay when
+`use_builtin_editor=True`, preserving the original callback behavior. The
+callback and every Tk widget it creates run on Tk's main thread. Callback
+exceptions are logged under `ctk_kanban` so the originating click can finish.
+
+### Getting editor-ready field data
+
+`get_field_data(card_id)` returns `dict[str, CardFieldData]`. The outer mapping
+follows schema order and is keyed by each field's stable `key`; each
+`CardFieldData` contains the normalized field definition plus that card's
+detached `value`:
+
+```python
+fields = board.get_field_data(card_id=17)
+status = fields["status"]
+
+print(status["label"])       # Status
+print(status["type"])        # select
+print(status["value"])       # Doing
+print(status["options"])     # ("To do", "Doing", "Done")
+print(status["read_only"])   # False
+```
+
+The nested mappings contain the same options documented in the field
+definition reference, including `label`, `type`, `required`, `default` when
+configured, `placeholder`, `options`, `show_on_card`, `show_in_editor`,
+`searchable`, `read_only`, `section`, `card_role`, `help_text`, limits,
+validators, formatters, and colors. `value` is the stored normalized value. If
+an optional value is absent, it is the same editor default used by the built-in
+form: `[]` for list controls, `False` for checkboxes, `None` for numbers, and
+`""` for other controls unless the schema supplies `default`.
+
+The result is detached. Changing a returned label, option collection, or value
+does not change the schema or card. Call `set_fields()` to replace definitions
+and use a mutation method to save values. Only configured fields are returned;
+structural `id`/`column` values and unconfigured private metadata remain
+available from `get_card()`. Unlike the forgiving widget `get_card()` helper,
+`get_field_data()` raises `BoardModelError` for an invalid or unknown card ID.
+
+### Targeting controls
+
+Always index controls by `field["key"]`, never by their label. Labels and
+section headings are presentation text and need not be unique. A minimal
+schema-driven form loop looks like this:
+
+```python
+controls = {}
+field_data = board.get_field_data(card["id"])
+
+for key, field in field_data.items():
+    if not field["show_in_editor"]:
+        continue
+    controls[key] = create_control(
+        label=field["label"],
+        field_type=field["type"],
+        value=field["value"],
+        options=field.get("options", ()),
+        disabled=field["read_only"],
+    )
+```
+
+Custom controls should return the stored type expected by the schema:
+
+| Field type | Form should submit |
+| --- | --- |
+| `text`, `textarea`, `date`, `datetime` | A string; date values use ISO formats. |
+| `number`, `integer` | A number, numeric entry string, or blank value. |
+| `select` | The original selected option value, not merely its display label. |
+| `multiselect` | A list containing original option values. |
+| `checkbox` | A real `bool`. |
+| `tags` | A list of nonblank strings without commas. |
+| `hidden` | Normally no control; preserve or update it through application logic. |
+
+Column is structural rather than a configured field. Read it from
+`card["column"]`, build choices from `board.get_columns()`, and submit the
+chosen column ID as `"column"` only when `board.actions.move_cards` is true.
+Use column IDs as values because column titles can be duplicated.
+
+### Saving one field or the whole form
+
+Use `update_field(card_id, field_key, value)` for one targeted change:
+
+```python
+try:
+    updated_status = board.update_field(17, "status", "Done")
+except BoardModelError as error:
+    show_error(str(error))
+else:
+    print(updated_status["value"])  # "Done"
+```
+
+The return value is the refreshed `CardFieldData`, so numeric strings and
+other inputs can immediately be inspected after normalization. The method
+requires a configured field key and intentionally rejects `id`, `column`, and
+unconfigured private keys. It delegates to `update_card()`, which means it
+uses the same validation, edit permission, card redraw, and `card_updated`
+event behavior. A no-op produces no event. `read_only` and `show_in_editor`
+control form presentation; application code may still update those fields
+programmatically.
+
+When a Save button commits multiple controls, collect one mapping and call
+`update_card()` once. This validates the completed card, redraws once, and
+emits at most one event:
+
+```python
+updates = {
+    key: control.get_value()
+    for key, control in controls.items()
+    if not field_data[key]["read_only"]
+}
+
+try:
+    board.update_card(card["id"], updates)
+except BoardModelError as error:
+    show_form_error(str(error))
+else:
+    close_form()
+```
+
+Keep the form open after `BoardModelError` so the user can correct required,
+type, option, limit, or custom-validator failures. Persistence continues to
+flow through the normal `on_change` callback after a successful update. The
+complete runnable [`examples/custom_editor.py`](examples/custom_editor.py)
+builds CustomTkinter controls from this contract, includes column selection
+and read-only handling, and reports validation errors without closing.
+
 ## Asynchronous loading
 
 `load_async()` performs fetching and validation on a daemon worker, then calls
@@ -795,28 +944,6 @@ a load after destruction raises `RuntimeError`.
 `set_loading(True)` is also public for application-owned tasks. It changes the
 toolbar presentation and disables its search/add controls; it does not start a
 worker, block public mutations, or alter data.
-
-Pass `on_card_open` to run a function when a card is clicked. The callback
-receives one detached card dictionary. Set `use_builtin_editor=False` when the
-callback should run without CTkKanban opening its generated overlay:
-
-```python
-def card_clicked(card):
-    open_my_form(card)
-
-
-board = CTkKanbanBoard(
-    app,
-    columns=columns,
-    cards=cards,
-    use_builtin_editor=False,
-    on_card_open=card_clicked,
-)
-```
-
-Providing `on_card_open` also replaces the edit overlay when
-`use_builtin_editor=True`, preserving the original callback behavior. Use the
-public `add_card()` and `update_card()` methods when your own form saves.
 
 Card schemas, fonts, and search text are reused across compact cards. Static
 text uses lightweight, appearance-aware Tk primitives, while the accent strip,
@@ -895,6 +1022,7 @@ targets; `column_keys` accepts `id` and `title`.
 | `get_cards(column_id=None)` | `list[CardRecord]` | Ordered detached records; an unknown explicit column raises. |
 | `get_columns()` | `list[ColumnRecord]` | Ordered detached records. |
 | `get_fields()` | `list[dict[str, Any]]` | Detached normalized definitions. |
+| `get_field_data(card_id)` | `dict[str, CardFieldData]` | Ordered definitions plus detached editor-ready values for one known card. |
 | `set_fields(fields)` | `None` | Atomic schema replacement, redraw, and optional `fields_changed` event. |
 | `get_selected_card()` | `CardRecord | None` | Current detached selection, if it still exists. |
 | `search(query)` | `None` | Set case-insensitive local search; non-string values are converted with `str()`. |
@@ -907,6 +1035,7 @@ targets; `column_keys` accepts `id` and `title`.
 | --- | --- | --- |
 | `add_card(card, *, index=None)` | `CardRecord` | Add to `card["column"]` at an insertion position. |
 | `update_card(card_id, updates)` | `CardRecord` | Merge fields. Changing column additionally requires move permission. |
+| `update_field(card_id, field_key, value)` | `CardFieldData` | Validate and update one configured value, returning its refreshed definition and normalized value. |
 | `move_card(card_id, column_id, index=None)` | `CardRecord` | Move/reorder, appending when index is omitted. |
 | `delete_card(card_id)` | `CardRecord` | Remove and return the old record; no confirmation prompt. |
 | `add_column(column, *, index=None)` | `ColumnRecord` | Add at an insertion position. |
@@ -966,6 +1095,7 @@ model `update_column()` also accepts a title string directly.
 | `Card` | Frozen compatibility dataclass for the four default fields; tags are a tuple. It is not a container for arbitrary schema fields. |
 | `ColumnRecord` | `TypedDict` output with `id` and `title`. |
 | `CardRecord` | `dict[str, Any]` because schema and private values are dynamic. |
+| `CardFieldData` | `TypedDict` extending `FieldDefinition` with the detached card `value`. |
 | `BoardSnapshot` | `TypedDict` with `columns` and `cards` lists. |
 | `CardField` | Frozen, typed convenience definition with readable visible/editor/search defaults. |
 | `Field` | Fluent builder for card input type, compact display, validation, formatting, and visibility. |

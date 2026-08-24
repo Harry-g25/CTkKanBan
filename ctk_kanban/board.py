@@ -23,7 +23,7 @@ from .config import ActionConfig, BoardConfig, merge_config
 from .context_menu import CTkContextMenu
 from .dropdown import CTkDropdown
 from .editor import CardEditor
-from .fields import FieldInput
+from .fields import CardFieldData, FieldInput, default_for_field
 from .model import BoardModel, BoardModelError, BoardSnapshot, CardRecord, ColumnRecord
 from .themes import merge_theme
 
@@ -941,6 +941,27 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
         return self.model.get_fields()
 
+    def get_field_data(self, card_id: Any) -> dict[str, CardFieldData]:
+        """Return editor-ready definitions and values for one card.
+
+        The outer mapping is ordered like :meth:`get_fields` and keyed by each
+        configured field's stable ``key``.  Every nested mapping is detached
+        from the model and adds ``value`` to the normalized field definition.
+        Missing optional values use the same defaults as the generated editor.
+
+        Unlike :meth:`get_card`, this targeted helper is strict: an invalid or
+        unknown card ID raises :class:`BoardModelError`.
+        """
+
+        card = self.model.get_card(card_id)
+        result: dict[str, CardFieldData] = {}
+        for field in self.model.get_fields():
+            key = str(field["key"])
+            data: dict[str, Any] = dict(field)
+            data["value"] = card[key] if key in card else default_for_field(field)
+            result[key] = cast(CardFieldData, data)
+        return result
+
     def set_fields(self, fields: Iterable[FieldInput]) -> None:
         """Replace the schema and rebuild cards and any open editor."""
 
@@ -1001,6 +1022,30 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         self._emit_change("card_updated", before=before, card=updated, previous=previous)
         return updated
+
+    def update_field(self, card_id: Any, field_key: str, value: Any) -> CardFieldData:
+        """Update one configured card field and return its refreshed data.
+
+        This is the single-field convenience counterpart to
+        :meth:`update_card`.  It deliberately delegates mutation to that
+        method so schema normalization, validation, action permissions,
+        rendering, and change events keep exactly the same behavior.
+        """
+
+        if not isinstance(field_key, str) or not field_key.strip():
+            raise BoardModelError("field key must be a nonblank string")
+        key = field_key.strip()
+        self.model.get_card(card_id)
+        field = next(
+            (definition for definition in self.model.get_fields() if definition["key"] == key),
+            None,
+        )
+        if field is None:
+            raise BoardModelError(f"unknown card field key: {key!r}")
+        updated = self.update_card(card_id, {key: value})
+        data: dict[str, Any] = dict(field)
+        data["value"] = updated[key] if key in updated else default_for_field(field)
+        return cast(CardFieldData, data)
 
     def delete_card(self, card_id: Any) -> CardRecord:
         self._require_action(self.actions.delete_cards, "card deletion is disabled")

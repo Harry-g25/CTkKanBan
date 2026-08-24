@@ -86,6 +86,12 @@ class FieldDefinition(_RequiredFieldDefinition, total=False):
     colors: Mapping[Any, Any]
 
 
+class CardFieldData(FieldDefinition):
+    """Detached editor-facing definition and value for one card field."""
+
+    value: Any
+
+
 @dataclass(frozen=True, slots=True)
 class CardField:
     """Typed, concise definition for one card value and generated input.
@@ -760,6 +766,7 @@ def format_field_value(
 
 __all__ = [
     "CardField",
+    "CardFieldData",
     "CardRole",
     "DEFAULT_FIELDS",
     "Field",

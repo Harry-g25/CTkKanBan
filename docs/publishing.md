@@ -43,13 +43,13 @@ repository workflow uses the project URL
    python -m twine check dist/*
    ```
 
-   CI installs the newest allowed CustomTkinter release, while its compatibility
-   job pins the minimum. Before a release, reproduce both dependency edges:
+   CI installs an allowed CustomTkinter release, while its compatibility job
+   pins the minimum. Before a release, reproduce both dependency edges:
 
    ```bash
-   python -m pip install "customtkinter==5.2.2"
+   python -m pip install "customtkinter==6.0.0"
    python -m pytest -q
-   python -m pip install --upgrade "customtkinter>=6,<7"
+   python -m pip install --upgrade "customtkinter>=6.0.0,<7"
    python -m pytest -q
    ```
 
@@ -78,7 +78,7 @@ Build artifacts in `dist/` are local outputs and must not be committed.
 
 1. Create a GitHub release targeting the validated commit on `main`.
 2. Use a tag that exactly matches `ctk_kanban.__version__`, with an optional
-   leading `v` (for example `2.2.1` or `v2.2.1`).
+   leading `v` (for example `2.3.0` or `v2.3.0`).
 3. Use the matching changelog section as the release notes and publish the
    release. A draft does not trigger publishing.
 4. Publishing triggers the `Publish to PyPI` workflow. Prereleases are

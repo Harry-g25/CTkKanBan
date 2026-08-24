@@ -16,6 +16,7 @@ def test_public_api_is_intentionally_small() -> None:
         "BoardSnapshot",
         "Card",
         "CardField",
+        "CardFieldData",
         "CardRecord",
         "Column",
         "ColumnRecord",

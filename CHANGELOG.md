@@ -6,6 +6,13 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
+## 2.3.0 - 2026-08-24
+
+[Release notes](docs/release-notes-2.3.0.md)
+
+- Added `get_field_data(card_id)` and `update_field(card_id, field_key, value)`
+  for schema-aware custom forms, plus a typed `CardFieldData` result and a
+  complete schema-driven custom-editor guide/example.
 - Replaced native Tk card and column menus with compact, text-only,
   content-sized CustomTkinter popup menus, including nested submenus and
   right-click access.
