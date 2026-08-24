@@ -432,7 +432,7 @@ def test_editor_open_and_close_preserves_board_canvas_and_column_fill(tk_root: A
 
 
 def test_fill_columns_distributes_extra_horizontal_space_equally(tk_root: Any) -> None:
-    tk_root.geometry("1400x700")
+    tk_root.geometry("900x700")
     tk_root.deiconify()
     board = make_board(
         tk_root,
@@ -442,6 +442,10 @@ def test_fill_columns_distributes_extra_horizontal_space_equally(tk_root: Any) -
             {"id": "done", "title": "Done"},
         ],
         fill_columns=True,
+        # Keep the minimum track narrower than the smallest hosted CI desktop.
+        # The default 300px columns correctly overflow at this size instead of
+        # exercising the extra-space distribution this test is about.
+        column_width=220,
     )
     tk_root.update()
 
@@ -456,7 +460,7 @@ def test_horizontal_scrollbar_tracks_window_resize_and_reaches_last_column(
     tk_root: Any,
     fill_columns: bool,
 ) -> None:
-    tk_root.geometry("1100x700")
+    tk_root.geometry("900x700")
     tk_root.deiconify()
     board = make_board(
         tk_root,
@@ -467,6 +471,9 @@ def test_horizontal_scrollbar_tracks_window_resize_and_reaches_last_column(
         ],
         cards=[{"id": 1, "column": "backlog", "title": "One"}],
         fill_columns=fill_columns,
+        # This fits before the resize even when a hosted desktop clamps the
+        # requested window, but still overflows after resizing to 640px.
+        column_width=220,
     )
     tk_root.update()
 
