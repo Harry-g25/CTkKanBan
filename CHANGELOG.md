@@ -8,6 +8,25 @@ confirm that matching distributions were published to PyPI.
 
 No unreleased changes yet.
 
+## 2.2.0 - 2026-08-24
+
+[Release notes](docs/release-notes-2.2.0.md)
+
+- Fixed the editor drawer layout transition so the scroll canvas stays managed,
+  columns retain their full height, and centred columns return after closing.
+- Added equal-width `fill_columns` layout and a `use_builtin_editor` switch so
+  the simple `on_card_open(card)` callback can handle card clicks by itself.
+- Reduced card and form rendering overhead by reusing normalized schemas and
+  fonts, removing unused per-card button widgets, and reusing cards in search.
+- Made scrollbars easier to grab, coalesced repeated geometry updates, and fixed
+  horizontal scrolling after the host window is resized. Wheel input now uses
+  the column's vertical axis when needed and otherwise moves across the board.
+- Added concise `CardField` and fluent `Field` definitions, string field
+  shorthand, custom title keys, and `CTkKanbanBoard.from_rows()` for building a
+  board directly from database rows or cursors with explicit key mappings.
+- Added focused, runnable examples for board setup, every generated input type,
+  custom editors, SQLite row mapping/persistence, and asynchronous loading.
+
 ## 2.1.0 - 2026-08-18
 
 - Added schema-driven card fields with generated editor controls for text,
@@ -29,6 +48,9 @@ No unreleased changes yet.
   field schemas, configuration, permissions, event payloads, data/ordering
   guarantees, database adapters, async loading, all theme tokens, errors, and
   lifecycle behavior; added automated documentation drift checks.
+- Reworked the runnable example into a 2.1 showcase covering typed
+  configuration, disabled deletion, custom theme tokens, schema-driven cards,
+  validation, formatting, change events, snapshots, and runtime field updates.
 
 ## 2.0.1 - 2026-08-17
 

@@ -9,6 +9,7 @@ import pytest
 
 from ctk_kanban import (
     BoardModelError,
+    Field,
     normalize_row,
     rows_from_cursor,
     snapshot_from_cursors,
@@ -144,3 +145,52 @@ def test_snapshot_helpers_accept_custom_field_schema() -> None:
     )
 
     assert snapshot["cards"][0]["estimate"] == 5
+
+
+def test_snapshot_from_rows_accepts_cursors_and_database_key_mappings() -> None:
+    columns_cursor = Cursor(
+        (("status_id", None), ("status_name", None)),
+        [(10, "To do"), (20, "Done")],
+    )
+    cards_cursor = Cursor(
+        (
+            ("task_id", None),
+            ("status_id", None),
+            ("summary", None),
+            ("customer_name", None),
+            ("estimate_hours", None),
+        ),
+        [(7, 10, "Mapped task", "Acme", "8")],
+    )
+
+    snapshot = snapshot_from_rows(
+        columns_cursor,
+        cards_cursor,
+        column_keys={"id": "status_id", "title": "status_name"},
+        card_keys={"id": "task_id", "column": "status_id", "title": "summary"},
+        fields=["customer_name", Field("estimate_hours").integer()],
+    )
+
+    assert snapshot == {
+        "columns": [{"id": 10, "title": "To do"}, {"id": 20, "title": "Done"}],
+        "cards": [
+            {
+                "id": 7,
+                "column": 10,
+                "title": "Mapped task",
+                "customer_name": "Acme",
+                "estimate_hours": 8,
+            }
+        ],
+    }
+
+
+def test_database_key_mapping_reports_unknown_and_missing_sources() -> None:
+    with pytest.raises(ValueError, match="unknown card key mapping"):
+        snapshot_from_rows([], [], card_keys={"owner": "owner_name"})
+    with pytest.raises(ValueError, match="missing mapped source column 'task_id'"):
+        snapshot_from_rows(
+            [{"id": "todo", "title": "To do"}],
+            [{"status": "todo", "summary": "Missing ID"}],
+            card_keys={"id": "task_id"},
+        )

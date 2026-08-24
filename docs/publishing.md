@@ -37,7 +37,7 @@ repository workflow uses the project URL
 
    ```bash
    python -m pytest -q
-   python -m ruff check ctk_kanban tests scripts example.py
+   python -m ruff check ctk_kanban tests scripts example.py examples
    python -m mypy ctk_kanban
    python -m build
    python -m twine check dist/*
@@ -56,8 +56,9 @@ repository workflow uses the project URL
    python -c "import ctk_kanban; print(ctk_kanban.__version__)"
    ```
 
-7. Start `python example.py` and manually verify board creation, editing,
-   dragging, deletion configuration, custom fields, and both appearance modes.
+7. Start `python example.py` and the focused programs in `examples/`. Manually
+   verify board creation, editing, dragging, deletion configuration, custom and
+   built-in editors, database mappings, async loading, and both appearance modes.
 8. Review the diff, commit the release preparation, push it to `main`, and wait
    for required CI checks to pass.
 
@@ -67,7 +68,7 @@ Build artifacts in `dist/` are local outputs and must not be committed.
 
 1. Create a GitHub release targeting the validated commit on `main`.
 2. Use a tag that exactly matches `ctk_kanban.__version__`, with an optional
-   leading `v` (for example `2.1.0` or `v2.1.0`).
+   leading `v` (for example `2.2.0` or `v2.2.0`).
 3. Use the matching changelog section as the release notes and publish the
    release. A draft does not trigger publishing.
 4. Publishing triggers the `Publish to PyPI` workflow. Prereleases are

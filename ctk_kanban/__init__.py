@@ -9,7 +9,7 @@ from .adapters import (
 )
 from .board import CTkKanbanBoard
 from .config import ActionConfig, BoardConfig, LayoutConfig, TextConfig, merge_config
-from .fields import DEFAULT_FIELDS, FieldDefinition, FieldType
+from .fields import DEFAULT_FIELDS, CardField, Field, FieldDefinition, FieldInput, FieldType
 from .model import (
     BoardModel,
     BoardModelError,
@@ -30,12 +30,15 @@ __all__ = [
     "BoardSnapshot",
     "BoardConfig",
     "Card",
+    "CardField",
     "CardRecord",
     "Column",
     "ColumnRecord",
     "DEFAULT_FIELDS",
     "DEFAULT_THEME",
+    "Field",
     "FieldDefinition",
+    "FieldInput",
     "FieldType",
     "LayoutConfig",
     "TextConfig",

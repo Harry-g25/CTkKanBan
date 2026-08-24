@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any, TypeAlias, TypedDict, cast
 
-from .fields import normalize_field_value, normalize_fields
+from .fields import FieldInput, normalize_field_value, normalize_fields
 
 BoardId = str | int
 CARD_PRIORITIES = ("", "Low", "Medium", "High", "Critical")
@@ -105,7 +105,7 @@ class BoardModel:
         columns: Iterable[ColumnInput] = (),
         cards: Iterable[CardInput] = (),
         *,
-        fields: Iterable[Mapping[str, Any]] | None = None,
+        fields: Iterable[FieldInput] | None = None,
     ) -> None:
         self._columns: dict[BoardId, Column] = {}
         self._column_order: list[BoardId] = []
@@ -127,7 +127,7 @@ class BoardModel:
 
         return deepcopy(list(self._fields))
 
-    def set_fields(self, fields: Iterable[Mapping[str, Any]]) -> None:
+    def set_fields(self, fields: Iterable[FieldInput]) -> None:
         """Atomically replace the card schema and revalidate existing cards."""
 
         try:
@@ -380,10 +380,12 @@ class BoardModel:
 
         if "column" in source and "column_id" in source and source["column"] != source["column_id"]:
             raise BoardModelError("column and column_id must refer to the same column")
+        title_field = next(field for field in fields if field["card_role"] == "title")
+        title_key = title_field["key"]
         try:
             card_id = source["id"]
             column_id = source["column_id"] if "column_id" in source else source["column"]
-            title = source["title"]
+            title = source[title_key]
         except KeyError as exc:
             raise BoardModelError(f"card is missing {exc.args[0]!r}") from exc
         cls._validate_id(card_id, "card")
@@ -406,8 +408,11 @@ class BoardModel:
             record[key] = normalize_field_value(field, raw, context)
             context[key] = record[key]
 
+        structural_keys = {"id", "column", "column_id"}
+        if title_key != "title":
+            structural_keys.add("title")
         for key, item in source.items():
-            if key not in {"id", "column", "column_id"} and key not in field_keys:
+            if key not in structural_keys and key not in field_keys:
                 record[key] = deepcopy(item)
         return record
 

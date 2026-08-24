@@ -45,7 +45,7 @@ jobs:
           actual = tag.removeprefix('v');
           assert actual == expected, f'release tag {tag!r} does not match package version {expected!r}'"
       - run: xvfb-run -a python -m pytest -q
-      - run: python -m ruff check ctk_kanban tests scripts example.py
+      - run: python -m ruff check ctk_kanban tests scripts example.py examples
       - run: python -m mypy ctk_kanban
       - run: python -m build
       - run: python -m twine check dist/*

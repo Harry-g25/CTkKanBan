@@ -22,6 +22,7 @@ a format suited to package and repository viewers.
 
 - [Install](#install)
 - [Quick start](#quick-start)
+- [Runnable examples](#runnable-examples)
 - [Interaction model](#interaction-model)
 - [Styling and theme tokens](#styling-and-theme-tokens)
 - [Configuration and permissions](#configuration-and-permissions)
@@ -83,6 +84,24 @@ app.mainloop()
 `columns` and `cards` may be any iterables of mappings. Their input order is
 the initial manual order. Call `board.get_data()` at any time to retrieve the
 complete, detached state.
+
+## Runnable examples
+
+Start with the smallest example for your use case. Every program can be run
+directly from the repository root after `python -m pip install -e ".[dev]"`.
+
+| Goal | Example | What it demonstrates |
+| --- | --- | --- |
+| Build a normal board | [`examples/basic_board.py`](examples/basic_board.py) | Minimal data, equal-width columns, editing, dragging, search, and `on_change`. |
+| Put database fields on cards | [`examples/custom_fields.py`](examples/custom_fields.py) | `Field`, `CardField`, custom title keys, all generated input types, display roles, validation, formatting, and visibility. |
+| Load and save real rows | [`examples/sqlite_board.py`](examples/sqlite_board.py) | In-memory SQLite, cursor loading, source-key mappings, typed columns, and persistence after edits or moves. |
+| Own the card form | [`examples/custom_editor.py`](examples/custom_editor.py) | `use_builtin_editor=False`, `on_card_open(card)`, a custom window, and `update_card()`. |
+| Fetch without freezing Tk | [`examples/async_loading.py`](examples/async_loading.py) | `snapshot_from_rows()`, `load_async()`, loading state, and success/error delivery. |
+| Explore everything together | [`example.py`](example.py) | Low-level field mappings, runtime schema replacement, permissions, layout, text, theme tokens, and snapshots. |
+
+The focused examples favor copyable application patterns; the larger showcase
+is useful for visually exploring the full board. See
+[`examples/README.md`](examples/README.md) for the same index and run command.
 
 ## Interaction model
 
@@ -193,6 +212,8 @@ board = CTkKanbanBoard(
         },
         "layout": {
             "show_toolbar": True,
+            "fill_columns": True,
+            "use_builtin_editor": True,
             "column_width": 340,
             "column_height": 560,
             "editor_width": 480,
@@ -255,9 +276,18 @@ started by the built-in menus; direct API deletions never prompt.
 | --- | ---: | --- |
 | `show_toolbar` | `True` | Show the title, summary, search, and add buttons. `search()` remains usable when hidden. |
 | `enable_drag` | `True` | Enable handle-only card dragging when `move_cards` is also enabled. Menu/API movement remains available when only dragging is off. |
+| `use_builtin_editor` | `True` | Use the generated drawer. When false, `on_card_open(card)` can handle card clicks and add-editor opening is a no-op. |
+| `fill_columns` | `False` | Give every column an equal share of surplus horizontal space. `column_width` remains the minimum, so narrower boards still scroll. |
 | `column_width` | `320` | Column width in widget pixels; integer at least `220`. |
 | `column_height` | `500` | Minimum board-column height; integer at least `240`. |
 | `editor_width` | `420` | Width of the embedded drawer; integer at least `320`. |
+
+Scrollbars use a 14-pixel default thickness and can be resized with the
+`scrollbar_width` theme token. The horizontal range is recalculated after host
+window resizes, so columns remain reachable on a narrower window. A wheel
+gesture scrolls a column vertically when it has overflow; over a short column
+or the board background it moves horizontally. Shift+wheel always moves the
+board horizontally.
 
 ### Text settings
 
@@ -290,8 +320,9 @@ board = CTkKanbanBoard(
 )
 ```
 
-Existing direct options such as `show_toolbar`, `enable_drag`, `column_width`,
-`column_height`, `editor_width`, `confirm_delete`, and `board_title` override
+Existing direct options such as `show_toolbar`, `enable_drag`,
+`use_builtin_editor`, `fill_columns`, `column_width`, `column_height`,
+`editor_width`, `confirm_delete`, and `board_title` override
 the corresponding structured setting when explicitly supplied. The two
 `allow_*_deletion` arguments override `actions.delete_cards` and
 `actions.delete_columns`. Remaining keyword arguments are forwarded to the
@@ -303,6 +334,45 @@ Pass `fields` to define any number of typed card values. The built-in editor is
 generated from these definitions, card rendering uses their display roles, and
 search uses fields marked `searchable`. When `fields` is omitted, the existing
 title, description, priority, and tags behavior remains unchanged.
+
+### Concise fields
+
+Use `Field` for a fluent definition similar to CTkDataTable's `Column` builder.
+A plain string is shorthand for a visible, editable, searchable text field;
+its database-style key is converted to a readable label automatically.
+
+```python
+from ctk_kanban import CardField, Field
+
+fields = [
+    Field("summary").label("Task").title(),
+    "customer_name",  # Customer Name text input and metadata pill
+    Field("description").textarea().body(),
+    Field("severity")
+        .select(["Low", "Medium", "High"])
+        .badge(colors={"High": "#EF4444"}),
+    CardField("due_date", label="Due", type="date"),
+    Field("estimate_hours").label("Estimate").integer(minimum=0),
+    Field("internal_notes").textarea().editor_only(),
+]
+```
+
+`CardField` is the immutable typed form. `Field(...).build()` returns a detached
+`CardField`. `Field` provides `text()`, `textarea()`, `number()`, `integer()`,
+`select()`, `multiselect()`, `date()`, `datetime()`, `checkbox()`, and `tags()`
+input helpers. Its display and behavior helpers are `title()`, `body()`,
+`badge()`, `metadata()`, `card_only()`, `editor_only()`, `hide()`,
+`read_only()`, `required()`, `searchable()`, `section()`, `placeholder()`,
+`help()`, `default()`, `length()`, `validate()`, and `fmt()`.
+
+Exactly one field is the title. Calling `.title()` allows a database key such
+as `summary` to be the heading. If no supplied field has that role, the normal
+`title` definition is inserted automatically.
+
+### Advanced mapping definitions
+
+Existing mapping definitions remain supported for callers that want to set
+each low-level schema option explicitly:
 
 ```python
 fields = [
@@ -400,7 +470,8 @@ invalid choices are reported when the schema validates the completed card.
 
 ### Field definition reference
 
-Every definition requires a unique, nonblank `key` and `label`.
+Every low-level mapping definition requires a unique, nonblank `key` and
+`label`; `Field`, `CardField`, and string shorthand infer the label.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -454,7 +525,7 @@ fields = [
 
 | Role | Presentation |
 | --- | --- |
-| `title` | Main heading. Exactly one field has this role and its key must be `title`. |
+| `title` | Main heading. Exactly one text/textarea field has this role; its key may match the source database column. |
 | `body` | Wrapped body line, truncated by `card_description_max_chars`. Multiple body fields are supported. |
 | `badge` | Colored pill; the first non-empty visible badge also colors the card's accent strip. |
 | `tags` | One `#value` pill per item, capped per field by `card_max_visible_tags`. |
@@ -466,9 +537,9 @@ are omitted. `formatter` changes display text but never the normalized stored
 value. A field's `colors` mapping takes precedence for its exact value; the
 default `priority` field otherwise uses the priority theme colors.
 
-`id`, `column`, and `column_id` are reserved structural keys. If `title` is
-not supplied in `fields`, the default title definition is inserted. The title
-must use `text` or `textarea`, is forced to `required=True` and
+`id`, `column`, and `column_id` are reserved structural keys. If no supplied
+field uses the title role, the default `title` definition is inserted. The
+chosen heading must use `text` or `textarea`, is forced to `required=True` and
 `show_on_card=True`, and must be the only field with `card_role="title"`.
 
 Additional card keys that are not in the schema are deep-copied and preserved
@@ -592,16 +663,37 @@ save, poll, page, retry, or resolve conflicts itself.
 
 ## Database rows
 
-Database results can be converted without adding a database-driver dependency
-to CTkKanban. Mapping rows from psycopg `dict_row`, `sqlite3.Row`, and
-SQLAlchemy are accepted by `snapshot_from_rows()`:
+Database results can be displayed without renaming every selected column.
+`CTkKanbanBoard.from_rows()` accepts mapping rows, `sqlite3.Row`, SQLAlchemy
+mapping rows, or executed DB-API cursors directly. Key mappings point from the
+board's structural names to the source query names:
 
 ```python
-from ctk_kanban import snapshot_from_rows
+from ctk_kanban import CTkKanbanBoard, Field
 
-snapshot = snapshot_from_rows(column_rows, card_rows, fields=fields)
-board.set_data(snapshot)
+board = CTkKanbanBoard.from_rows(
+    app,
+    columns=column_cursor,
+    cards=card_cursor,
+    column_keys={"id": "status_id", "title": "status_name"},
+    card_keys={
+        "id": "task_id",
+        "column": "status_id",
+        "title": "summary",
+    },
+    fields=[
+        "customer_name",
+        Field("severity").badge(),
+        Field("due_date").date(),
+        Field("estimate_hours").integer(),
+    ],
+)
+board.pack(fill="both", expand=True)
 ```
+
+Mapped structural source keys are consumed and outputs use canonical `id`,
+`column`, and `title`. Other selected columns retain their database names.
+Missing mapped columns and unknown mapping targets produce clear errors.
 
 Plain DB-API tuple results can be converted using cursor metadata. Fetch each
 result before reusing its cursor:
@@ -624,9 +716,9 @@ cards = rows_from_cursor(cursor)
 board.set_data(snapshot_from_rows(columns, cards))
 ```
 
-Use SQL aliases such as `column_id AS column` to produce CTkKanban's exact
-record keys. Result column names must be unique. `rows_from_cursor()` consumes
-all remaining rows returned by the cursor.
+SQL aliases such as `column_id AS column` remain a valid alternative to key
+mappings. Result column names must be unique. `rows_from_cursor()` consumes all
+remaining rows returned by the cursor.
 
 `snapshot_from_cursors(columns_cursor, cards_cursor)` is a shorter equivalent
 when two separately executed cursors are available. Every snapshot helper
@@ -637,8 +729,8 @@ normalizes and validates the complete result before returning it.
 | `normalize_row(row)` | Copies a mapping, an object with `_mapping`, or a keys/index row to `dict[str, Any]`. Plain tuples have no names and raise `TypeError`. |
 | `normalize_rows(rows)` | Applies `normalize_row()` to an iterable. |
 | `rows_from_cursor(cursor)` | Requires an executed result with `description`, verifies unique column names, calls `fetchall()`, and zips each tuple to those names. |
-| `snapshot_from_rows(columns, cards, *, fields=None)` | Normalizes rows, validates them through a temporary `BoardModel`, and returns its detached snapshot. |
-| `snapshot_from_cursors(columns_cursor, cards_cursor, *, fields=None)` | Consumes two separately executed cursor results and delegates to `snapshot_from_rows()`. |
+| `snapshot_from_rows(columns, cards, *, fields=None, card_keys=None, column_keys=None)` | Accepts row iterables or cursors, applies optional source-key mappings, validates through a temporary `BoardModel`, and returns its detached snapshot. |
+| `snapshot_from_cursors(columns_cursor, cards_cursor, *, fields=None, card_keys=None, column_keys=None)` | Consumes two separately executed cursors and delegates to `snapshot_from_rows()`. |
 
 Pass the same `fields` used by the board so database values receive identical
 normalization. SQL drivers may return JSON/array values in driver-specific
@@ -695,8 +787,33 @@ a load after destruction raises `RuntimeError`.
 toolbar presentation and disables its search/add controls; it does not start a
 worker, block public mutations, or alter data.
 
-Pass `on_card_open` when the host application owns card editing. Its callback
-receives the card snapshot and replaces the built-in drawer when a card opens.
+Pass `on_card_open` to run a function when a card is clicked. The callback
+receives one detached card dictionary. Set `use_builtin_editor=False` when the
+callback should run without CTkKanban opening its generated drawer:
+
+```python
+def card_clicked(card):
+    open_my_form(card)
+
+
+board = CTkKanbanBoard(
+    app,
+    columns=columns,
+    cards=cards,
+    use_builtin_editor=False,
+    on_card_open=card_clicked,
+)
+```
+
+Providing `on_card_open` also replaces the edit drawer when
+`use_builtin_editor=True`, preserving the original callback behavior. Use the
+public `add_card()` and `update_card()` methods when your own form saves.
+
+Card schemas and shared fonts are reused across compact cards, and search now
+hides and reorders existing card widgets instead of destroying and recreating
+them on every query. Initial rendering and `set_data()` still create real Tk
+widgets on the main thread, so schemas that show many labels or pills per card
+have a cost proportional to the number of visible controls.
 
 ## API reference
 
@@ -715,6 +832,8 @@ CTkKanbanBoard(
     config=None,
     show_toolbar=None,
     enable_drag=None,
+    use_builtin_editor=None,
+    fill_columns=None,
     column_width=None,
     column_height=None,
     editor_width=None,
@@ -728,9 +847,29 @@ CTkKanbanBoard(
 
 `master` is the parent Tk widget. `columns` and `cards` provide initial state;
 all other inputs are keyword-only. `theme`, `fields`, and `config` use the
-contracts above. `on_change` receives event dictionaries, and `on_card_open`
-receives a detached card record in place of the built-in existing-card editor.
+contracts above. `on_change` receives event dictionaries and `on_card_open`
+receives a detached card record when a card is clicked.
 Direct layout/text/deletion options take precedence over structured config.
+
+### `CTkKanbanBoard.from_rows()`
+
+```python
+CTkKanbanBoard.from_rows(
+    master,
+    columns,
+    cards,
+    *,
+    card_keys=None,
+    column_keys=None,
+    fields=None,
+    **board_options,
+)
+```
+
+This classmethod consumes supported row iterables or executed DB-API cursors,
+maps database names, validates the complete snapshot, and returns a normal
+`CTkKanbanBoard`. `card_keys` accepts canonical `id`, `column`, and `title`
+targets; `column_keys` accepts `id` and `title`.
 
 ### Board data, view, and schema methods
 
@@ -767,8 +906,8 @@ event only when data changes.
 
 | Member | Return | Behavior |
 | --- | --- | --- |
-| `open_add_card_editor(column_id=None)` | `None` | Open the generated drawer. If no column exists and adding columns is allowed, prompt for one first. |
-| `open_edit_card_editor(card_id)` | `None` | Open the drawer or invoke `on_card_open`; invalid/unknown IDs are ignored. |
+| `open_add_card_editor(column_id=None)` | `None` | Open the generated drawer. It is a no-op when `use_builtin_editor=False`; otherwise, if no column exists and adding columns is allowed, prompt for one first. |
+| `open_edit_card_editor(card_id)` | `None` | Open the drawer or invoke the configured custom callback; invalid/unknown IDs are ignored. |
 | `open_add_column_dialog()` | `None` | Prompt for a title and create a UUID-backed column. |
 | `is_loading` | `bool` | Read-only property describing pending async delivery/manual presentation. |
 | `load_error` | `Exception | None` | Most recent async load error; cleared when a new load starts. |
@@ -813,14 +952,17 @@ model `update_column()` also accepts a title string directly.
 | `ColumnRecord` | `TypedDict` output with `id` and `title`. |
 | `CardRecord` | `dict[str, Any]` because schema and private values are dynamic. |
 | `BoardSnapshot` | `TypedDict` with `columns` and `cards` lists. |
+| `CardField` | Frozen, typed convenience definition with readable visible/editor/search defaults. |
+| `Field` | Fluent builder for card input type, compact display, validation, formatting, and visibility. |
 | `FieldDefinition` | `TypedDict` describing a generated field. |
+| `FieldInput` | Accepted union of `str`, `CardField`, `Field`, and legacy field mappings. |
 | `FieldType` | Literal union of supported field type strings. |
 | `DEFAULT_FIELDS` | Tuple containing detached-compatible definitions for title, description, priority, and tags. |
 | `ActionConfig`, `LayoutConfig`, `TextConfig`, `BoardConfig` | Frozen configuration dataclasses. |
 | `DEFAULT_THEME` | Import-time dictionary of all theme defaults/tokens. |
 | `merge_config()`, `merge_theme()` | Strict validation/merge helpers. |
 | `normalize_row()`, `normalize_rows()`, `rows_from_cursor()` | Row-to-dictionary adapters. |
-| `snapshot_from_rows()`, `snapshot_from_cursors()` | Schema-aware snapshot adapters. |
+| `snapshot_from_rows()`, `snapshot_from_cursors()` | Schema-aware row/cursor adapters with optional `card_keys` and `column_keys` mappings. |
 | `__version__` | Installed CTkKanban version string. |
 
 `Card.from_definition()` intentionally uses the default schema and returns the

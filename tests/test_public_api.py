@@ -15,12 +15,15 @@ def test_public_api_is_intentionally_small() -> None:
         "BoardModelError",
         "BoardSnapshot",
         "Card",
+        "CardField",
         "CardRecord",
         "Column",
         "ColumnRecord",
         "DEFAULT_FIELDS",
         "DEFAULT_THEME",
+        "Field",
         "FieldDefinition",
+        "FieldInput",
         "FieldType",
         "LayoutConfig",
         "TextConfig",
@@ -53,7 +56,11 @@ def test_structured_config_is_partial_and_strict() -> None:
     config = ctk_kanban.merge_config(
         {
             "actions": {"delete_cards": False},
-            "layout": {"editor_width": 500},
+            "layout": {
+                "editor_width": 500,
+                "fill_columns": True,
+                "use_builtin_editor": False,
+            },
             "text": {"board_title": "Roadmap"},
         }
     )
@@ -61,6 +68,10 @@ def test_structured_config_is_partial_and_strict() -> None:
     assert not config.actions.delete_cards
     assert config.actions.add_cards
     assert config.layout.editor_width == 500
+    assert config.layout.fill_columns
+    assert not config.layout.use_builtin_editor
     assert config.text.board_title == "Roadmap"
     with pytest.raises(ValueError, match="unknown action"):
         ctk_kanban.merge_config({"actions": {"explode_cards": True}})
+    with pytest.raises(TypeError, match="layout.fill_columns"):
+        ctk_kanban.merge_config({"layout": {"fill_columns": 1}})

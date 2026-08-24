@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import tkinter as tk
 from typing import Any, Callable
 
@@ -36,7 +37,15 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._managed_global_bindings: list[tuple[str, str]] = []
         self._managed_destroyed = False
+        self._scrollregion_after_id: str | None = None
+        self._last_scrollbar_view: tuple[float, float] | None = None
         super().__init__(*args, **kwargs)
+        self.bind("<Configure>", self._queue_scrollregion_update)
+        self._parent_canvas.configure(xscrollincrement=16, yscrollincrement=16)
+        if self._orientation == "horizontal":
+            self._parent_canvas.configure(xscrollcommand=self._set_scrollbar_view)
+        else:
+            self._parent_canvas.configure(yscrollcommand=self._set_scrollbar_view)
 
     def bind_all(
         self,
@@ -71,7 +80,89 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
                 self._create_window_id,
                 width=self._parent_canvas.winfo_width(),
             )
-        self._parent_canvas.configure(scrollregion=self._parent_canvas.bbox("all"))
+        self._queue_scrollregion_update()
+
+    def _queue_scrollregion_update(self, _event: tk.Event[Any] | None = None) -> None:
+        """Coalesce geometry bursts and measure the final canvas-window size."""
+
+        if self._managed_destroyed or self._scrollregion_after_id is not None:
+            return
+        try:
+            self._scrollregion_after_id = self.after_idle(self._refresh_scrollregion)
+        except tk.TclError:
+            pass
+
+    def _refresh_scrollregion(self) -> None:
+        self._scrollregion_after_id = None
+        if self._managed_destroyed:
+            return
+        try:
+            self._parent_canvas.configure(scrollregion=self._parent_canvas.bbox("all"))
+        except tk.TclError:
+            pass
+
+    def _set_scrollbar_view(self, first: str | float, last: str | float) -> None:
+        """Avoid redrawing a compound CTkScrollbar for duplicate canvas views."""
+
+        view = (float(first), float(last))
+        if view == self._last_scrollbar_view:
+            return
+        self._last_scrollbar_view = view
+        try:
+            self._scrollbar.set(*view)
+        except tk.TclError:
+            pass
+
+    def _mouse_wheel_all(self, event: tk.Event[Any]) -> None:
+        """Route one wheel event to the useful axis with a practical step size."""
+
+        if not self.check_if_master_is_canvas(event.widget):
+            return
+
+        if self._shift_pressed:
+            if self._orientation == "horizontal":
+                self._scroll_canvas(event, horizontal=True)
+            return
+
+        if self._orientation == "vertical":
+            self._scroll_canvas(event, horizontal=False)
+            return
+
+        nearest = self._nearest_managed_scrollable(event.widget)
+        if nearest is self or (
+            nearest is not None
+            and nearest._orientation == "vertical"
+            and nearest._parent_canvas.yview() == (0.0, 1.0)
+        ):
+            self._scroll_canvas(event, horizontal=True)
+
+    @staticmethod
+    def _nearest_managed_scrollable(widget: Any) -> ManagedScrollableFrame | None:
+        current = widget
+        while current is not None:
+            if isinstance(current, ManagedScrollableFrame):
+                return current
+            current = getattr(current, "master", None)
+        return None
+
+    def _scroll_canvas(self, event: tk.Event[Any], *, horizontal: bool) -> None:
+        canvas = self._parent_canvas
+        view = canvas.xview() if horizontal else canvas.yview()
+        if view == (0.0, 1.0):
+            return
+
+        delta = int(getattr(event, "delta", 0))
+        if delta == 0:
+            return
+        if sys.platform == "darwin":
+            units = -delta
+        else:
+            notches = max(1, abs(delta) // 120)
+            units = (-1 if delta > 0 else 1) * notches * 3
+        if horizontal:
+            canvas.xview_scroll(units, "units")
+        else:
+            canvas.yview_scroll(units, "units")
 
     def fit_content_to_canvas(self) -> None:
         """Recalculate the inner window after children are added or removed."""
@@ -82,10 +173,32 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
         except tk.TclError:
             pass
 
+    def grid_configure(self, cnf: dict[str, Any] | None = None, **kwargs: Any) -> None:
+        """Configure the scrollable frame's outer geometry container.
+
+        ``CTkScrollableFrame.grid()`` manages a private parent frame, while its
+        inherited ``grid_configure()`` accidentally manages the inner canvas
+        window.  Delegate both operations to the same widget so changing board
+        padding cannot detach the scrolling content from its canvas.
+        """
+
+        previous = getattr(self._parent_frame, "_last_geometry_manager_call", {})
+        options = dict(previous.get("kwargs", {}))
+        if cnf is not None:
+            options.update(cnf)
+        options.update(kwargs)
+        self._parent_frame.grid(**options)
+
     def destroy(self) -> None:
         if self._managed_destroyed:
             return
         self._managed_destroyed = True
+        if self._scrollregion_after_id is not None:
+            try:
+                self.after_cancel(self._scrollregion_after_id)
+            except tk.TclError:
+                pass
+            self._scrollregion_after_id = None
         root = self._root()
         for sequence, func_id in self._managed_global_bindings:
             try:

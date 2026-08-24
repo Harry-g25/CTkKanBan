@@ -65,7 +65,7 @@ Run:
 
 ```bash
 python -m pytest -q
-python -m ruff check ctk_kanban tests scripts example.py
+python -m ruff check ctk_kanban tests scripts example.py examples
 python -m mypy ctk_kanban
 python -m build
 python -m twine check dist/*.whl dist/*.tar.gz

@@ -129,7 +129,9 @@ class CTkKanbanColumn(ctk.CTkFrame):
         )
         self.body.grid(row=2, column=0, padx=7, pady=(0, 8), sticky="nsew")
         if hasattr(self.body, "_scrollbar"):
-            self.body._scrollbar.configure(width=self.theme["scrollbar_width"])
+            self.body._scrollbar.configure(
+                width=self.theme["scrollbar_width"],
+            )
 
         self.drop_indicator = ctk.CTkFrame(
             self.body,
@@ -160,7 +162,9 @@ class CTkKanbanColumn(ctk.CTkFrame):
         current: list[CTkKanbanCard] = []
         for card in self.card_widgets:
             try:
-                if card in cards and card.winfo_manager() == "pack":
+                if card not in cards:
+                    card.pack_forget()
+                elif card.winfo_manager() == "pack":
                     current.append(card)
             except tk.TclError:
                 continue

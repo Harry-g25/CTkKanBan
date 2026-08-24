@@ -130,7 +130,7 @@ def _customtkinter_defaults() -> dict[str, Any]:
         "input_corner_radius": 9,
         "input_border_width": 1,
         "textbox_height": 105,
-        "scrollbar_width": 7,
+        "scrollbar_width": 14,
         "error_text_color": ("#B91C1C", "#FCA5A5"),
         # Native Tk context-menu colors.
         "menu_fg_color": _color(frame["fg_color"]),

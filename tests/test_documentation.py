@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import re
+import runpy
 from dataclasses import fields as dataclass_fields
 from html.parser import HTMLParser
 from pathlib import Path
@@ -27,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 HTML = (ROOT / "docs" / "index.html").read_text(encoding="utf-8")
 CHANGELOG = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+EXAMPLES_README = (ROOT / "examples" / "README.md").read_text(encoding="utf-8")
 GUIDES = {"README.md": README, "docs/index.html": HTML}
 
 
@@ -138,15 +141,23 @@ def test_html_elements_are_balanced() -> None:
     assert not parser.stack, f"unclosed HTML tags: {parser.stack}"
 
 
-def test_readme_local_links_resolve() -> None:
-    targets = re.findall(r"\[[^]]+\]\(([^)]+)\)", README)
-    local_paths = {
-        target.split("#", 1)[0]
-        for target in targets
-        if not target.startswith(("#", "http://", "https://"))
-    }
-    missing = sorted(path for path in local_paths if not (ROOT / path).exists())
-    assert not missing, f"README links point to missing paths: {missing}"
+def test_markdown_local_links_resolve() -> None:
+    documents = [
+        ROOT / "README.md",
+        ROOT / "CHANGELOG.md",
+        *(ROOT / "docs").glob("*.md"),
+        *(ROOT / "examples").glob("*.md"),
+    ]
+    missing: list[str] = []
+    for document in documents:
+        source = document.read_text(encoding="utf-8")
+        for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", source):
+            path = target.split("#", 1)[0]
+            if not path or target.startswith(("http://", "https://")):
+                continue
+            if not (document.parent / path).resolve().exists():
+                missing.append(f"{document.relative_to(ROOT)} -> {path}")
+    assert not missing, f"Markdown links point to missing paths: {missing}"
 
 
 def test_guides_do_not_repeat_superseded_field_claims_or_mojibake() -> None:
@@ -159,6 +170,27 @@ def test_guides_do_not_repeat_superseded_field_claims_or_mojibake() -> None:
         found = sorted(claim for claim in stale_claims if claim in source)
         assert not found, f"{guide_name} contains superseded claims: {found}"
         assert "�" not in source, f"{guide_name} contains replacement characters"
+
+
+def test_focused_examples_are_documented_parseable_and_packaged() -> None:
+    expected = {
+        "basic_board.py",
+        "custom_fields.py",
+        "sqlite_board.py",
+        "custom_editor.py",
+        "async_loading.py",
+    }
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert "recursive-include examples *.py *.md" in manifest
+
+    for name in expected:
+        path = ROOT / "examples" / name
+        assert path.is_file(), f"missing runnable example: {name}"
+        ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        runpy.run_path(str(path), run_name=f"_ctk_kanban_example_{path.stem}")
+        assert name in README
+        assert name in HTML
+        assert name in EXAMPLES_README
 
 
 def test_release_version_is_consistent_across_user_facing_docs() -> None:

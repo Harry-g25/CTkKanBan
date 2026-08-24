@@ -6,12 +6,12 @@ import tkinter as tk
 from collections import OrderedDict
 from collections.abc import Sequence
 from copy import deepcopy
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, cast
 
 import customtkinter as ctk
 
 from ._scrolling import ManagedScrollableFrame
-from .fields import default_for_field, normalize_field_value, normalize_fields
+from .fields import FieldInput, default_for_field, normalize_field_value, normalize_fields
 from .themes import merge_theme
 
 SaveCallback = Callable[[dict[str, Any]], bool | str | None]
@@ -32,12 +32,19 @@ class CardEditor(ctk.CTkFrame):
         on_save: SaveCallback,
         on_close: Callable[[CardEditor], None] | None = None,
         theme: Mapping[str, Any] | None = None,
-        fields: Sequence[Mapping[str, Any]] | None = None,
+        fields: Sequence[FieldInput] | None = None,
         panel_width: int | None = None,
         allow_column_change: bool = True,
+        _normalized_fields: bool = False,
+        _font_cache: dict[str, ctk.CTkFont] | None = None,
     ) -> None:
         self.theme = merge_theme(theme)
-        self.fields = normalize_fields(fields)
+        self.fields: tuple[Mapping[str, Any], ...] = (
+            tuple(cast(Sequence[Mapping[str, Any]], fields or ()))
+            if _normalized_fields
+            else normalize_fields(fields)
+        )
+        self._font_cache = {} if _font_cache is None else _font_cache
         self.panel_width = self.PANEL_WIDTH if panel_width is None else panel_width
         self.allow_column_change = bool(allow_column_change)
         super().__init__(
@@ -65,6 +72,7 @@ class CardEditor(ctk.CTkFrame):
         self._list_frames: dict[str, ctk.CTkFrame] = {}
         self._field_widgets: dict[str, Any] = {}
         self._slide_x = 0
+        self._slide_target = 0
         self._slide_after_id: str | None = None
         self._activate_after_id: str | None = None
         self._shortcut_bindings: list[tuple[str, str]] = []
@@ -92,7 +100,9 @@ class CardEditor(ctk.CTkFrame):
         )
         self.form.grid_columnconfigure(0, weight=1)
         if hasattr(self.form, "_scrollbar"):
-            self.form._scrollbar.configure(width=self.theme["scrollbar_width"])
+            self.form._scrollbar.configure(
+                width=self.theme["scrollbar_width"],
+            )
 
         column_labels, selected_column = self._prepare_columns(
             columns, initial.get("column", initial.get("column_id"))
@@ -109,6 +119,7 @@ class CardEditor(ctk.CTkFrame):
 
         self.place(relx=1.0, rely=0.0, x=0, relheight=1.0)
         self.lift()
+        self._slide_target = -self.winfo_reqwidth()
         self._slide_after_id = self.after_idle(self._slide_open)
         self._activate_after_id = self.after(20, self._activate)
 
@@ -127,7 +138,7 @@ class CardEditor(ctk.CTkFrame):
             text="CARD DETAILS",
             anchor="w",
             text_color=self.theme["accent_color"],
-            font=ctk.CTkFont(**self.theme["editor_eyebrow_font"]),
+            font=self._font("editor_eyebrow_font"),
         ).grid(row=0, column=0, sticky="ew")
         heading_row = ctk.CTkFrame(header, height=1, fg_color="transparent")
         heading_row.grid(row=1, column=0, sticky="ew", pady=(2, 0))
@@ -135,7 +146,7 @@ class CardEditor(ctk.CTkFrame):
             heading_row,
             text=title,
             anchor="w",
-            font=ctk.CTkFont(**self.theme["editor_title_font"]),
+            font=self._font("editor_title_font"),
         ).pack(side="left")
         ctk.CTkLabel(
             heading_row,
@@ -144,7 +155,7 @@ class CardEditor(ctk.CTkFrame):
             corner_radius=7,
             fg_color=self.theme["count_fg_color"],
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(**self.theme["editor_status_font"]),
+            font=self._font("editor_status_font"),
         ).pack(side="left", padx=(9, 0))
         self.close_button = ctk.CTkButton(
             header,
@@ -160,7 +171,7 @@ class CardEditor(ctk.CTkFrame):
         self.close_button.grid(row=0, column=1, rowspan=2, padx=(12, 0))
 
     def _build_schema_form(self, column_labels: list[str]) -> None:
-        sections: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+        sections: OrderedDict[str, list[Mapping[str, Any]]] = OrderedDict()
         for field in self.fields:
             if field["show_in_editor"]:
                 sections.setdefault(field["section"], []).append(field)
@@ -252,7 +263,7 @@ class CardEditor(ctk.CTkFrame):
                 border_color=self.theme["input_border_color"],
             )
             self._variables[key] = text_variable
-            if key == "title":
+            if field.get("card_role") == "title":
                 self._title_var = text_variable
                 self.title_entry = widget
 
@@ -275,7 +286,7 @@ class CardEditor(ctk.CTkFrame):
                 justify="left",
                 wraplength=max(180, self.panel_width - 90),
                 text_color=self.theme["muted_text_color"],
-                font=ctk.CTkFont(**self.theme["help_text_font"]),
+                font=self._font("help_text_font"),
             ).grid(
                 row=row,
                 column=0,
@@ -359,7 +370,7 @@ class CardEditor(ctk.CTkFrame):
             text="",
             anchor="w",
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(**self.theme["status_text_font"]),
+            font=self._font("status_text_font"),
         )
         self.status_label.grid(row=2, column=0, sticky="ew", padx=(20, 8), pady=(13, 18))
         self.cancel_button = ctk.CTkButton(
@@ -406,7 +417,7 @@ class CardEditor(ctk.CTkFrame):
             section,
             text=title,
             anchor="w",
-            font=ctk.CTkFont(**self.theme["section_title_font"]),
+            font=self._font("section_title_font"),
         ).grid(
             row=0,
             column=0,
@@ -421,7 +432,7 @@ class CardEditor(ctk.CTkFrame):
             master,
             text=text,
             anchor="w",
-            font=ctk.CTkFont(**self.theme["field_label_font"]),
+            font=self._font("field_label_font"),
         ).grid(
             row=row,
             column=0,
@@ -457,6 +468,13 @@ class CardEditor(ctk.CTkFrame):
             values["None"] = ""
         self._select_values[str(field["key"])] = values
         return labels, selected or labels[0]
+
+    def _font(self, key: str) -> ctk.CTkFont:
+        font = self._font_cache.get(key)
+        if font is None:
+            font = ctk.CTkFont(**self.theme[key])
+            self._font_cache[key] = font
+        return font
 
     def _bind_change_tracking(self) -> None:
         for variable in [*self._variables.values(), *self._list_drafts.values(), self._column_var]:
@@ -521,7 +539,7 @@ class CardEditor(ctk.CTkFrame):
                 text="No values added",
                 anchor="w",
                 text_color=self.theme["muted_text_color"],
-                font=ctk.CTkFont(**self.theme["help_text_font"]),
+                font=self._font("help_text_font"),
             ).grid(row=0, column=0, sticky="w")
             return
         palette = self.theme["tag_pill_colors"]
@@ -537,7 +555,7 @@ class CardEditor(ctk.CTkFrame):
                 fg_color=palette[index % len(palette)],
                 hover_color=self.theme["danger_color"],
                 text_color=self.theme["pill_text_color"],
-                font=ctk.CTkFont(**self.theme["pill_font"]),
+                font=self._font("pill_font"),
                 command=lambda value=item, field_key=key: self._remove_list_value(
                     field_key, value
                 ),
@@ -650,7 +668,7 @@ class CardEditor(ctk.CTkFrame):
         self._slide_after_id = None
         if not self.winfo_exists():
             return
-        target = -self.winfo_reqwidth()
+        target = self._slide_target
         self._slide_x = max(target, self._slide_x - self.theme["editor_slide_step"])
         self.place_configure(x=self._slide_x)
         self.lift()

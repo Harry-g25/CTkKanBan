@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from ctk_kanban import BoardModelError, CTkKanbanBoard
+from ctk_kanban import BoardModelError, CTkKanbanBoard, Field
 from ctk_kanban.editor import CardEditor
 
 
@@ -136,8 +136,11 @@ def test_real_drag_events_route_outside_the_handle_and_release(tk_root: Any) -> 
     start_y = card.drag_handle.winfo_rooty() + card.drag_handle.winfo_height() // 2
     target_x = destination.winfo_rootx() + 30
     target_y = destination.winfo_rooty() + 100
-    source = card.drag_handle.winfo_containing(start_x, start_y)
-    assert source is not None
+    # Target the CTkLabel's mapped text widget directly. ``winfo_containing``
+    # intermittently returns None on Windows while the compositor is mapping a
+    # newly deiconified test window, even though Tk has completed layout.
+    source = next(widget for widget in descendants(card.drag_handle) if isinstance(widget, tk.Label))
+    assert source.winfo_ismapped()
     local_x = start_x - source.winfo_rootx()
     local_y = start_y - source.winfo_rooty()
 
@@ -295,15 +298,20 @@ def test_drop_cannot_target_a_clipped_offscreen_column(tk_root: Any) -> None:
 def test_search_only_changes_the_view(tk_root: Any) -> None:
     board = make_board(tk_root, show_toolbar=True)
     original = board.get_data()
+    original_widgets = dict(board._card_widgets)
 
     board.search("two")
 
     assert board.search_entry.get() == "two"
     assert set(board._card_widgets) == {2}
     assert board.get_data() == original
+
     card = board._card_widgets[2]
     board._on_drag_press(card, SimpleNamespace(x_root=0, y_root=0))
     assert board._drag_state is None
+
+    board.search("")
+    assert board._card_widgets == original_widgets
 
 
 def test_async_load_validates_off_thread_and_applies_on_tk_thread(tk_root: Any) -> None:
@@ -396,6 +404,129 @@ def test_opening_another_editor_replaces_the_existing_drawer(tk_root: Any) -> No
     assert board._editor is not None
     assert board._editor is not first
     assert len([widget for widget in descendants(board) if isinstance(widget, CardEditor)]) == 1
+
+
+def test_editor_open_and_close_preserves_board_canvas_and_column_fill(tk_root: Any) -> None:
+    tk_root.geometry("1200x760")
+    tk_root.deiconify()
+    board = make_board(tk_root, column_height=320, show_toolbar=True)
+    tk_root.update()
+    column = board._column_widgets["todo"]
+    initial_track_x = board.column_track.winfo_x()
+    initial_height = column.winfo_height()
+
+    board.open_edit_card_editor(1)
+    tk_root.update()
+
+    assert board.board_area.winfo_manager() == "canvas"
+    assert column.winfo_height() == initial_height
+    assert board.column_track.winfo_x() <= initial_track_x
+
+    assert board._editor is not None
+    board._editor.close()
+    tk_root.update()
+
+    assert board.board_area.winfo_manager() == "canvas"
+    assert column.winfo_height() == initial_height
+    assert board.column_track.winfo_x() == initial_track_x
+
+
+def test_fill_columns_distributes_extra_horizontal_space_equally(tk_root: Any) -> None:
+    tk_root.geometry("1400x700")
+    tk_root.deiconify()
+    board = make_board(
+        tk_root,
+        columns=[
+            {"id": "todo", "title": "To do"},
+            {"id": "doing", "title": "Doing"},
+            {"id": "done", "title": "Done"},
+        ],
+        fill_columns=True,
+    )
+    tk_root.update()
+
+    widths = [column.winfo_width() for column in board._column_widgets.values()]
+    assert max(widths) - min(widths) <= 1
+    assert board.column_track.winfo_width() == board.board_area._parent_canvas.winfo_width()
+    assert min(widths) > board.column_width
+
+
+@pytest.mark.parametrize("fill_columns", [False, True])
+def test_horizontal_scrollbar_tracks_window_resize_and_reaches_last_column(
+    tk_root: Any,
+    fill_columns: bool,
+) -> None:
+    tk_root.geometry("1100x700")
+    tk_root.deiconify()
+    board = make_board(
+        tk_root,
+        columns=[
+            {"id": "backlog", "title": "Backlog"},
+            {"id": "todo", "title": "To do"},
+            {"id": "done", "title": "Done"},
+        ],
+        cards=[{"id": 1, "column": "backlog", "title": "One"}],
+        fill_columns=fill_columns,
+    )
+    tk_root.update()
+
+    assert int(board.board_area._scrollbar.cget("height")) == board.theme["scrollbar_width"]
+    assert board.board_area._scrollbar.winfo_height() >= board.theme["scrollbar_width"]
+    assert int(board._column_widgets["backlog"].body._scrollbar.cget("width")) == board.theme[
+        "scrollbar_width"
+    ]
+    assert (
+        board._column_widgets["backlog"].body._scrollbar.winfo_width()
+        >= board.theme["scrollbar_width"]
+    )
+    assert board.board_area._parent_canvas.xview() == (0.0, 1.0)
+
+    tk_root.geometry("640x700")
+    tk_root.update()
+    canvas = board.board_area._parent_canvas
+    first, last = canvas.xview()
+    assert first == pytest.approx(0.0)
+    assert last - first < 1.0
+
+    board.board_area._mouse_wheel_all(
+        SimpleNamespace(
+            widget=board._card_widgets[1].title_label._label,
+            delta=-120,
+        )
+    )
+    assert canvas.xview()[0] > 0.0
+
+    canvas.xview_moveto(1.0)
+    tk_root.update_idletasks()
+    assert canvas.xview()[1] == pytest.approx(1.0)
+    final_column = board._column_widgets["done"]
+    assert final_column.winfo_rootx() < canvas.winfo_rootx() + canvas.winfo_width()
+
+
+def test_card_click_callback_runs_without_builtin_drawer(tk_root: Any) -> None:
+    opened: list[dict[str, Any]] = []
+    board = make_board(
+        tk_root,
+        use_builtin_editor=False,
+        on_card_open=opened.append,
+    )
+
+    board._card_widgets[1]._select()
+
+    assert opened == [board.get_card(1)]
+    assert board._editor is None
+    board.open_add_card_editor("done")
+    assert board._editor is None
+
+
+def test_existing_on_card_open_callback_still_replaces_edit_drawer(tk_root: Any) -> None:
+    opened: list[dict[str, Any]] = []
+    board = make_board(tk_root, on_card_open=opened.append)
+
+    board.open_edit_card_editor(1)
+
+    assert opened == [board.get_card(1)]
+    assert board._editor is None
 
 
 def test_add_editor_rejects_a_stale_column_id(tk_root: Any) -> None:
@@ -591,6 +722,44 @@ def test_schema_drives_card_rendering_search_and_sidebar_updates(tk_root: Any) -
     assert board._editor is not None
     assert board._editor is not previous_editor
     assert "due_date" in board._editor._field_widgets
+
+
+def test_from_rows_builds_and_renders_a_board_from_database_names(tk_root: Any) -> None:
+    board = CTkKanbanBoard.from_rows(
+        tk_root,
+        columns=[{"status_id": 10, "status_name": "To do"}],
+        cards=[
+            {
+                "task_id": 7,
+                "status_id": 10,
+                "summary": "Database task",
+                "customer_name": "Acme",
+                "estimate_hours": "8",
+            }
+        ],
+        column_keys={"id": "status_id", "title": "status_name"},
+        card_keys={"id": "task_id", "column": "status_id", "title": "summary"},
+        fields=["customer_name", Field("estimate_hours").label("Estimate").integer()],
+        show_toolbar=True,
+    )
+    board.pack(fill="both", expand=True)
+    tk_root.update_idletasks()
+
+    assert board.get_columns() == [{"id": 10, "title": "To do"}]
+    assert board.get_card(7) == {
+        "id": 7,
+        "column": 10,
+        "title": "Database task",
+        "customer_name": "Acme",
+        "estimate_hours": 8,
+    }
+    assert board._card_widgets[7].title_label.cget("text") == "Database task"
+    assert [pill.cget("text") for pill in board._card_widgets[7].metadata_pills] == [
+        "Customer Name: Acme",
+        "Estimate: 8",
+    ]
+    board.search("acme")
+    assert set(board._card_widgets) == {7}
 
 
 def test_structured_config_and_extended_theme_tokens_are_applied(tk_root: Any) -> None:

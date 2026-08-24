@@ -344,7 +344,7 @@
 
   <nav class="topnav" aria-label="Primary">
     <a class="nav-title" href="#hero">CTkKanban</a>
-    <span class="nav-ver">v2.1.0 Docs</span>
+    <span class="nav-ver">v2.2.0 Docs</span>
     <div class="nav-spacer"></div>
     <a class="nav-a" href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a class="nav-a" href="https://pypi.org/project/CTkKanBan/" target="_blank" rel="noopener noreferrer">PyPI</a>
@@ -358,8 +358,9 @@
           <div class="nav-group-title">Overview</div>
           <a class="nav-item" href="#hero">Introduction</a>
           <a class="nav-item" href="#installation">Installation</a>
-          <a class="nav-item" href="#release-210">Release 2.1.0</a>
+          <a class="nav-item" href="#release-220">Release 2.2.0</a>
           <a class="nav-item" href="#quick-start">Quick Start</a>
+          <a class="nav-item" href="#examples">Runnable Examples</a>
         </div>
         <div class="nav-group">
           <div class="nav-group-title">Tutorials</div>
@@ -452,12 +453,15 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
     BoardModelError,
     BoardSnapshot,
     Card,
+    CardField,
     CardRecord,
     Column,
     ColumnRecord,
     DEFAULT_FIELDS,
     DEFAULT_THEME,
+    Field,
     FieldDefinition,
+    FieldInput,
     FieldType,
     LayoutConfig,
     TextConfig,
@@ -473,21 +477,21 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
         </div>
       </section>
 
-      <section id="release-210">
-        <h2>Release 2.1.0 Highlights</h2>
+      <section id="release-220">
+        <h2>Release 2.2.0 Highlights</h2>
         <hr class="section-hr">
-        <p>Version 2.1 keeps the focused 2.x board API while adding the flexibility needed by real applications.</p>
+        <p>Version 2.2 makes database-shaped cards and host-owned editors simpler, while improving board layout, scrolling, and rendering responsiveness.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Area</th><th>What changed</th></tr></thead>
             <tbody>
-              <tr><td>Custom fields</td><td>Any number of schema-defined text, numeric, choice, date, boolean, tag, or hidden values now drive validation, the editor, compact cards, and search.</td></tr>
-              <tr><td>Runtime schemas</td><td><code>get_fields()</code> and atomic <code>set_fields()</code> support safe schema inspection and replacement.</td></tr>
-              <tr><td>Configuration</td><td>Structured action permissions, layout settings, customizable text, and delete-confirmation policy replace scattered flags.</td></tr>
-              <tr><td>Deletion control</td><td>Card and column deletion can be disabled independently, including protection against bypass through a non-empty column cascade.</td></tr>
-              <tr><td>Appearance</td><td>The closed theme surface now covers 97 color, typography, spacing, geometry, limit, scrollbar, menu, and motion tokens.</td></tr>
-              <tr><td>Data integration</td><td>Arbitrary card metadata round-trips safely and row/cursor snapshot adapters validate against the active field schema.</td></tr>
-              <tr><td>Documentation</td><td>The README, browser guide, maintainer runbooks, and automated drift checks now cover the complete public contract.</td></tr>
+              <tr><td>Concise fields</td><td><code>Field</code>, <code>CardField</code>, string shorthand, and custom title keys make database columns easy to expose without verbose schema dictionaries.</td></tr>
+              <tr><td>Database setup</td><td><code>CTkKanbanBoard.from_rows()</code> accepts row iterables or executed cursors plus explicit source-key mappings.</td></tr>
+              <tr><td>Custom forms</td><td>A simple <code>on_card_open(card)</code> callback and <code>use_builtin_editor=False</code> let the host application own card editing.</td></tr>
+              <tr><td>Responsive layout</td><td><code>fill_columns</code> shares surplus width equally; editor close restores centred columns and columns retain their vertical fill.</td></tr>
+              <tr><td>Scrolling</td><td>Thicker scrollbars, coalesced geometry updates, resize-aware horizontal ranges, and axis-aware wheel input improve navigation.</td></tr>
+              <tr><td>Rendering</td><td>Normalized schemas and fonts are reused, unused per-card widgets are removed, and search reuses existing card widgets.</td></tr>
+              <tr><td>Examples</td><td>Focused runnable programs now cover normal setup, every input type, SQLite, custom editors, and asynchronous loading.</td></tr>
             </tbody>
           </table>
         </div>
@@ -539,6 +543,34 @@ app.mainloop()</code></pre>
         <div class="callout c-tip">
           <div class="callout-t">Data ownership</div>
           <p>The board owns its current in-memory model. Your application owns durable storage. Read snapshots with <code>get_data()</code>, replace them with <code>set_data()</code>, and persist successful changes from <code>on_change</code>.</p>
+        </div>
+      </section>
+
+      <section id="examples">
+        <h2>Runnable Examples</h2>
+        <hr class="section-hr">
+        <p>Choose the smallest program matching your task. Clone the repository, install the development extras, and run an example from the repository root:</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>python -m pip install -e ".[dev]"
+python examples/basic_board.py</code></pre>
+        </div>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Goal</th><th>Example</th><th>Practical coverage</th></tr></thead>
+            <tbody>
+              <tr><td>Build a normal board</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/basic_board.py" target="_blank" rel="noopener noreferrer"><code>basic_board.py</code></a></td><td>Minimal data, equal-width columns, editing, dragging, search, and change events.</td></tr>
+              <tr><td>Put database fields on cards</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_fields.py" target="_blank" rel="noopener noreferrer"><code>custom_fields.py</code></a></td><td>Every generated input type, custom title keys, display roles, validation, formatting, and visibility.</td></tr>
+              <tr><td>Load and save real rows</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/sqlite_board.py" target="_blank" rel="noopener noreferrer"><code>sqlite_board.py</code></a></td><td>SQLite cursors, key mappings, typed fields, and update/move persistence.</td></tr>
+              <tr><td>Own the card form</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/custom_editor.py" target="_blank" rel="noopener noreferrer"><code>custom_editor.py</code></a></td><td>Disabled built-in editor, simple card callback, host-owned window, and <code>update_card()</code>.</td></tr>
+              <tr><td>Fetch without freezing Tk</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/examples/async_loading.py" target="_blank" rel="noopener noreferrer"><code>async_loading.py</code></a></td><td>Background fetching, snapshots, loading state, and success/error delivery.</td></tr>
+              <tr><td>Explore everything together</td><td><a href="https://github.com/Harry-g25/CTkKanBan/blob/main/example.py" target="_blank" rel="noopener noreferrer"><code>example.py</code></a></td><td>Raw schemas, runtime field replacement, permissions, layout, text, theming, events, and snapshots.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout c-info">
+          <div class="callout-t">Which definition style should I use?</div>
+          <p>Use <code>Field</code> or a string for normal application code, <code>CardField</code> when you want an immutable typed value, and mapping definitions only when generating or serializing the complete low-level schema.</p>
         </div>
       </section>
 
@@ -648,7 +680,7 @@ board = CTkKanbanBoard(
       <section id="tutorial-postgres">
         <h2>Tutorial 4: Complete PostgreSQL App</h2>
         <hr class="section-hr">
-        <p>This example uses Psycopg 3 mapping rows, SQL aliases that match CTkKanban's schema, and <code>load_async()</code> so database work does not freeze the desktop window.</p>
+        <p>This example uses Psycopg 3 mapping rows, a source-key mapping for the existing database column, and <code>load_async()</code> so database work does not freeze the desktop window.</p>
         <p>Install Psycopg separately; CTkKanban intentionally does not require a database driver:</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
@@ -696,7 +728,7 @@ COLUMN_QUERY = """
 CARD_QUERY = """
     SELECT
         id,
-        column_id AS column,
+        column_id,
         title,
         description,
         priority,
@@ -710,7 +742,11 @@ def fetch_board():
     with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
         columns = connection.execute(COLUMN_QUERY).fetchall()
         cards = connection.execute(CARD_QUERY).fetchall()
-    return snapshot_from_rows(columns, cards)
+    return snapshot_from_rows(
+        columns,
+        cards,
+        card_keys={"column": "column_id"},
+    )
 
 
 app = ctk.CTk()
@@ -733,8 +769,8 @@ board.load_async(
 app.mainloop()</code></pre>
         </div>
         <div class="callout c-tip">
-          <div class="callout-t">Why the alias matters</div>
-          <p>The database uses <code>column_id</code>, while serialized card snapshots use <code>column</code>. <code>column_id AS column</code> produces the exact output key. Input accepts either spelling, but snapshots always return <code>column</code>.</p>
+          <div class="callout-t">Keep your database names</div>
+          <p>The database uses <code>column_id</code>, while serialized card snapshots use <code>column</code>. The <code>card_keys</code> mapping translates that structural key without requiring a SQL alias. Use the same approach for database names such as <code>task_id</code>, <code>status_id</code>, or <code>summary</code>.</p>
         </div>
         <p>For plain tuple cursors, use <code>rows_from_cursor()</code> after each query. For writes, use stable IDs and positions, handle transactions in your repository layer, and feed the resulting canonical snapshot back through <code>set_data()</code> if the server changes any values.</p>
       </section>
@@ -802,47 +838,28 @@ app.mainloop()</code></pre>
       <section id="field-schema">
         <h2>Card Field Schema</h2>
         <hr class="section-hr">
-        <p>Pass <code>fields</code> to the board, model, or snapshot adapters to describe any number of card data points. One ordered definition controls normalization, generated editor controls, drawer grouping, local search, compact-card placement, custom validation, and display formatting.</p>
+        <p>Pass <code>fields</code> to the board, model, or snapshot adapters to describe any number of card data points. Use the fluent <code>Field</code> builder for the common case, immutable <code>CardField</code> objects for typed definitions, or the existing mappings for full low-level control. A plain string creates a visible, editable, searchable text field and turns keys such as <code>customer_name</code> into the label <code>Customer Name</code>.</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
-          <pre><code>fields = [
-    {
-        "key": "title",
-        "label": "Title",
-        "type": "text",
-        "required": True,
-        "searchable": True,
-        "show_on_card": True,
-        "card_role": "title",
-    },
-    {
-        "key": "estimate",
-        "label": "Estimate",
-        "type": "integer",
-        "min": 0,
-        "max": 100,
-        "section": "Planning",
-        "show_on_card": True,
-        "card_role": "metadata",
-        "formatter": lambda value, _card: (
-            "" if value is None else f"{value} pts"
-        ),
-    },
-    {
-        "key": "stage",
-        "label": "Stage",
-        "type": "select",
-        "options": ["Discovery", "Delivery", "Review"],
-        "show_on_card": True,
-        "card_role": "badge",
-        "colors": {"Delivery": ("#DCFCE7", "#14532D")},
-    },
+          <pre><code>from ctk_kanban import CardField, Field
+
+fields = [
+    Field("summary").label("Task").title(),
+    "customer_name",
+    Field("description").textarea().body(),
+    Field("stage")
+        .select(["Discovery", "Delivery", "Review"])
+        .badge(colors={"Delivery": "#22C55E"}),
+    CardField("due_date", label="Due", type="date"),
+    Field("estimate_hours").integer(minimum=0, maximum=100),
+    Field("internal_notes").textarea().editor_only(),
 ]
 
 board = CTkKanbanBoard(
     app, columns=columns, cards=cards, fields=fields
 )</code></pre>
         </div>
+        <p><code>Field</code> input helpers are <code>text()</code>, <code>textarea()</code>, <code>number()</code>, <code>integer()</code>, <code>select()</code>, <code>multiselect()</code>, <code>date()</code>, <code>datetime()</code>, <code>checkbox()</code>, and <code>tags()</code>. Display and behavior helpers include <code>title()</code>, <code>body()</code>, <code>badge()</code>, <code>metadata()</code>, <code>card_only()</code>, <code>editor_only()</code>, <code>hide()</code>, <code>read_only()</code>, <code>required()</code>, <code>searchable()</code>, <code>section()</code>, <code>placeholder()</code>, <code>help()</code>, <code>default()</code>, <code>length()</code>, <code>validate()</code>, and <code>fmt()</code>. <code>build()</code> returns a detached immutable <code>CardField</code>. All of these forms belong to the public <code>FieldInput</code> union.</p>
 
         <h3>Supported types</h3>
         <div class="tbl">
@@ -869,7 +886,7 @@ board = CTkKanbanBoard(
         </div>
 
         <h3>Definition options</h3>
-        <p>Each mapping requires a unique, nonblank <code>key</code> and <code>label</code>. Unknown options are rejected.</p>
+        <p>Each low-level mapping requires a unique, nonblank <code>key</code> and <code>label</code>. <code>Field</code>, <code>CardField</code>, and string shorthand infer the label. Unknown options are rejected.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
@@ -901,7 +918,7 @@ board = CTkKanbanBoard(
           <table>
             <thead><tr><th>Role</th><th>Presentation</th></tr></thead>
             <tbody>
-              <tr><td><code>title</code></td><td>Main heading. Exactly one definition uses this role and its key must be <code>title</code>.</td></tr>
+              <tr><td><code>title</code></td><td>Main heading. Exactly one text/textarea definition uses this role; its key may match a source database column.</td></tr>
               <tr><td><code>body</code></td><td>Wrapped body line, truncated by <code>card_description_max_chars</code>. Multiple body fields are allowed.</td></tr>
               <tr><td><code>badge</code></td><td>Colored pill; the first non-empty visible badge also colors the accent strip.</td></tr>
               <tr><td><code>tags</code></td><td>One <code>#value</code> pill per item, capped per field by <code>card_max_visible_tags</code>.</td></tr>
@@ -915,8 +932,8 @@ board = CTkKanbanBoard(
         <h3>Structural rules and runtime replacement</h3>
         <ul>
           <li><code>id</code>, <code>column</code>, and <code>column_id</code> are reserved and cannot be field keys.</li>
-          <li>If <code>title</code> is omitted, the default title definition is inserted first.</li>
-          <li>Title must be text or textarea and is forced to required, visible-on-card, and the sole title role.</li>
+          <li>If no supplied field uses the title role, the default <code>title</code> definition is inserted first.</li>
+          <li>The chosen title may use a custom key, must be text or textarea, and is forced to required, visible-on-card, and the sole title role.</li>
           <li>Fields omitted from a loaded card are only materialized when they have an explicit default or are required; a new editor presents type defaults.</li>
           <li>Undeclared card keys are preserved as private application metadata.</li>
         </ul>
@@ -950,15 +967,37 @@ board.set_data(snapshot)         # Validates, replaces, and redraws.</code></pre
       <section id="data-database">
         <h2>Database Row Sources</h2>
         <hr class="section-hr">
-        <p>CTkKanban includes small conversion helpers without taking a dependency on PostgreSQL, SQLite, SQLAlchemy, or any other database library.</p>
+        <p><code>CTkKanbanBoard.from_rows()</code> creates a board directly from supported row iterables or executed DB-API cursors without taking a dependency on PostgreSQL, SQLite, SQLAlchemy, or another database library. Structural key mappings let query names remain unchanged.</p>
+        <div class="cb">
+          <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code>from ctk_kanban import CTkKanbanBoard, Field
+
+board = CTkKanbanBoard.from_rows(
+    app,
+    columns=column_cursor,
+    cards=card_cursor,
+    column_keys={"id": "status_id", "title": "status_name"},
+    card_keys={
+        "id": "task_id",
+        "column": "status_id",
+        "title": "summary",
+    },
+    fields=[
+        "customer_name",
+        Field("severity").badge(),
+        Field("due_date").date(),
+    ],
+)</code></pre>
+        </div>
+        <p>Mapped source keys are consumed and normalized output uses canonical <code>id</code>, <code>column</code>, and <code>title</code>. Other selected database columns keep their names. Missing source columns and unsupported mapping targets raise clear errors. The lower-level snapshot helpers accept the same <code>card_keys</code> and <code>column_keys</code> options.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Row source</th><th>Recommended helper</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><td>Psycopg <code>dict_row</code></td><td><code>snapshot_from_rows()</code></td><td>Rows already implement the mapping protocol.</td></tr>
-              <tr><td><code>sqlite3.Row</code></td><td><code>snapshot_from_rows()</code></td><td>Converted through its <code>keys()</code> interface.</td></tr>
-              <tr><td>SQLAlchemy <code>Row</code></td><td><code>snapshot_from_rows()</code></td><td>Converted through <code>row._mapping</code>.</td></tr>
-              <tr><td>Plain DB-API tuples</td><td><code>rows_from_cursor()</code></td><td>Uses <code>cursor.description</code> for column names and consumes remaining rows.</td></tr>
+              <tr><td>Psycopg <code>dict_row</code></td><td><code>from_rows()</code> or <code>snapshot_from_rows()</code></td><td>Rows already implement the mapping protocol.</td></tr>
+              <tr><td><code>sqlite3.Row</code></td><td><code>from_rows()</code> or <code>snapshot_from_rows()</code></td><td>Converted through its <code>keys()</code> interface.</td></tr>
+              <tr><td>SQLAlchemy <code>Row</code></td><td><code>from_rows()</code> or <code>snapshot_from_rows()</code></td><td>Converted through <code>row._mapping</code>.</td></tr>
+              <tr><td>Plain DB-API tuples</td><td><code>from_rows()</code> or <code>rows_from_cursor()</code></td><td>Uses <code>cursor.description</code> for column names and consumes remaining rows.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1145,24 +1184,22 @@ board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
       <section id="feat-external-editor">
         <h2>Feature: External Card Editor</h2>
         <hr class="section-hr">
-        <p>Pass <code>on_card_open</code> when the host application owns card editing. The callback receives a detached card dictionary and replaces the built-in editor for existing cards.</p>
+        <p>Pass <code>on_card_open</code> to run a function when a card is clicked. It receives one detached card dictionary. Set <code>use_builtin_editor=False</code> when the callback should run without CTkKanban opening its generated drawer.</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
-          <pre><code>def open_application_editor(card):
-    details_panel.show(card)
+          <pre><code>def card_clicked(card):
+    open_my_form(card)
 
 
 board = CTkKanbanBoard(
     app,
     columns=columns,
     cards=cards,
-    on_card_open=open_application_editor,
-)
-
-# When your editor saves:
-board.update_card(card["id"], validated_updates)</code></pre>
+    use_builtin_editor=False,
+    on_card_open=card_clicked,
+)</code></pre>
         </div>
-        <p>The callback is for opening an existing card. <code>open_add_card_editor()</code> continues to use CTkKanban's built-in add drawer.</p>
+        <p>Providing <code>on_card_open</code> also replaces the edit drawer when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas and fonts are shared across compact cards, and local search reuses existing card widgets rather than rebuilding them on every query.</p>
       </section>
 
       <section id="feat-loading">
@@ -1219,6 +1256,8 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
         },
         "layout": {
             "show_toolbar": True,
+            "fill_columns": True,
+            "use_builtin_editor": True,
             "column_width": 340,
             "column_height": 560,
             "editor_width": 480,
@@ -1263,6 +1302,8 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
             <tbody>
               <tr><td><code>show_toolbar</code></td><td><code>True</code></td><td>Show title, summary, search, and add controls. Programmatic <code>search()</code> still works when hidden.</td></tr>
               <tr><td><code>enable_drag</code></td><td><code>True</code></td><td>Enable handle dragging only when <code>move_cards</code> is also true. Menus/API remain available when only drag is off.</td></tr>
+              <tr><td><code>use_builtin_editor</code></td><td><code>True</code></td><td>Use the generated drawer. When false, <code>on_card_open(card)</code> can handle card clicks and add-editor opening is a no-op.</td></tr>
+              <tr><td><code>fill_columns</code></td><td><code>False</code></td><td>Give columns equal shares of surplus width while retaining <code>column_width</code> as their scrolling minimum.</td></tr>
               <tr><td><code>column_width</code></td><td><code>320</code></td><td>Integer at least 220.</td></tr>
               <tr><td><code>column_height</code></td><td><code>500</code></td><td>Integer at least 240.</td></tr>
               <tr><td><code>editor_width</code></td><td><code>420</code></td><td>Integer at least 320.</td></tr>
@@ -1270,6 +1311,7 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
             </tbody>
           </table>
         </div>
+        <p>Scrollbars use a 14-pixel default thickness and can be resized with the <code>scrollbar_width</code> theme token. The horizontal range is recalculated after host-window resizes, keeping every column reachable on narrower windows. Wheel input scrolls an overflowing column vertically; over a short column or the board background it moves horizontally. Shift+wheel always moves the board horizontally.</p>
 
         <h3>Customizable text</h3>
         <div class="tbl">
@@ -1424,6 +1466,8 @@ board = CTkKanbanBoard(
     config=None,
     show_toolbar=None,
     enable_drag=None,
+    use_builtin_editor=None,
+    fill_columns=None,
     column_width=None,
     column_height=None,
     editor_width=None,
@@ -1444,9 +1488,9 @@ board = CTkKanbanBoard(
               <tr><td><code>on_change</code></td><td><code>Callable | None</code></td><td>Receives one event dictionary after each changed mutation.</td></tr>
               <tr><td><code>on_card_open</code></td><td><code>Callable | None</code></td><td>Replaces the built-in existing-card editor and receives a detached card record.</td></tr>
               <tr><td><code>theme</code></td><td><code>Mapping | None</code></td><td>Partial overrides for known board theme tokens.</td></tr>
-              <tr><td><code>fields</code></td><td><code>Iterable[FieldDefinition] | None</code></td><td>Typed values used by model validation, the generated editor, compact cards, and search.</td></tr>
+              <tr><td><code>fields</code></td><td><code>Iterable[FieldInput] | None</code></td><td>Strings, <code>CardField</code>, fluent <code>Field</code>, or mapping definitions used by validation, the generated editor, compact cards, and search.</td></tr>
               <tr><td><code>config</code></td><td><code>BoardConfig | Mapping | None</code></td><td>Structured action, layout, text, and deletion-confirmation configuration.</td></tr>
-              <tr><td><code>show_toolbar</code>, <code>enable_drag</code></td><td><code>bool | None</code></td><td>Optional direct overrides for the matching layout settings.</td></tr>
+              <tr><td><code>show_toolbar</code>, <code>enable_drag</code>, <code>use_builtin_editor</code>, <code>fill_columns</code></td><td><code>bool | None</code></td><td>Optional direct overrides for the matching layout settings.</td></tr>
               <tr><td><code>column_width</code>, <code>column_height</code>, <code>editor_width</code></td><td><code>int | None</code></td><td>Optional direct size overrides. Defaults are 320, 500, and 420.</td></tr>
               <tr><td><code>confirm_delete</code></td><td><code>bool | None</code></td><td>Optional override for built-in menu confirmation.</td></tr>
               <tr><td><code>allow_card_deletion</code>, <code>allow_column_deletion</code></td><td><code>bool | None</code></td><td>Convenience permission overrides; disabled card deletion also blocks non-empty column cascades.</td></tr>
@@ -1455,6 +1499,8 @@ board = CTkKanbanBoard(
             </tbody>
           </table>
         </div>
+        <h3><code>CTkKanbanBoard.from_rows()</code></h3>
+        <p><code>from_rows(master, columns, cards, *, card_keys=None, column_keys=None, fields=None, **board_options)</code> consumes row iterables or DB-API cursors, maps source database columns, validates the complete snapshot, and returns a normal board widget. Card mappings accept canonical <code>id</code>, <code>column</code>, and <code>title</code> targets; board-column mappings accept <code>id</code> and <code>title</code>.</p>
       </section>
 
       <section id="api-board-methods">
@@ -1507,8 +1553,8 @@ board = CTkKanbanBoard(
           <table>
             <thead><tr><th>Method / property</th><th>Returns</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><code>open_add_card_editor(column_id=None)</code></td><td><code>None</code></td><td>Open the add drawer. With no columns, first opens the add-column dialog.</td></tr>
-              <tr><td><code>open_edit_card_editor(card_id)</code></td><td><code>None</code></td><td>Open the built-in editor or call <code>on_card_open</code>. Unknown IDs are ignored.</td></tr>
+              <tr><td><code>open_add_card_editor(column_id=None)</code></td><td><code>None</code></td><td>Open the add drawer, or do nothing when <code>use_builtin_editor</code> is false. With no columns, first opens the add-column dialog.</td></tr>
+              <tr><td><code>open_edit_card_editor(card_id)</code></td><td><code>None</code></td><td>Open the built-in editor or call the configured custom callback. Unknown IDs are ignored.</td></tr>
               <tr><td><code>open_add_column_dialog()</code></td><td><code>None</code></td><td>Prompt for a title and add a UUID-backed column.</td></tr>
               <tr><td><code>is_loading</code></td><td><code>bool</code></td><td>Read-only property for pending asynchronous work.</td></tr>
               <tr><td><code>load_error</code></td><td><code>Exception | None</code></td><td>Most recent async load exception; reset when a new load starts.</td></tr>
@@ -1569,7 +1615,10 @@ validated_snapshot = model.snapshot()</code></pre>
               <tr><td><code>Card</code></td><td>Frozen dataclass</td><td>Typed input; stores tags as <code>tuple[str, ...]</code>.</td></tr>
               <tr><td><code>ColumnRecord</code></td><td><code>TypedDict</code></td><td>Serializable column output shape.</td></tr>
               <tr><td><code>CardRecord</code></td><td><code>dict[str, Any]</code></td><td>Serializable flat card output with structural and arbitrary custom keys.</td></tr>
+              <tr><td><code>CardField</code></td><td>Frozen dataclass</td><td>Concise typed definition with visible, editable, searchable defaults and <code>from_definition()</code>/<code>to_definition()</code> conversion.</td></tr>
+              <tr><td><code>Field</code></td><td>Fluent mapping builder</td><td>Configures card input type, compact role, visibility, validation, and formatting; <code>build()</code> returns a <code>CardField</code>.</td></tr>
               <tr><td><code>FieldDefinition</code></td><td><code>TypedDict</code></td><td>Editor, validation, search, and compact-display configuration for one value.</td></tr>
+              <tr><td><code>FieldInput</code></td><td>Type alias</td><td>Accepted union of string, <code>CardField</code>, <code>Field</code>, and legacy field mappings.</td></tr>
               <tr><td><code>FieldType</code></td><td>Literal union</td><td>All supported field type strings.</td></tr>
               <tr><td><code>DEFAULT_FIELDS</code></td><td>Tuple of mappings</td><td>Default title, description, priority, and tags definitions.</td></tr>
               <tr><td><code>BoardSnapshot</code></td><td><code>TypedDict</code></td><td>Complete <code>columns</code> and <code>cards</code> output shape.</td></tr>
@@ -1617,8 +1666,8 @@ assert card.tags == ("docs", "release")</code></pre>
               <tr><td><code>normalize_row(row)</code></td><td><code>dict[str, Any]</code></td><td>Convert a mapping, SQLAlchemy-style <code>_mapping</code> row, or keys/index row into a plain dictionary.</td></tr>
               <tr><td><code>normalize_rows(rows)</code></td><td><code>list[dict[str, Any]]</code></td><td>Normalize an iterable of supported row objects.</td></tr>
               <tr><td><code>rows_from_cursor(cursor)</code></td><td><code>list[dict[str, Any]]</code></td><td>Consume a DB-API cursor and combine tuples with names from <code>cursor.description</code>.</td></tr>
-              <tr><td><code>snapshot_from_rows(columns, cards, *, fields=None)</code></td><td><code>BoardSnapshot</code></td><td>Normalize and validate both row collections against the default or supplied schema.</td></tr>
-              <tr><td><code>snapshot_from_cursors(columns_cursor, cards_cursor, *, fields=None)</code></td><td><code>BoardSnapshot</code></td><td>Consume two executed cursors and validate the complete board against the schema.</td></tr>
+              <tr><td><code>snapshot_from_rows(columns, cards, *, fields=None, card_keys=None, column_keys=None)</code></td><td><code>BoardSnapshot</code></td><td>Normalize row iterables or cursors, apply optional source-key mappings, and validate the complete board.</td></tr>
+              <tr><td><code>snapshot_from_cursors(columns_cursor, cards_cursor, *, fields=None, card_keys=None, column_keys=None)</code></td><td><code>BoardSnapshot</code></td><td>Consume two executed cursors, apply optional mappings, and validate against the schema.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1686,7 +1735,7 @@ theme = merge_theme({
             <tbody>
               <tr><td><code>from CTkKanBan import ...</code></td><td><code>from ctk_kanban import ...</code></td></tr>
               <tr><td>Dynamic field definitions</td><td>The focused <code>fields</code> schema and generated explicit-save drawer.</td></tr>
-              <tr><td>Inline editing</td><td>The explicit-save embedded editor, or <code>on_card_open</code> for your own editor.</td></tr>
+              <tr><td>Inline editing</td><td>The explicit-save embedded editor, or the simple <code>on_card_open(card)</code> callback for your own behavior.</td></tr>
               <tr><td>Mutation-specific callbacks</td><td>One <code>on_change(event)</code> callback.</td></tr>
               <tr><td>Built-in persistence/data sources</td><td>Your repository layer plus snapshots, row adapters, and <code>load_async()</code>.</td></tr>
               <tr><td>Advanced filtering and sorting</td><td>Simple local search and manual order; transform data in your application when needed.</td></tr>
@@ -1720,7 +1769,7 @@ card = {
 
         <div class="faq-item">
           <button class="faq-q" type="button" aria-expanded="false"><span>Can CTkKanban connect directly to PostgreSQL?</span><span class="faq-icon">+</span></button>
-          <div class="faq-a"><p>No database driver is built in. Query with Psycopg or your preferred library, convert rows with <code>snapshot_from_rows()</code> or <code>rows_from_cursor()</code>, then call <code>set_data()</code> or return the snapshot from <code>load_async()</code>.</p></div>
+          <div class="faq-a"><p>No database driver is built in. Query with Psycopg or your preferred library, create the widget directly with <code>CTkKanbanBoard.from_rows()</code>, or convert rows with <code>snapshot_from_rows()</code>/<code>rows_from_cursor()</code> before calling <code>set_data()</code> or <code>load_async()</code>.</p></div>
         </div>
 
         <div class="faq-item">
@@ -1780,7 +1829,7 @@ card = {
       </section>
 
       <footer class="page-footer">
-        CTkKanban 2.1.0 documentation · MIT License ·
+        CTkKanban 2.2.0 documentation · MIT License ·
         <a href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">Source</a>
       </footer>
     </main>

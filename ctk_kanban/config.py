@@ -26,6 +26,8 @@ class LayoutConfig:
 
     show_toolbar: bool = True
     enable_drag: bool = True
+    use_builtin_editor: bool = True
+    fill_columns: bool = False
     column_width: int = 320
     column_height: int = 500
     editor_width: int = 420
@@ -104,10 +106,9 @@ def merge_config(config: BoardConfig | Mapping[str, Any] | None = None) -> Board
     for name, value in asdict(result.actions).items():
         if not isinstance(value, bool):
             raise TypeError(f"actions.{name} must be a bool")
-    if not isinstance(result.layout.show_toolbar, bool):
-        raise TypeError("layout.show_toolbar must be a bool")
-    if not isinstance(result.layout.enable_drag, bool):
-        raise TypeError("layout.enable_drag must be a bool")
+    for name in ("show_toolbar", "enable_drag", "use_builtin_editor", "fill_columns"):
+        if not isinstance(getattr(result.layout, name), bool):
+            raise TypeError(f"layout.{name} must be a bool")
     limits = {
         "column_width": (result.layout.column_width, 220),
         "column_height": (result.layout.column_height, 240),

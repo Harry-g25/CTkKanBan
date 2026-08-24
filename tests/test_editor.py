@@ -6,6 +6,7 @@ from typing import Any
 
 import customtkinter as ctk
 
+from ctk_kanban import Field
 from ctk_kanban.editor import CardEditor
 
 
@@ -102,4 +103,26 @@ def test_custom_field_schema_generates_typed_controls_and_values(tk_root: Any) -
             "stage": "Delivery",
             "column": "todo",
         }
+    ]
+
+
+def test_custom_title_field_is_the_editor_heading_input(tk_root: Any) -> None:
+    saved: list[dict[str, Any]] = []
+    editor = CardEditor(
+        tk_root,
+        title="Edit card",
+        initial={"column": "todo", "summary": "Database title", "customer": "Acme"},
+        columns=[{"id": "todo", "title": "To do"}],
+        fields=[Field("summary").title(), "customer"],
+        on_save=lambda value: saved.append(value),
+    )
+    tk_root.update()
+
+    assert editor.title_entry is editor._field_widgets["summary"]
+    editor.title_entry.delete(0, "end")
+    editor.title_entry.insert(0, "Changed title")
+    editor.save()
+
+    assert saved == [
+        {"summary": "Changed title", "customer": "Acme", "column": "todo"}
     ]

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, cast
 
 import customtkinter as ctk
 
-from .fields import format_field_value, normalize_fields
+from .fields import FieldInput, format_field_value, normalize_fields
 
 CardCallback = Callable[["CTkKanbanCard"], None]
 PointerCallback = Callable[["CTkKanbanCard", Any], None]
@@ -22,7 +22,7 @@ class CTkKanbanCard(ctk.CTkFrame):
         card: Mapping[str, Any],
         theme: Mapping[str, Any],
         *,
-        fields: Sequence[Mapping[str, Any]] | None = None,
+        fields: Sequence[FieldInput] | None = None,
         on_select: CardCallback | None = None,
         on_edit: CardCallback | None = None,
         on_menu: CardCallback | None = None,
@@ -31,6 +31,8 @@ class CTkKanbanCard(ctk.CTkFrame):
         on_drag_release: PointerCallback | None = None,
         drag_enabled: bool = True,
         width: int = 264,
+        _normalized_fields: bool = False,
+        _font_cache: dict[str, ctk.CTkFont] | None = None,
     ) -> None:
         super().__init__(
             master,
@@ -44,13 +46,19 @@ class CTkKanbanCard(ctk.CTkFrame):
         self.card = dict(card)
         self.card_id = self.card["id"]
         self.theme = dict(theme)
-        self.fields = normalize_fields(fields)
+        self.fields: tuple[Mapping[str, Any], ...] = (
+            tuple(cast(Sequence[Mapping[str, Any]], fields or ()))
+            if _normalized_fields
+            else normalize_fields(fields)
+        )
+        self._font_cache = {} if _font_cache is None else _font_cache
         self._on_select = on_select
         self._on_edit = on_edit
         self._on_menu = on_menu
         self._selected = False
         self._dragging = False
         self._hovered = False
+        self._drag_enabled = bool(drag_enabled)
         self.grid_columnconfigure(1, weight=1)
 
         accent_field, accent_value = self._accent_value()
@@ -80,7 +88,7 @@ class CTkKanbanCard(ctk.CTkFrame):
             justify="left",
             wraplength=max(140, width - 104),
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(**self.theme["card_title_font"]),
+            font=self._font("card_title_font"),
         )
         self.title_label.grid(row=0, column=1, padx=(12, 4), pady=(11, 3), sticky="ew")
 
@@ -91,7 +99,7 @@ class CTkKanbanCard(ctk.CTkFrame):
             height=26,
             cursor="fleur" if drag_enabled else "arrow",
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(size=15, weight="bold"),
+            font=self._font("card_drag_handle_font", size=15, weight="bold"),
         )
         if drag_enabled:
             self.drag_handle.grid(row=0, column=2, padx=(2, 0), pady=(8, 2), sticky="n")
@@ -110,8 +118,9 @@ class CTkKanbanCard(ctk.CTkFrame):
         if on_menu is not None:
             self.menu_button.grid(row=0, column=3, padx=(0, 8), pady=(8, 2), sticky="n")
 
-        # Kept as a non-gridded compatibility command surface.
-        self.edit_button = ctk.CTkButton(self, text="", width=1, height=1, command=self._edit)
+        # Create this historical, non-gridded command surface only if an
+        # integration accesses it. Normal card clicks do not need the widget.
+        self._edit_button: ctk.CTkButton | None = None
 
         interactive: list[Any] = [self, self.priority_strip, self.title_label]
         next_row = 1
@@ -130,7 +139,7 @@ class CTkKanbanCard(ctk.CTkFrame):
                 justify="left",
                 wraplength=max(160, width - 48),
                 text_color=self.theme["muted_text_color"],
-                font=ctk.CTkFont(**self.theme["card_body_font"]),
+                font=self._font("card_body_font"),
             )
             label.grid(
                 row=next_row,
@@ -284,7 +293,7 @@ class CTkKanbanCard(ctk.CTkFrame):
                 corner_radius=self.theme["pill_corner_radius"],
                 fg_color=color,
                 text_color=self.theme["pill_text_color"],
-                font=ctk.CTkFont(**self.theme["pill_font"]),
+                font=self._font("pill_font"),
             )
             pill.pack(side="left", padx=(0, 5))
             self.all_pills.append(pill)
@@ -295,6 +304,42 @@ class CTkKanbanCard(ctk.CTkFrame):
             else:
                 self.metadata_pills.append(pill)
             row_width += pill_width + 5
+
+    def _font(self, key: str, **fallback: Any) -> ctk.CTkFont:
+        font = self._font_cache.get(key)
+        if font is None:
+            options = self.theme.get(key, fallback)
+            font = ctk.CTkFont(**options)
+            self._font_cache[key] = font
+        return font
+
+    def set_drag_enabled(self, enabled: bool) -> None:
+        """Show or hide the drag affordance without rebuilding the card."""
+
+        enabled = bool(enabled)
+        if self._drag_enabled == enabled:
+            return
+        self._drag_enabled = enabled
+        if enabled:
+            self.drag_handle.configure(cursor="fleur")
+            self.drag_handle.grid(row=0, column=2, padx=(2, 0), pady=(8, 2), sticky="n")
+        else:
+            self.drag_handle.configure(cursor="arrow")
+            self.drag_handle.grid_remove()
+
+    @property
+    def edit_button(self) -> ctk.CTkButton:
+        """Return the lazily-created compatibility edit command button."""
+
+        if self._edit_button is None:
+            self._edit_button = ctk.CTkButton(
+                self,
+                text="",
+                width=1,
+                height=1,
+                command=self._edit,
+            )
+        return self._edit_button
 
     def _select(self) -> None:
         if self._on_select is not None:
