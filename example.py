@@ -262,7 +262,7 @@ CONFIG = BoardConfig(
 # Override only the tokens you need; every other value comes from the active
 # CustomTkinter theme and CTkKanban's defaults.
 THEME = {
-    "card_corner_radius": 14,
+    "card_corner_radius": 6,
     "card_description_max_chars": 190,
     "card_max_visible_tags": 5,
     "column_gap": 10,

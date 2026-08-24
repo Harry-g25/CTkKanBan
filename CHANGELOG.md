@@ -6,7 +6,18 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
-No unreleased changes yet.
+- Reworked card rendering around lightweight, appearance-aware static content
+  and anti-aliased CustomTkinter controls for the accent, actions, and pooled
+  pills while retaining theme behavior.
+- Replaced underscaled native Tk column headers with DPI-aware CustomTkinter
+  titles, counts, accent bars, and action controls.
+- Made column add, rename, move, and delete operations update existing widgets
+  in place instead of rebuilding every column and card.
+- Removed unnecessary full-board snapshots and deep copies from mutations that
+  have no change callback, and added revision-based no-op detection.
+- Consolidated per-column global wheel callbacks into one root-level router,
+  coalesced scrollbar and scroll-position work, cached search text, and reduced
+  drag hit-testing to logarithmic card lookup.
 
 ## 2.2.1 - 2026-08-24
 

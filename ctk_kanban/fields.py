@@ -590,6 +590,12 @@ def default_for_field(field: Mapping[str, Any]) -> Any:
     return ""
 
 
+def _field_value_name(field: Mapping[str, Any]) -> str:
+    key = str(field["key"])
+    label = str(field["label"])
+    return label if label == key else f"{label} ({key})"
+
+
 def normalize_field_value(
     field: Mapping[str, Any],
     raw_value: Any,
@@ -597,32 +603,31 @@ def normalize_field_value(
 ) -> Any:
     """Normalize and validate one value according to a field definition."""
 
-    key = str(field["key"])
-    label = str(field["label"])
-    name = label if label == key else f"{label} ({key})"
     field_type = field["type"]
     value = raw_value
 
     if field_type in {"text", "textarea"}:
         if value is None:
             value = ""
-        if not isinstance(value, str):
-            raise ValueError(f"{name} must be a string")
+        elif type(value) is not str:
+            raise ValueError(f"{_field_value_name(field)} must be a string")
         value = value.strip()
     elif field_type == "date":
         if value in (None, ""):
             value = ""
         elif isinstance(value, datetime):
-            raise ValueError(f"{name} must be a date without a time")
+            raise ValueError(f"{_field_value_name(field)} must be a date without a time")
         elif isinstance(value, date):
             value = value.isoformat()
         elif isinstance(value, str):
             try:
                 value = date.fromisoformat(value.strip()).isoformat()
             except ValueError as exc:
-                raise ValueError(f"{name} must use YYYY-MM-DD format") from exc
+                raise ValueError(
+                    f"{_field_value_name(field)} must use YYYY-MM-DD format"
+                ) from exc
         else:
-            raise ValueError(f"{name} must be a date or ISO date string")
+            raise ValueError(f"{_field_value_name(field)} must be a date or ISO date string")
     elif field_type == "datetime":
         if value in (None, ""):
             value = ""
@@ -632,80 +637,105 @@ def normalize_field_value(
             try:
                 value = datetime.fromisoformat(value.strip().replace("Z", "+00:00")).isoformat()
             except ValueError as exc:
-                raise ValueError(f"{name} must be an ISO date and time") from exc
+                raise ValueError(
+                    f"{_field_value_name(field)} must be an ISO date and time"
+                ) from exc
         else:
-            raise ValueError(f"{name} must be a datetime or ISO datetime string")
+            raise ValueError(
+                f"{_field_value_name(field)} must be a datetime or ISO datetime string"
+            )
     elif field_type in {"number", "integer"}:
         if value in (None, ""):
             value = None
         elif isinstance(value, bool):
-            raise ValueError(f"{name} must be a number")
+            raise ValueError(f"{_field_value_name(field)} must be a number")
         elif field_type == "integer":
-            try:
-                value = int(value)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{name} must be an integer") from exc
-            if isinstance(raw_value, float) and not raw_value.is_integer():
-                raise ValueError(f"{name} must be an integer")
+            if type(value) is not int:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{_field_value_name(field)} must be an integer") from exc
+                if isinstance(raw_value, float) and not raw_value.is_integer():
+                    raise ValueError(f"{_field_value_name(field)} must be an integer")
         else:
-            try:
-                value = float(value)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{name} must be a number") from exc
+            if type(value) is not float:
+                try:
+                    value = float(value)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"{_field_value_name(field)} must be a number") from exc
     elif field_type == "checkbox":
-        if not isinstance(value, bool):
-            raise ValueError(f"{name} must be a boolean")
+        if type(value) is not bool:
+            raise ValueError(f"{_field_value_name(field)} must be a boolean")
     elif field_type in {"tags", "multiselect"}:
         if value is None:
             value = []
         if isinstance(value, (str, bytes)) or not isinstance(value, Iterable):
-            raise ValueError(f"{name} must be an iterable")
+            raise ValueError(f"{_field_value_name(field)} must be an iterable")
         items: list[Any] = []
         for item in value:
             normalized_item = item.strip() if isinstance(item, str) else deepcopy(item)
             if normalized_item in (None, ""):
-                raise ValueError(f"{name} values must not be blank")
+                raise ValueError(f"{_field_value_name(field)} values must not be blank")
             if field_type == "tags" and (
                 not isinstance(normalized_item, str) or "," in normalized_item
             ):
-                raise ValueError(f"{name} must contain strings without commas")
+                raise ValueError(
+                    f"{_field_value_name(field)} must contain strings without commas"
+                )
             if normalized_item not in items:
                 items.append(normalized_item)
         value = items
     elif field_type == "select":
-        value = deepcopy(value)
+        if type(value) not in (type(None), bool, int, float, str, bytes):
+            value = deepcopy(value)
     else:
         value = deepcopy(value)
 
     empty = value is None or value == "" or value == []
     if field.get("required") and empty:
-        raise ValueError(f"{name} is required")
+        raise ValueError(f"{_field_value_name(field)} is required")
 
-    options = tuple(field.get("options", ()))
-    if not empty and field_type == "select" and options and value not in options:
-        raise ValueError(f"{name} must be one of: {', '.join(map(str, options))}")
-    if field_type == "multiselect" and options:
-        invalid = [item for item in value if item not in options]
-        if invalid:
-            raise ValueError(f"{name} contains unsupported values: {invalid!r}")
+    if field_type in {"select", "multiselect"}:
+        options = field.get("options", ())
+        if not empty and field_type == "select" and options and value not in options:
+            raise ValueError(
+                f"{_field_value_name(field)} must be one of: "
+                f"{', '.join(map(str, options))}"
+            )
+        if field_type == "multiselect" and options:
+            invalid = [item for item in value if item not in options]
+            if invalid:
+                raise ValueError(
+                    f"{_field_value_name(field)} contains unsupported values: {invalid!r}"
+                )
     if value is not None and field_type in {"number", "integer"}:
         if "min" in field and value < field["min"]:
-            raise ValueError(f"{name} must be at least {field['min']}")
+            raise ValueError(
+                f"{_field_value_name(field)} must be at least {field['min']}"
+            )
         if "max" in field and value > field["max"]:
-            raise ValueError(f"{name} must be at most {field['max']}")
-    if isinstance(value, (str, list)):
+            raise ValueError(
+                f"{_field_value_name(field)} must be at most {field['max']}"
+            )
+    if ("min_length" in field or "max_length" in field) and isinstance(value, (str, list)):
         if "min_length" in field and len(value) < field["min_length"]:
-            raise ValueError(f"{name} must contain at least {field['min_length']} characters/items")
+            raise ValueError(
+                f"{_field_value_name(field)} must contain at least "
+                f"{field['min_length']} characters/items"
+            )
         if "max_length" in field and len(value) > field["max_length"]:
-            raise ValueError(f"{name} must contain at most {field['max_length']} characters/items")
+            raise ValueError(
+                f"{_field_value_name(field)} must contain at most "
+                f"{field['max_length']} characters/items"
+            )
 
     validator = field.get("validator")
     if validator is not None:
         result = validator(value, card)
         if result is False:
-            raise ValueError(f"{name} is invalid")
+            raise ValueError(f"{_field_value_name(field)} is invalid")
         if isinstance(result, str):
-            raise ValueError(result or f"{name} is invalid")
+            raise ValueError(result or f"{_field_value_name(field)} is invalid")
     return value
 
 

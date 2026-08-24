@@ -108,7 +108,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
 
         self.model = BoardModel(columns=columns, cards=cards, fields=fields)
-        self.fields = self.model.get_fields()
+        self.fields: tuple[Mapping[str, Any], ...] = tuple(self.model.get_fields())
         self.theme = merge_theme(theme)
         kwargs.setdefault("fg_color", self.theme["board_fg_color"])
         super().__init__(master, **kwargs)
@@ -131,6 +131,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
         self._logger = logging.getLogger("ctk_kanban")
         self._search_query = ""
+        self._search_text_cache: dict[Any, str] = {}
+        self._search_after_id: str | None = None
         self._selected_card_id: Any | None = None
         self._drag_state: _DragState | None = None
         self._column_widgets: dict[Any, CTkKanbanColumn] = {}
@@ -146,6 +148,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.load_error: Exception | None = None
         self._load_generation = 0
         self._pending_load_after: str | None = None
+        self._scroll_restore_after_id: str | None = None
+        self._pending_scroll_positions: tuple[float, dict[Any, float]] | None = None
         self._destroyed = False
 
         self.grid_rowconfigure(1 if self.show_toolbar else 0, weight=1)
@@ -294,9 +298,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         )
         self.column_track.grid_rowconfigure(0, weight=1, minsize=self.column_height)
         if hasattr(self.board_area, "_scrollbar"):
-            self.board_area._scrollbar.configure(
-                height=self.theme["scrollbar_width"],
-            )
+            self.board_area.set_scrollbar_thickness(self.theme["scrollbar_width"])
 
     def refresh(self, *, preserve_scroll: bool = True) -> None:
         """Rebuild structural board state while preserving its viewport.
@@ -329,51 +331,24 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self._finish_layout(scroll_positions)
             return
 
-        cards_by_column: dict[Any, list[CardRecord]] = {
-            column["id"]: [] for column in columns
-        }
-        for card in self.model.get_cards():
+        cards_by_column: dict[Any, list[CardRecord]] = {column["id"]: [] for column in columns}
+        for card in self.model._card_records():
             cards_by_column[card["column"]].append(card)
 
+        # Build all scrollable column shells before any card widgets.  A CTk
+        # scrollbar flushes idle drawing during construction; interleaving it
+        # with card creation makes startup progressively slower per column.
         for index, column_data in enumerate(columns):
-            accent_palette = self.theme["column_accent_colors"]
-            column = CTkKanbanColumn(
-                self.column_track,
-                column_data,
-                self.theme,
-                width=self.column_width,
-                height=self.column_height,
-                accent_color=accent_palette[index % len(accent_palette)],
-                on_add=self.open_add_card_editor if self.actions.add_cards else None,
-                on_menu=(
-                    self._show_column_menu
-                    if any(
-                        (
-                            self.actions.edit_columns,
-                            self.actions.move_columns,
-                            self.actions.delete_columns,
-                        )
-                    )
-                    else None
-                ),
-                text=self.text,
-            )
-            self.column_track.grid_columnconfigure(
-                index,
-                minsize=self.column_width,
-                weight=1 if self.fill_columns else 0,
-                uniform="kanban_columns" if self.fill_columns else "",
-            )
-            column.grid(
-                row=0,
-                column=index,
-                padx=self.theme["column_gap"],
-                pady=2,
-                sticky="nsew",
-            )
-            self._rendered_column_slots += 1
+            column = self._create_column_widget(column_data, index)
             self._column_widgets[column_data["id"]] = column
 
+        # Settle the lightweight column shells once so native card canvases can
+        # draw at their real DPI-scaled width on the first pass. This avoids a
+        # full redraw of every fixed-width card after it is packed.
+        self.update_idletasks()
+
+        for column_data in columns:
+            column = self._column_widgets[column_data["id"]]
             cards = [
                 card
                 for card in cards_by_column[column_data["id"]]
@@ -388,11 +363,97 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._update_summary()
         self._finish_layout(scroll_positions)
 
+    def _create_column_widget(
+        self,
+        column_data: Mapping[str, Any],
+        index: int,
+    ) -> CTkKanbanColumn:
+        accent_palette = self.theme["column_accent_colors"]
+        column = CTkKanbanColumn(
+            self.column_track,
+            column_data,
+            self.theme,
+            width=self.column_width,
+            height=self.column_height,
+            accent_color=accent_palette[index % len(accent_palette)],
+            on_add=self.open_add_card_editor if self.actions.add_cards else None,
+            on_menu=(
+                self._show_column_menu
+                if any(
+                    (
+                        self.actions.edit_columns,
+                        self.actions.move_columns,
+                        self.actions.delete_columns,
+                    )
+                )
+                else None
+            ),
+            text=self.text,
+            _font_cache=self._font_cache,
+            _shared_theme=True,
+        )
+        self._configure_column_slot(column, index)
+        self._rendered_column_slots = max(self._rendered_column_slots, index + 1)
+        return column
+
+    def _configure_column_slot(self, column: CTkKanbanColumn, index: int) -> None:
+        self.column_track.grid_columnconfigure(
+            index,
+            minsize=self.column_width,
+            weight=1 if self.fill_columns else 0,
+            uniform="kanban_columns" if self.fill_columns else "",
+        )
+        column.grid(
+            row=0,
+            column=index,
+            padx=self.theme["column_gap"],
+            pady=2,
+            sticky="nsew",
+        )
+
+    def _layout_existing_columns(self) -> None:
+        """Reorder existing column widgets without rebuilding their card trees."""
+
+        columns = self.model.get_columns()
+        palette = self.theme["column_accent_colors"]
+        ordered: dict[Any, CTkKanbanColumn] = {}
+        for index, column_data in enumerate(columns):
+            column = self._column_widgets[column_data["id"]]
+            column.set_accent_color(palette[index % len(palette)])
+            self._configure_column_slot(column, index)
+            ordered[column_data["id"]] = column
+        for index in range(len(columns), self._rendered_column_slots):
+            self.column_track.grid_columnconfigure(index, minsize=0, weight=0, uniform="")
+        self._rendered_column_slots = len(columns)
+        self._column_widgets = ordered
+        self.after_idle(self.board_area.fit_content_to_canvas)
+
+    def _layout_moved_columns(self, start: int, end: int) -> None:
+        """Reposition only slots affected by one column move."""
+
+        columns = self.model.get_columns()
+        palette = self.theme["column_accent_colors"]
+        for index in range(start, end + 1):
+            column = self._column_widgets[columns[index]["id"]]
+            column.set_accent_color(palette[index % len(palette)])
+            column.grid_configure(column=index)
+        self._column_widgets = {
+            column["id"]: self._column_widgets[column["id"]] for column in columns
+        }
+        self.after_idle(self.board_area.fit_content_to_canvas)
+
     def _create_card_widget(
         self,
         column: CTkKanbanColumn,
         card_data: Mapping[str, Any],
     ) -> CTkKanbanCard:
+        scaling = ctk.ScalingTracker.get_widget_scaling(column)
+        border = int(self.theme["card_border_width"] * scaling + 0.5)
+        pack_inset = int(column.CARD_PADDING_X * scaling + 0.5) * 2
+        initial_content_width = max(
+            120,
+            int(column.body._parent_canvas.winfo_width()) - pack_inset - border * 2,
+        )
         card = CTkKanbanCard(
             column.body,
             card_data,
@@ -422,10 +483,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
             on_drag_release=self._on_drag_release,
             _normalized_fields=True,
             _font_cache=self._font_cache,
+            _shared_theme=True,
+            _initial_content_width=initial_content_width,
         )
         self._card_widgets[card.card_id] = card
         self._card_widget_cache[card.card_id] = card
-        card.set_drag_enabled(self.enable_drag and not self._search_query)
+        card.set_drag_enabled(self.enable_drag)
         if card.card_id == self._selected_card_id:
             card.set_selected(True)
         return card
@@ -442,14 +505,27 @@ class CTkKanbanBoard(ctk.CTkFrame):
         else:
             self._restore_scroll_positions(positions)
 
-    def _capture_scroll_positions(self) -> tuple[float, dict[Any, float]]:
+    def _capture_scroll_positions(
+        self,
+        column_ids: Iterable[Any] | None = None,
+    ) -> tuple[float, dict[Any, float]]:
         horizontal = 0.0
         vertical: dict[Any, float] = {}
         try:
             horizontal = float(self.board_area._parent_canvas.xview()[0])
         except (AttributeError, IndexError, tk.TclError):
             pass
-        for column_id, column in self._column_widgets.items():
+        items = (
+            self._column_widgets.items()
+            if column_ids is None
+            else (
+                (column_id, self._column_widgets.get(column_id))
+                for column_id in dict.fromkeys(column_ids)
+            )
+        )
+        for column_id, column in items:
+            if column is None:
+                continue
             try:
                 vertical[column_id] = float(column.body._parent_canvas.yview()[0])
             except (AttributeError, IndexError, tk.TclError):
@@ -460,10 +536,36 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self,
         positions: tuple[float, dict[Any, float]],
     ) -> None:
+        if self._pending_scroll_positions is None:
+            self._pending_scroll_positions = positions
+        else:
+            # Preserve the viewport captured before the first mutation in a
+            # burst. Later captures can already reflect half-settled geometry.
+            horizontal, existing_vertical = self._pending_scroll_positions
+            _, new_vertical = positions
+            merged_vertical = dict(new_vertical)
+            merged_vertical.update(existing_vertical)
+            self._pending_scroll_positions = (horizontal, merged_vertical)
+        if self._scroll_restore_after_id is not None:
+            return
+        try:
+            self._scroll_restore_after_id = self.after_idle(self._apply_scroll_positions)
+        except tk.TclError:
+            self._scroll_restore_after_id = None
+
+    def _apply_scroll_positions(self) -> None:
+        self._scroll_restore_after_id = None
+        positions = self._pending_scroll_positions
+        self._pending_scroll_positions = None
+        if self._destroyed or positions is None:
+            return
         horizontal, vertical = positions
+        # One coalesced flush settles all CTk geometry created by the mutation
+        # burst. Doing this here avoids the previous flush on every operation.
         self.update_idletasks()
         self.board_area.fit_content_to_canvas()
         try:
+            self.board_area.refresh_scrollregion()
             self.board_area._parent_canvas.xview_moveto(horizontal)
         except (AttributeError, tk.TclError):
             pass
@@ -472,6 +574,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
             if column is None:
                 continue
             try:
+                column.body.refresh_scrollregion()
                 column.body._parent_canvas.yview_moveto(position)
             except (AttributeError, tk.TclError):
                 pass
@@ -484,7 +587,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
     ) -> None:
         """Update only affected card lists, keeping column scroll frames alive."""
 
-        scroll_positions = self._capture_scroll_positions()
+        normalized_column_ids = tuple(dict.fromkeys(column_ids))
+        scroll_positions = self._capture_scroll_positions(normalized_column_ids)
         self._destroy_active_menu()
         self._clear_drag_feedback()
 
@@ -499,11 +603,11 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 ]
             widget.destroy()
 
-        for column_id in dict.fromkeys(column_ids):
+        for column_id in normalized_column_ids:
             column_widget = self._column_widgets.get(column_id)
             if column_widget is None:
                 continue
-            all_cards = self.model.get_cards(column_id)
+            all_cards = self.model._card_records(column_id)
             visible_cards = [card for card in all_cards if self._card_matches_search(card)]
             desired_ids = {card["id"] for card in visible_cards}
 
@@ -526,7 +630,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 if widget is None:
                     widget = self._create_card_widget(column_widget, card_data)
                 self._card_widgets[widget.card_id] = widget
-                widget.set_drag_enabled(self.enable_drag and not self._search_query)
+                widget.set_drag_enabled(self.enable_drag)
                 ordered_widgets.append(widget)
 
             column_widget.set_cards(
@@ -589,6 +693,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
     def set_data(self, data: Mapping[str, Any]) -> None:
         self.model.load(data)
+        self._search_text_cache.clear()
         if self._selected_card_id is not None:
             try:
                 self.model.get_card(self._selected_card_id)
@@ -747,9 +852,13 @@ class CTkKanbanBoard(ctk.CTkFrame):
     def set_fields(self, fields: Iterable[FieldInput]) -> None:
         """Replace the schema and rebuild cards and any open editor."""
 
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
+        revision = self.model._revision
         self.model.set_fields(fields)
-        self.fields = self.model.get_fields()
+        if self.model._revision == revision:
+            return
+        self.fields = tuple(self.model.get_fields())
+        self._search_text_cache.clear()
         editor_initial: dict[str, Any] | None = None
         if self._editor is not None:
             editor = self._editor
@@ -764,38 +873,48 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 self.open_add_card_editor(
                     editor_initial.get("column", editor_initial.get("column_id"))
                 )
-        if self.model.snapshot() != before:
+        if before is not None and self.model.snapshot() != before:
             self._emit_change("fields_changed", before=before, fields=self.get_fields())
 
     def add_card(self, card: Mapping[str, Any], *, index: int | None = None) -> CardRecord:
         self._require_action(self.actions.add_cards, "card creation is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
         created = self.model.add_card(card, index=index)
+        self._search_text_cache.pop(created["id"], None)
         self._sync_card_columns([created["column"]])
         self._emit_change("card_added", before=before, card=created)
         return created
 
     def update_card(self, card_id: Any, updates: Mapping[str, Any]) -> CardRecord:
         self._require_action(self.actions.edit_cards, "card editing is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
         previous = self.model.get_card(card_id)
         requested_column = updates.get("column", updates.get("column_id", previous["column"]))
         if requested_column != previous["column"]:
             self._require_action(self.actions.move_cards, "card movement is disabled")
+        revision = self.model._revision
         updated = self.model.update_card(card_id, updates)
-        if self.model.snapshot() == before:
+        if self.model._revision == revision:
             return updated
+        self._search_text_cache.pop(card_id, None)
+        widget = self._card_widget_cache.get(card_id)
+        replace_ids: list[Any] = []
+        if previous["column"] == updated["column"] and widget is not None:
+            widget.update_card(updated)
+        else:
+            replace_ids.append(card_id)
         self._sync_card_columns(
             [previous["column"], updated["column"]],
-            replace_card_ids=[card_id],
+            replace_card_ids=replace_ids,
         )
         self._emit_change("card_updated", before=before, card=updated, previous=previous)
         return updated
 
     def delete_card(self, card_id: Any) -> CardRecord:
         self._require_action(self.actions.delete_cards, "card deletion is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
         deleted = self.model.delete_card(card_id)
+        self._search_text_cache.pop(card_id, None)
         if self._selected_card_id == card_id:
             self._selected_card_id = None
         self._sync_card_columns([deleted["column"]], replace_card_ids=[card_id])
@@ -809,10 +928,11 @@ class CTkKanbanBoard(ctk.CTkFrame):
         index: int | None = None,
     ) -> CardRecord:
         self._require_action(self.actions.move_cards, "card movement is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
         previous = self.model.get_card(card_id)
+        revision = self.model._revision
         moved = self.model.move_card(card_id, column_id, index=index)
-        if self.model.snapshot() == before:
+        if self.model._revision == revision:
             return moved
         replace_ids = [card_id] if previous["column"] != moved["column"] else []
         self._sync_card_columns(
@@ -824,29 +944,42 @@ class CTkKanbanBoard(ctk.CTkFrame):
 
     def add_column(self, column: Mapping[str, Any], *, index: int | None = None) -> ColumnRecord:
         self._require_action(self.actions.add_columns, "column creation is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
+        positions = self._capture_scroll_positions()
         created = self.model.add_column(column, index=index)
-        self.refresh()
+        if self._empty_widget is not None:
+            self._empty_widget.destroy()
+            self._empty_widget = None
+        columns = self.model.get_columns()
+        position = next(i for i, item in enumerate(columns) if item["id"] == created["id"])
+        widget = self._create_column_widget(created, position)
+        self._column_widgets[created["id"]] = widget
+        widget.set_cards([], empty_text="No cards")
+        self._layout_existing_columns()
+        self._update_summary()
+        self._restore_scroll_positions(positions)
         self._emit_change("column_added", before=before, column=created)
         return created
 
     def update_column(self, column_id: Any, updates: Mapping[str, Any]) -> ColumnRecord:
         self._require_action(self.actions.edit_columns, "column editing is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
         previous = next((item for item in self.model.get_columns() if item["id"] == column_id), None)
+        revision = self.model._revision
         updated = self.model.update_column(column_id, updates)
-        if self.model.snapshot() == before:
+        if self.model._revision == revision:
             return updated
-        self.refresh()
+        widget = self._column_widgets.get(column_id)
+        if widget is not None:
+            widget.update_column(updated)
         self._emit_change("column_updated", before=before, column=updated, previous=previous)
         return updated
 
     def delete_column(self, column_id: Any, *, delete_cards: bool = False) -> ColumnRecord:
         self._require_action(self.actions.delete_columns, "column deletion is disabled")
-        before = self.model.snapshot()
-        removed_card_ids = {
-            card["id"] for card in before["cards"] if card["column"] == column_id
-        }
+        before = self.model.snapshot() if self.on_change is not None else None
+        positions = self._capture_scroll_positions()
+        removed_card_ids = {card["id"] for card in self.model._card_records(column_id)}
         if removed_card_ids and delete_cards:
             self._require_action(
                 self.actions.delete_cards,
@@ -855,17 +988,48 @@ class CTkKanbanBoard(ctk.CTkFrame):
         deleted = self.model.delete_column(column_id, delete_cards=delete_cards)
         if self._selected_card_id in removed_card_ids:
             self._selected_card_id = None
-        self.refresh()
+        widget = self._column_widgets.pop(column_id, None)
+        if widget is not None:
+            widget.destroy()
+        for card_id in removed_card_ids:
+            self._card_widgets.pop(card_id, None)
+            self._card_widget_cache.pop(card_id, None)
+            self._search_text_cache.pop(card_id, None)
+        if self._column_widgets:
+            self._layout_existing_columns()
+        else:
+            for index in range(self._rendered_column_slots):
+                self.column_track.grid_columnconfigure(index, minsize=0, weight=0, uniform="")
+            self._rendered_column_slots = 0
+            self._render_empty_board()
+        self._update_summary()
+        self._restore_scroll_positions(positions)
         self._emit_change("column_deleted", before=before, column=deleted)
         return deleted
 
     def move_column(self, column_id: Any, index: int) -> ColumnRecord:
         self._require_action(self.actions.move_columns, "column movement is disabled")
-        before = self.model.snapshot()
+        before = self.model.snapshot() if self.on_change is not None else None
+        current_order = tuple(self._column_widgets)
+        try:
+            previous_index = current_order.index(column_id)
+        except ValueError:
+            # Preserve BoardModel's public validation error for unknown IDs.
+            previous_index = index
+        positions = self._capture_scroll_positions(())
+        revision = self.model._revision
         moved = self.model.move_column(column_id, index)
-        if self.model.snapshot() == before:
+        if self.model._revision == revision:
             return moved
-        self.refresh()
+        columns = self.model.get_columns()
+        new_index = next(
+            position for position, column in enumerate(columns) if column["id"] == column_id
+        )
+        self._layout_moved_columns(
+            min(previous_index, new_index),
+            max(previous_index, new_index),
+        )
+        self._restore_scroll_positions(positions)
         self._emit_change("column_moved", before=before, column=moved)
         return moved
 
@@ -964,6 +1128,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 panel_width=self.editor_width,
                 allow_column_change=self.actions.move_cards,
                 _normalized_fields=True,
+                _normalized_theme=True,
                 _font_cache=self._font_cache,
             )
         except Exception:
@@ -1179,6 +1344,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
         return self.get_card(self._selected_card_id)
 
     def search(self, query: str) -> None:
+        if self._search_after_id is not None:
+            try:
+                self.after_cancel(self._search_after_id)
+            except tk.TclError:
+                pass
+            self._search_after_id = None
         self._apply_search(query, sync_entry=True)
 
     def _apply_search(self, query: str, *, sync_entry: bool) -> None:
@@ -1198,7 +1369,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._clear_drag_feedback()
         visible_widgets: dict[Any, CTkKanbanCard] = {}
         for column_id, column_widget in self._column_widgets.items():
-            all_cards = self.model.get_cards(column_id)
+            all_cards = self.model._card_records(column_id)
             ordered_widgets: list[CTkKanbanCard] = []
             for card_data in all_cards:
                 if not self._card_matches_search(card_data):
@@ -1206,33 +1377,49 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 widget = self._card_widget_cache.get(card_data["id"])
                 if widget is None:
                     widget = self._create_card_widget(column_widget, card_data)
-                widget.set_drag_enabled(self.enable_drag and not self._search_query)
                 ordered_widgets.append(widget)
                 visible_widgets[widget.card_id] = widget
             column_widget.set_cards(
                 ordered_widgets,
                 empty_text="No matching cards" if self._search_query else "No cards",
             )
-            column_widget.count_label.configure(text=str(len(all_cards)))
         self._card_widgets = visible_widgets
         self._update_summary()
 
     def _on_search_changed(self, _event: Any = None) -> None:
-        self._apply_search(self.search_entry.get(), sync_entry=False)
+        if self._search_after_id is not None:
+            try:
+                self.after_cancel(self._search_after_id)
+            except tk.TclError:
+                pass
+        try:
+            self._search_after_id = self.after(80, self._apply_debounced_search)
+        except tk.TclError:
+            self._search_after_id = None
+
+    def _apply_debounced_search(self) -> None:
+        self._search_after_id = None
+        if not self._destroyed:
+            self._apply_search(self.search_entry.get(), sync_entry=False)
 
     def _card_matches_search(self, card: Mapping[str, Any]) -> bool:
         if not self._search_query:
             return True
-        values: list[Any] = []
-        for field in self.fields:
-            if not field.get("searchable"):
-                continue
-            value = card.get(field["key"], "")
-            if isinstance(value, (list, tuple, set)):
-                values.extend(value)
-            else:
-                values.append(value)
-        return self._search_query in " ".join(str(value) for value in values).casefold()
+        card_id = card["id"]
+        searchable = self._search_text_cache.get(card_id)
+        if searchable is None:
+            values: list[Any] = []
+            for field in self.fields:
+                if not field.get("searchable"):
+                    continue
+                value = card.get(field["key"], "")
+                if isinstance(value, (list, tuple, set)):
+                    values.extend(value)
+                else:
+                    values.append(value)
+            searchable = " ".join(str(value) for value in values).casefold()
+            self._search_text_cache[card_id] = searchable
+        return self._search_query in searchable
 
     def _on_drag_press(self, card_widget: CTkKanbanCard, event: Any) -> None:
         if not self.enable_drag or self._search_query:
@@ -1368,7 +1555,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
             self.summary_label.configure(text="Loading\u2026")
             return
         visible = sum(len(column.card_widgets) for column in self._column_widgets.values())
-        total = len(self.model.get_cards())
+        total = self.model._card_count()
         if self._search_query:
             text = f"{visible} result{'s' if visible != 1 else ''} \u00b7 {total} total"
         else:
@@ -1388,6 +1575,19 @@ class CTkKanbanBoard(ctk.CTkFrame):
             except tk.TclError:
                 pass
             self._pending_load_after = None
+        if self._search_after_id is not None:
+            try:
+                self.after_cancel(self._search_after_id)
+            except tk.TclError:
+                pass
+            self._search_after_id = None
+        if self._scroll_restore_after_id is not None:
+            try:
+                self.after_cancel(self._scroll_restore_after_id)
+            except tk.TclError:
+                pass
+            self._scroll_restore_after_id = None
+        self._pending_scroll_positions = None
         if self._editor is not None:
             editor = self._editor
             self._editor = None

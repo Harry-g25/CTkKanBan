@@ -7,6 +7,7 @@ import tkinter as tk
 from types import SimpleNamespace
 from typing import Any
 
+import customtkinter as ctk
 import pytest
 
 from ctk_kanban import BoardModelError, CTkKanbanBoard, Field
@@ -66,6 +67,59 @@ def test_one_change_callback_contains_current_snapshot(tk_root: Any) -> None:
     assert len(events) == 1
 
 
+def test_mutations_without_callback_do_not_snapshot_the_whole_board(
+    monkeypatch: Any,
+    tk_root: Any,
+) -> None:
+    board = make_board(tk_root)
+
+    def unexpected_snapshot() -> None:
+        raise AssertionError("mutation copied the complete board")
+
+    monkeypatch.setattr(board.model, "snapshot", unexpected_snapshot)
+
+    board.update_card(1, {"title": "Updated"})
+    board.move_card(1, "done")
+    board.update_column("todo", {"title": "Ready"})
+
+    assert board.get_card(1)["title"] == "Updated"
+    assert board.get_card(1)["column"] == "done"
+
+
+def test_column_mutations_reuse_unaffected_widget_trees(tk_root: Any) -> None:
+    board = make_board(tk_root)
+    original_columns = dict(board._column_widgets)
+    original_cards = dict(board._card_widgets)
+
+    board.update_column("todo", {"title": "Ready"})
+    board.move_column("done", 0)
+    board.add_column({"id": "review", "title": "Review"}, index=1)
+
+    assert board._column_widgets["todo"] is original_columns["todo"]
+    assert board._column_widgets["done"] is original_columns["done"]
+    assert board._card_widgets == original_cards
+    assert list(board._column_widgets) == ["done", "review", "todo"]
+
+    board.delete_column("review")
+
+    assert board._column_widgets["todo"] is original_columns["todo"]
+    assert board._column_widgets["done"] is original_columns["done"]
+    assert board._card_widgets == original_cards
+
+
+def test_scrollable_frames_share_one_global_wheel_router(tk_root: Any) -> None:
+    baseline = binding_count(tk_root, "<MouseWheel>")
+    first = make_board(tk_root)
+    second = make_board(tk_root)
+
+    assert binding_count(tk_root, "<MouseWheel>") == baseline + 1
+
+    first.destroy()
+    assert binding_count(tk_root, "<MouseWheel>") == baseline + 1
+    second.destroy()
+    assert binding_count(tk_root, "<MouseWheel>") == baseline
+
+
 def test_invalid_initial_data_does_not_leave_an_orphan_widget(tk_root: Any) -> None:
     before = set(tk_root.winfo_children())
 
@@ -108,6 +162,242 @@ def test_priority_and_tags_render_as_colored_pills(tk_root: Any) -> None:
     assert card.priority_pill.cget("fg_color") == board.theme["priority_high_color"]
     assert [pill.cget("text") for pill in card.tag_pills] == ["#design", "#client"]
     assert all(pill.cget("fg_color") in board.theme["tag_pill_colors"] for pill in card.tag_pills)
+    assert len(card._pill_widgets) == 3
+    assert all(isinstance(pill, ctk.CTkLabel) for pill in card._pill_widgets)
+    assert all(
+        pill.cget("corner_radius") == board.theme["pill_corner_radius"]
+        for pill in card._pill_widgets
+    )
+
+    card._set_appearance_mode("light")
+    assert card.title_label.cget("background") == card._apply_appearance_mode(
+        board.theme["card_fg_color"]
+    )
+    assert card.priority_pill.cget("background") == card.title_label.cget("background")
+
+    card._set_appearance_mode("dark")
+    assert card.title_label.cget("background") == card._apply_appearance_mode(
+        board.theme["card_fg_color"]
+    )
+    assert card.priority_pill.cget("background") == card.title_label.cget("background")
+
+
+def test_hover_transitions_inside_one_card_are_coalesced(
+    monkeypatch: Any,
+    tk_root: Any,
+) -> None:
+    board = make_board(
+        tk_root,
+        cards=[
+            {
+                "id": 1,
+                "column": "todo",
+                "title": "Stable hover",
+                "description": "Moving between this text and its pills must not redraw.",
+                "priority": "High",
+                "tags": ["design", "client"],
+            }
+        ],
+    )
+    card = board._card_widgets[1]
+    geometry = (card.winfo_x(), card.winfo_y(), card.winfo_width(), card.winfo_height())
+    surface_color = card.cget("fg_color")
+    refresh_count = 0
+    refresh = card._sync_interaction_indicator
+
+    def counted_refresh() -> None:
+        nonlocal refresh_count
+        refresh_count += 1
+        refresh()
+
+    monkeypatch.setattr(card, "_sync_interaction_indicator", counted_refresh)
+    card._hover_enter()
+    for _ in range(100):
+        card._hover_leave()
+        card._hover_enter()
+    tk_root.update_idletasks()
+
+    assert card._hovered
+    assert refresh_count == 1
+    assert card.cget("fg_color") == surface_color
+    assert card._content_canvas.itemcget(card._interaction_item, "state") == "hidden"
+    assert (card.winfo_x(), card.winfo_y(), card.winfo_width(), card.winfo_height()) == geometry
+
+
+def test_card_hover_and_actions_have_clear_interaction_feedback(tk_root: Any) -> None:
+    board = make_board(tk_root)
+    card = board._card_widgets[1]
+
+    title_size = board.theme["card_title_font"]["size"]
+    expected_canvas_size = -abs(round(title_size * ctk.ScalingTracker.get_widget_scaling(card)))
+    title_font = card._content_canvas.itemcget("card_title", "font")
+    title_position = card._content_canvas.coords("card_title")
+    assert f" {expected_canvas_size} " in title_font
+    assert title_position == [
+        card._scale(board.theme["card_padding_x"]),
+        card._scale(board.theme["card_padding_y"]),
+    ]
+
+    handle_left, handle_top, handle_right, handle_bottom = card._handle_bounds
+    menu_left, menu_top, menu_right, menu_bottom = card._menu_bounds
+    scaled_action_size = card._scale(board.theme["card_action_size"])
+    assert handle_right - handle_left == scaled_action_size
+    assert handle_bottom - handle_top == scaled_action_size
+    assert menu_right - menu_left == scaled_action_size
+    assert menu_bottom - menu_top == scaled_action_size
+
+    card._hover_enter()
+    assert card.title_label.cget("background") == card._apply_appearance_mode(
+        board.theme["card_fg_color"]
+    )
+    card.set_selected(True)
+    assert card._content_canvas.itemcget(card._interaction_item, "state") == "hidden"
+    assert isinstance(card.priority_strip, ctk.CTkFrame)
+    assert isinstance(card.drag_handle, ctk.CTkButton)
+    assert isinstance(card.menu_button, ctk.CTkButton)
+    assert card.drag_handle.cget("corner_radius") == board.theme["pill_corner_radius"]
+    assert card.menu_button.cget("corner_radius") == board.theme["pill_corner_radius"]
+    assert card.drag_handle.cget("hover_color") == board.theme["control_hover_color"]
+
+    card.set_dragging(True)
+    assert card.title_label.cget("background") == card._apply_appearance_mode(
+        board.theme["dragging_card_fg_color"]
+    )
+
+
+def test_column_header_uses_scaled_native_typography_and_controls(tk_root: Any) -> None:
+    board = make_board(tk_root)
+    column = board._column_widgets["todo"]
+
+    assert isinstance(column.accent_bar, ctk.CTkFrame)
+    assert isinstance(column.title_label, ctk.CTkLabel)
+    assert isinstance(column.count_label, ctk.CTkLabel)
+    assert isinstance(column.add_button, ctk.CTkButton)
+    assert isinstance(column.menu_button, ctk.CTkButton)
+    assert column.title_label.cget("font").cget("size") == board.theme[
+        "column_title_font"
+    ]["size"]
+    assert column.title_label.cget("font").cget("size") == board.theme[
+        "card_title_font"
+    ]["size"]
+    assert column.add_button.cget("width") == board.theme["small_control_size"]
+    assert column.menu_button.cget("corner_radius") == board.theme[
+        "pill_corner_radius"
+    ]
+
+
+def test_fill_column_cards_reflow_canvas_content_to_the_actual_width(tk_root: Any) -> None:
+    tk_root.geometry("1100x620")
+    tk_root.deiconify()
+    try:
+        board = make_board(tk_root, fill_columns=True)
+        tk_root.update()
+        card = board._card_widgets[1]
+
+        assert card._content_width == card._content_canvas.winfo_width()
+        assert card._menu_bounds[2] == card._content_width - card._scale(7)
+        assert card._handle_bounds[2] == card._menu_bounds[0]
+
+        original_width = card._content_width
+        tk_root.geometry("900x620")
+        tk_root.update()
+
+        assert card._content_width != original_width
+        assert card._content_width == card._content_canvas.winfo_width()
+        assert card._menu_bounds[2] == card._content_width - card._scale(7)
+    finally:
+        tk_root.withdraw()
+
+
+def test_fill_column_cards_keep_a_readable_metadata_measure(tk_root: Any) -> None:
+    fields = [
+        {
+            "key": "title",
+            "label": "Title",
+            "type": "text",
+            "show_on_card": True,
+            "card_role": "title",
+        },
+        {
+            "key": "description",
+            "label": "Description",
+            "type": "textarea",
+            "show_on_card": True,
+            "card_role": "body",
+        },
+        {
+            "key": "stage",
+            "label": "Stage",
+            "type": "text",
+            "show_on_card": True,
+            "card_role": "badge",
+        },
+        {
+            "key": "tags",
+            "label": "Tags",
+            "type": "tags",
+            "show_on_card": True,
+            "card_role": "tags",
+        },
+        *[
+            {
+                "key": key,
+                "label": label,
+                "type": "text",
+                "show_on_card": True,
+                "card_role": "metadata",
+            }
+            for key, label in (
+                ("client", "Client"),
+                ("blocked", "Blocked"),
+                ("estimate", "Estimate"),
+                ("due", "Due date"),
+                ("owners", "Owners"),
+            )
+        ],
+    ]
+    card_data = {
+        "id": 1,
+        "column": "todo",
+        "title": "Map the onboarding journey",
+        "description": "Interview recent customers and identify the rough edges.",
+        "stage": "Discovery",
+        "tags": ["research", "ux"],
+        "client": "Northstar",
+        "blocked": "No",
+        "estimate": "5 pts",
+        "due": "2026-08-28",
+        "owners": "Avery, Harry",
+    }
+    tk_root.geometry("1100x620")
+    tk_root.deiconify()
+    try:
+        board = make_board(
+            tk_root,
+            columns=[{"id": "todo", "title": "To do"}],
+            cards=[card_data],
+            fields=fields,
+            fill_columns=True,
+            column_width=350,
+        )
+        tk_root.update()
+        card = board._card_widgets[1]
+        original_height = card.winfo_height()
+        original_rows = card._pill_row_count
+
+        assert card._text_width == card._preferred_text_width
+        assert original_rows >= 4
+        assert original_height >= 150
+
+        tk_root.geometry("1250x620")
+        tk_root.update()
+
+        assert card._content_width == card._content_canvas.winfo_width()
+        assert card._text_width == card._preferred_text_width
+        assert card._pill_row_count == original_rows
+        assert card.winfo_height() == original_height
+    finally:
+        tk_root.withdraw()
 
 
 def test_card_body_selects_without_starting_drag(tk_root: Any) -> None:
@@ -132,17 +422,14 @@ def test_real_drag_events_route_outside_the_handle_and_release(tk_root: Any) -> 
     card = board._card_widgets[1]
     destination = board._column_widgets["done"]
     tk_root.update()
-    start_x = card.drag_handle.winfo_rootx() + card.drag_handle.winfo_width() // 2
-    start_y = card.drag_handle.winfo_rooty() + card.drag_handle.winfo_height() // 2
+    source = card.drag_handle._canvas
+    start_x = source.winfo_rootx() + source.winfo_width() // 2
+    start_y = source.winfo_rooty() + source.winfo_height() // 2
     target_x = destination.winfo_rootx() + 30
     target_y = destination.winfo_rooty() + 100
-    # Target the CTkLabel's mapped text widget directly. ``winfo_containing``
-    # intermittently returns None on Windows while the compositor is mapping a
-    # newly deiconified test window, even though Tk has completed layout.
-    source = next(widget for widget in descendants(card.drag_handle) if isinstance(widget, tk.Label))
     assert source.winfo_ismapped()
-    local_x = start_x - source.winfo_rootx()
-    local_y = start_y - source.winfo_rooty()
+    local_x = source.winfo_width() // 2
+    local_y = source.winfo_height() // 2
 
     try:
         source.event_generate(

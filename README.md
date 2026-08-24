@@ -169,12 +169,12 @@ to `ctk.CTkFont`. Palette tokens such as `column_accent_colors` and
 ### Complete token reference
 
 The supported token set is intentionally closed. Values are shown through
-`DEFAULT_THEME`; the table below describes all 97 names.
+`DEFAULT_THEME`; the table below describes all 107 names.
 
 | Area | Tokens |
 | --- | --- |
 | Board surfaces | `board_fg_color`, `toolbar_fg_color`, `column_fg_color`, `column_header_fg_color`, `column_border_color`, `column_accent_colors` |
-| Cards and drag feedback | `card_fg_color`, `card_hover_color`, `dragging_card_fg_color`, `card_border_color`, `selected_border_color`, `drop_indicator_color` |
+| Cards and drag feedback | `card_fg_color`, `card_hover_color`, `dragging_card_fg_color`, `card_metadata_fg_color`, `card_border_color`, `selected_border_color`, `drop_indicator_color` |
 | Shared colors | `text_color`, `muted_text_color`, `accent_color`, `control_hover_color`, `count_fg_color`, `empty_icon_fg_color`, `divider_color`, `danger_color` |
 | Editor/input/scroll colors | `editor_fg_color`, `editor_section_fg_color`, `input_border_color`, `scrollbar_color`, `scrollbar_hover_color`, `error_text_color` |
 | Pills and priorities | `pill_text_color`, `priority_low_color`, `priority_medium_color`, `priority_high_color`, `priority_critical_color`, `tag_pill_colors` |
@@ -183,8 +183,8 @@ The supported token set is intentionally closed. Values are shown through
 | Toolbar fonts | `toolbar_title_font`, `toolbar_summary_font` |
 | Column geometry | `column_corner_radius`, `column_border_width`, `column_gap`, `column_accent_height`, `column_header_padding_x`, `card_gap` |
 | Column fonts | `column_title_font`, `column_count_font`, `column_empty_title_font`, `column_empty_body_font` |
-| Card geometry and limits | `card_corner_radius`, `card_border_width`, `card_selected_border_width`, `card_accent_width`, `card_description_max_chars`, `card_max_visible_tags`, `pill_height`, `pill_corner_radius` |
-| Card fonts | `card_title_font`, `card_body_font`, `card_metadata_font`, `pill_font` |
+| Card geometry and limits | `card_corner_radius`, `card_border_width`, `card_selected_border_width`, `card_accent_width`, `card_padding_x`, `card_padding_y`, `card_content_gap`, `card_action_size`, `card_action_margin`, `card_description_max_chars`, `card_max_visible_tags`, `pill_height`, `pill_corner_radius`, `pill_padding_x`, `pill_gap`, `pill_row_gap` |
+| Card fonts | `card_title_font`, `card_body_font`, `card_metadata_font`, `card_action_font`, `pill_font` |
 | Editor layout | `editor_border_width`, `editor_header_padding_x`, `editor_header_padding_y`, `editor_form_padding_x`, `editor_form_padding_y`, `editor_field_padding_x`, `editor_field_gap`, `editor_section_gap`, `editor_section_corner_radius`, `editor_section_border_width`, `editor_section_title_padding_y` |
 | Editor motion | `editor_slide_step`, `editor_slide_interval_ms` |
 | Editor fonts | `editor_eyebrow_font`, `editor_title_font`, `editor_status_font`, `section_title_font`, `field_label_font`, `help_text_font`, `status_text_font` |
@@ -809,11 +809,15 @@ Providing `on_card_open` also replaces the edit drawer when
 `use_builtin_editor=True`, preserving the original callback behavior. Use the
 public `add_card()` and `update_card()` methods when your own form saves.
 
-Card schemas and shared fonts are reused across compact cards, and search now
-hides and reorders existing card widgets instead of destroying and recreating
-them on every query. Initial rendering and `set_data()` still create real Tk
-widgets on the main thread, so schemas that show many labels or pills per card
-have a cost proportional to the number of visible controls.
+Card schemas, fonts, and search text are reused across compact cards. Static
+text uses lightweight, appearance-aware Tk primitives, while the accent strip,
+action buttons, and pills use anti-aliased native CustomTkinter widgets. Pill
+labels come from a reusable pool. Search hides and reorders existing cards
+instead of recreating them.
+Column mutations retain their existing card and scroll widgets, and all board
+scroll frames share one routed wheel binding. Initial rendering and `set_data()`
+still scale with the number of cards, but avoid compound CustomTkinter widgets
+for every static label.
 
 ## API reference
 

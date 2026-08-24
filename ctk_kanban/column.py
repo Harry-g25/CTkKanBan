@@ -15,6 +15,8 @@ from .config import TextConfig
 class CTkKanbanColumn(ctk.CTkFrame):
     """A readable, full-height column with a vertically scrollable card list."""
 
+    CARD_PADDING_X = 3
+
     def __init__(
         self,
         master: Any,
@@ -27,6 +29,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
         on_add: Callable[[Any], None] | None = None,
         on_menu: Callable[[Any, Any], None] | None = None,
         text: TextConfig | None = None,
+        _font_cache: dict[str, ctk.CTkFont] | None = None,
+        _shared_theme: bool = False,
     ) -> None:
         super().__init__(
             master,
@@ -40,7 +44,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.grid_propagate(False)
         self.column = dict(column)
         self.column_id = self.column["id"]
-        self.theme = dict(theme)
+        self.theme = theme if _shared_theme else dict(theme)
+        self._font_cache = {} if _font_cache is None else _font_cache
         self.accent_color = accent_color or self.theme["accent_color"]
         self._on_add = on_add
         self.text = text or TextConfig()
@@ -54,7 +59,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.accent_bar = ctk.CTkFrame(
             self,
             height=self.theme["column_accent_height"],
-            corner_radius=2,
+            corner_radius=max(1, (int(self.theme["column_accent_height"]) + 1) // 2),
             fg_color=self.accent_color,
         )
         self.accent_bar.grid(
@@ -65,12 +70,18 @@ class CTkKanbanColumn(ctk.CTkFrame):
             sticky="ew",
         )
 
-        header = ctk.CTkFrame(self, fg_color=self.theme["column_header_fg_color"])
+        self._header = ctk.CTkFrame(
+            self,
+            height=self.theme["small_control_size"],
+            corner_radius=0,
+            fg_color=self.theme["column_header_fg_color"],
+        )
+        header = self._header
         header.grid(
             row=1,
             column=0,
             padx=self.theme["column_header_padding_x"],
-            pady=(5, 8),
+            pady=(6, 10),
             sticky="ew",
         )
         header.grid_columnconfigure(0, weight=1)
@@ -79,43 +90,55 @@ class CTkKanbanColumn(ctk.CTkFrame):
             header,
             text=str(self.column["title"]),
             anchor="w",
+            height=self.theme["small_control_size"],
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(**self.theme["column_title_font"]),
+            font=self._font("column_title_font"),
         )
         self.title_label.grid(row=0, column=0, sticky="ew")
 
         self.count_label = ctk.CTkLabel(
             header,
             text="0",
-            width=26,
-            height=22,
-            corner_radius=7,
+            width=self.theme["small_control_size"],
+            height=self.theme["pill_height"],
+            corner_radius=self.theme["pill_corner_radius"],
             fg_color=self.theme["count_fg_color"],
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(**self.theme["column_count_font"]),
+            font=self._font("column_count_font"),
         )
-        self.count_label.grid(row=0, column=1, padx=(8, 5))
+        self.count_label.grid(row=0, column=1, padx=(10, 5))
 
         self.add_button = ctk.CTkButton(
             header,
             text="+",
-            width=30,
-            height=30,
-            corner_radius=8,
+            width=self.theme["small_control_size"],
+            height=self.theme["small_control_size"],
+            corner_radius=self.theme["pill_corner_radius"],
+            border_width=0,
+            border_spacing=0,
+            fg_color="transparent",
+            hover_color=self.theme["control_hover_color"],
+            text_color=self.theme["text_color"],
+            cursor="hand2",
+            font=self._font("card_action_font"),
             command=lambda: on_add(self.column_id) if on_add is not None else None,
         )
         if on_add is not None:
             self.add_button.grid(row=0, column=2, padx=2)
 
-        self.menu_button: ctk.CTkButton = ctk.CTkButton(
+        self.menu_button = ctk.CTkButton(
             header,
             text="\u22ef",
-            width=30,
-            height=30,
-            corner_radius=8,
+            width=self.theme["small_control_size"],
+            height=self.theme["small_control_size"],
+            corner_radius=self.theme["pill_corner_radius"],
+            border_width=0,
+            border_spacing=0,
             fg_color="transparent",
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
+            cursor="hand2",
+            font=self._font("card_action_font"),
         )
         if on_menu is not None:
             self.menu_button.configure(command=lambda: on_menu(self.column_id, self.menu_button))
@@ -129,18 +152,42 @@ class CTkKanbanColumn(ctk.CTkFrame):
         )
         self.body.grid(row=2, column=0, padx=7, pady=(0, 8), sticky="nsew")
         if hasattr(self.body, "_scrollbar"):
-            self.body._scrollbar.configure(
-                width=self.theme["scrollbar_width"],
-            )
+            self.body.set_scrollbar_thickness(self.theme["scrollbar_width"])
 
-        self.drop_indicator = ctk.CTkFrame(
+        self.drop_indicator = tk.Frame(
             self.body,
             height=4,
-            corner_radius=2,
-            fg_color=self.theme["drop_indicator_color"],
+            borderwidth=0,
+            highlightthickness=0,
         )
         self.empty_label: ctk.CTkLabel | None = None
         self.empty_frame: ctk.CTkFrame | None = None
+        self._refresh_native_appearance()
+
+    def _refresh_native_appearance(self) -> None:
+        if not hasattr(self, "_header"):
+            return
+        header_token = self.theme["column_header_fg_color"]
+        self._header.configure(fg_color=header_token)
+        self.accent_bar.configure(fg_color=self.accent_color)
+        self.title_label.configure(text_color=self.theme["text_color"])
+        self.count_label.configure(
+            fg_color=self.theme["count_fg_color"],
+            text_color=self.theme["muted_text_color"],
+        )
+        for button in (self.add_button, self.menu_button):
+            button.configure(
+                fg_color="transparent",
+                hover_color=self.theme["control_hover_color"],
+                text_color=self.theme["text_color"],
+            )
+        self.drop_indicator.configure(
+            background=self._apply_appearance_mode(self.theme["drop_indicator_color"])
+        )
+
+    def _set_appearance_mode(self, mode_string: str) -> None:
+        super()._set_appearance_mode(mode_string)
+        self._refresh_native_appearance()
 
     def _clear_empty(self) -> None:
         if self.empty_frame is not None:
@@ -151,7 +198,7 @@ class CTkKanbanColumn(ctk.CTkFrame):
     def add_card(self, card: CTkKanbanCard) -> None:
         self._clear_empty()
         self.card_widgets.append(card)
-        card.pack(fill="x", padx=3, pady=self.theme["card_gap"])
+        card.pack(fill="x", padx=self.CARD_PADDING_X, pady=self.theme["card_gap"])
         self.count_label.configure(text=str(len(self.card_widgets)))
 
     def set_cards(self, cards: list[CTkKanbanCard], *, empty_text: str = "No cards") -> None:
@@ -159,23 +206,31 @@ class CTkKanbanColumn(ctk.CTkFrame):
 
         self.clear_drop_indicator()
         self._clear_empty()
+        desired = set(cards)
         current: list[CTkKanbanCard] = []
         for card in self.card_widgets:
             try:
-                if card not in cards:
+                if card not in desired:
                     card.pack_forget()
                 elif card.winfo_manager() == "pack":
                     current.append(card)
             except tk.TclError:
                 continue
 
+        current_set = set(current)
         for index, card in enumerate(cards):
             if index < len(current) and current[index] is card:
                 continue
-            if card in current:
+            if card in current_set:
                 card.pack_forget()
                 current.remove(card)
-            options = {"fill": "x", "padx": 3, "pady": self.theme["card_gap"]}
+            else:
+                current_set.add(card)
+            options = {
+                "fill": "x",
+                "padx": self.CARD_PADDING_X,
+                "pady": self.theme["card_gap"],
+            }
             if index < len(current):
                 card.pack(before=current[index], **options)
             else:
@@ -200,20 +255,20 @@ class CTkKanbanColumn(ctk.CTkFrame):
             corner_radius=21,
             fg_color=self.theme["empty_icon_fg_color"],
             text_color=self.accent_color,
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=self._font("column_empty_icon_font", size=22, weight="bold"),
         ).pack(pady=(0, 9))
         self.empty_label = ctk.CTkLabel(
             self.empty_frame,
             text=self.text.no_results if is_search else self.text.no_cards,
             text_color=self.theme["text_color"],
-            font=ctk.CTkFont(**self.theme["column_empty_title_font"]),
+            font=self._font("column_empty_title_font"),
         )
         self.empty_label.pack()
         ctk.CTkLabel(
             self.empty_frame,
             text=self.text.no_results_help if is_search else self.text.no_cards_help,
             text_color=self.theme["muted_text_color"],
-            font=ctk.CTkFont(**self.theme["column_empty_body_font"]),
+            font=self._font("column_empty_body_font"),
         ).pack(pady=(2, 10))
         if not is_search and self._on_add is not None:
             ctk.CTkButton(
@@ -234,30 +289,57 @@ class CTkKanbanColumn(ctk.CTkFrame):
                 ),
             ).pack()
 
+    def update_column(self, column: Mapping[str, Any]) -> None:
+        """Apply header-only changes without rebuilding cards or scrolling."""
+
+        value = dict(column)
+        self.column = value
+        self.title_label.configure(text=str(value["title"]))
+
+    def set_accent_color(self, color: Any) -> None:
+        if color == self.accent_color:
+            return
+        self.accent_color = color
+        self.accent_bar.configure(fg_color=color)
+
+    def _font(self, key: str, **fallback: Any) -> ctk.CTkFont:
+        font = self._font_cache.get(key)
+        if font is None:
+            font = ctk.CTkFont(**self.theme.get(key, fallback))
+            self._font_cache[key] = font
+        return font
+
     def contains_point(self, root_x: int, root_y: int) -> bool:
+        left = self.winfo_rootx()
+        top = self.winfo_rooty()
         return (
-            self.winfo_rootx() <= root_x <= self.winfo_rootx() + self.winfo_width()
-            and self.winfo_rooty() <= root_y <= self.winfo_rooty() + self.winfo_height()
+            left <= root_x <= left + self.winfo_width()
+            and top <= root_y <= top + self.winfo_height()
         )
 
     def card_index_at(self, root_y: int, *, excluding_id: Any | None = None) -> int:
         visible = [card for card in self.card_widgets if card.card_id != excluding_id]
-        for index, card in enumerate(visible):
+        low = 0
+        high = len(visible)
+        while low < high:
+            index = (low + high) // 2
+            card = visible[index]
             midpoint = card.winfo_rooty() + card.winfo_height() // 2
             if root_y < midpoint:
-                return index
-        return len(visible)
+                high = index
+            else:
+                low = index + 1
+        return low
 
     def show_drop_indicator(self, index: int, *, excluding_id: Any | None = None) -> None:
         if self._drop_index == index:
             return
         self.clear_drop_indicator()
         visible = [card for card in self.card_widgets if card.card_id != excluding_id]
-        options = {"fill": "x", "padx": 5, "pady": 2}
         if 0 <= index < len(visible):
-            self.drop_indicator.pack(before=visible[index], **options)
+            self.drop_indicator.pack(before=visible[index], fill="x", padx=5, pady=2)
         else:
-            self.drop_indicator.pack(**options)
+            self.drop_indicator.pack(fill="x", padx=5, pady=2)
         self._drop_index = index
 
     def clear_drop_indicator(self) -> None:

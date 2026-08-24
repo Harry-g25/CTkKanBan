@@ -1200,7 +1200,7 @@ board = CTkKanbanBoard(
     on_card_open=card_clicked,
 )</code></pre>
         </div>
-        <p>Providing <code>on_card_open</code> also replaces the edit drawer when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas and fonts are shared across compact cards, and local search reuses existing card widgets rather than rebuilding them on every query.</p>
+        <p>Providing <code>on_card_open</code> also replaces the edit drawer when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas, fonts, and search text are shared across compact cards; static text uses lightweight appearance-aware Tk primitives; the accent strip, action buttons, and pooled pills use anti-aliased native CustomTkinter widgets; search reuses existing card widgets; column mutations retain their widget trees; and all board scroll frames share one routed wheel binding.</p>
       </section>
 
       <section id="feat-loading">
@@ -1425,7 +1425,7 @@ board = CTkKanbanBoard(
             <thead><tr><th>Area</th><th>All accepted tokens</th></tr></thead>
             <tbody>
               <tr><td>Board surfaces</td><td><code>board_fg_color</code>, <code>toolbar_fg_color</code>, <code>column_fg_color</code>, <code>column_header_fg_color</code>, <code>column_border_color</code>, <code>column_accent_colors</code></td></tr>
-              <tr><td>Cards and drag</td><td><code>card_fg_color</code>, <code>card_hover_color</code>, <code>dragging_card_fg_color</code>, <code>card_border_color</code>, <code>selected_border_color</code>, <code>drop_indicator_color</code></td></tr>
+              <tr><td>Cards and drag</td><td><code>card_fg_color</code>, <code>card_hover_color</code>, <code>dragging_card_fg_color</code>, <code>card_metadata_fg_color</code>, <code>card_border_color</code>, <code>selected_border_color</code>, <code>drop_indicator_color</code></td></tr>
               <tr><td>Shared colors</td><td><code>text_color</code>, <code>muted_text_color</code>, <code>accent_color</code>, <code>control_hover_color</code>, <code>count_fg_color</code>, <code>empty_icon_fg_color</code>, <code>divider_color</code>, <code>danger_color</code></td></tr>
               <tr><td>Editor/input/scroll colors</td><td><code>editor_fg_color</code>, <code>editor_section_fg_color</code>, <code>input_border_color</code>, <code>scrollbar_color</code>, <code>scrollbar_hover_color</code>, <code>error_text_color</code></td></tr>
               <tr><td>Pills and priorities</td><td><code>pill_text_color</code>, <code>priority_low_color</code>, <code>priority_medium_color</code>, <code>priority_high_color</code>, <code>priority_critical_color</code>, <code>tag_pill_colors</code></td></tr>
@@ -1434,8 +1434,8 @@ board = CTkKanbanBoard(
               <tr><td>Toolbar fonts</td><td><code>toolbar_title_font</code>, <code>toolbar_summary_font</code></td></tr>
               <tr><td>Column geometry</td><td><code>column_corner_radius</code>, <code>column_border_width</code>, <code>column_gap</code>, <code>column_accent_height</code>, <code>column_header_padding_x</code>, <code>card_gap</code></td></tr>
               <tr><td>Column fonts</td><td><code>column_title_font</code>, <code>column_count_font</code>, <code>column_empty_title_font</code>, <code>column_empty_body_font</code></td></tr>
-              <tr><td>Card geometry and limits</td><td><code>card_corner_radius</code>, <code>card_border_width</code>, <code>card_selected_border_width</code>, <code>card_accent_width</code>, <code>card_description_max_chars</code>, <code>card_max_visible_tags</code>, <code>pill_height</code>, <code>pill_corner_radius</code></td></tr>
-              <tr><td>Card fonts</td><td><code>card_title_font</code>, <code>card_body_font</code>, <code>card_metadata_font</code>, <code>pill_font</code></td></tr>
+              <tr><td>Card geometry and limits</td><td><code>card_corner_radius</code>, <code>card_border_width</code>, <code>card_selected_border_width</code>, <code>card_accent_width</code>, <code>card_padding_x</code>, <code>card_padding_y</code>, <code>card_content_gap</code>, <code>card_action_size</code>, <code>card_action_margin</code>, <code>card_description_max_chars</code>, <code>card_max_visible_tags</code>, <code>pill_height</code>, <code>pill_corner_radius</code>, <code>pill_padding_x</code>, <code>pill_gap</code>, <code>pill_row_gap</code></td></tr>
+              <tr><td>Card fonts</td><td><code>card_title_font</code>, <code>card_body_font</code>, <code>card_metadata_font</code>, <code>card_action_font</code>, <code>pill_font</code></td></tr>
               <tr><td>Editor layout</td><td><code>editor_border_width</code>, <code>editor_header_padding_x</code>, <code>editor_header_padding_y</code>, <code>editor_form_padding_x</code>, <code>editor_form_padding_y</code>, <code>editor_field_padding_x</code>, <code>editor_field_gap</code>, <code>editor_section_gap</code>, <code>editor_section_corner_radius</code>, <code>editor_section_border_width</code>, <code>editor_section_title_padding_y</code></td></tr>
               <tr><td>Editor motion</td><td><code>editor_slide_step</code>, <code>editor_slide_interval_ms</code></td></tr>
               <tr><td>Editor fonts</td><td><code>editor_eyebrow_font</code>, <code>editor_title_font</code>, <code>editor_status_font</code>, <code>section_title_font</code>, <code>field_label_font</code>, <code>help_text_font</code>, <code>status_text_font</code></td></tr>
