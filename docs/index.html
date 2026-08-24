@@ -344,7 +344,7 @@
 
   <nav class="topnav" aria-label="Primary">
     <a class="nav-title" href="#hero">CTkKanban</a>
-    <span class="nav-ver">v2.2.0 Docs</span>
+    <span class="nav-ver">v2.2.1 Docs</span>
     <div class="nav-spacer"></div>
     <a class="nav-a" href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">GitHub</a>
     <a class="nav-a" href="https://pypi.org/project/CTkKanBan/" target="_blank" rel="noopener noreferrer">PyPI</a>
@@ -358,7 +358,7 @@
           <div class="nav-group-title">Overview</div>
           <a class="nav-item" href="#hero">Introduction</a>
           <a class="nav-item" href="#installation">Installation</a>
-          <a class="nav-item" href="#release-220">Release 2.2.0</a>
+          <a class="nav-item" href="#release-221">Release 2.2.1</a>
           <a class="nav-item" href="#quick-start">Quick Start</a>
           <a class="nav-item" href="#examples">Runnable Examples</a>
         </div>
@@ -477,10 +477,10 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
         </div>
       </section>
 
-      <section id="release-220">
-        <h2>Release 2.2.0 Highlights</h2>
+      <section id="release-221">
+        <h2>Release 2.2.1 Highlights</h2>
         <hr class="section-hr">
-        <p>Version 2.2 makes database-shaped cards and host-owned editors simpler, while improving board layout, scrolling, and rendering responsiveness.</p>
+        <p>Version 2.2.1 includes the 2.2 feature set and restores wheel routing on CustomTkinter 6.0 without relying on version-specific private methods.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Area</th><th>What changed</th></tr></thead>
@@ -491,6 +491,7 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
               <tr><td>Responsive layout</td><td><code>fill_columns</code> shares surplus width equally; editor close restores centred columns and columns retain their vertical fill.</td></tr>
               <tr><td>Scrolling</td><td>Thicker scrollbars, coalesced geometry updates, resize-aware horizontal ranges, and axis-aware wheel input improve navigation.</td></tr>
               <tr><td>Rendering</td><td>Normalized schemas and fonts are reused, unused per-card widgets are removed, and search reuses existing card widgets.</td></tr>
+              <tr><td>Compatibility</td><td>Wheel containment is now owned by CTkKanban and tested across CustomTkinter 5.2.2 and 6.0.0.</td></tr>
               <tr><td>Examples</td><td>Focused runnable programs now cover normal setup, every input type, SQLite, custom editors, and asynchronous loading.</td></tr>
             </tbody>
           </table>
@@ -1829,7 +1830,7 @@ card = {
       </section>
 
       <footer class="page-footer">
-        CTkKanban 2.2.0 documentation · MIT License ·
+        CTkKanban 2.2.1 documentation · MIT License ·
         <a href="https://github.com/Harry-g25/CTkKanBan" target="_blank" rel="noopener noreferrer">Source</a>
       </footer>
     </main>

@@ -116,7 +116,7 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
     def _mouse_wheel_all(self, event: tk.Event[Any]) -> None:
         """Route one wheel event to the useful axis with a practical step size."""
 
-        if not self.check_if_master_is_canvas(event.widget):
+        if not self._contains_widget(event.widget):
             return
 
         if self._shift_pressed:
@@ -135,6 +135,24 @@ class ManagedScrollableFrame(ctk.CTkScrollableFrame):
             and nearest._parent_canvas.yview() == (0.0, 1.0)
         ):
             self._scroll_canvas(event, horizontal=True)
+
+    def _contains_widget(self, widget: Any) -> bool:
+        """Return whether ``widget`` belongs to this scrollable frame.
+
+        CustomTkinter 5 exposed ``check_if_master_is_canvas()`` for this walk,
+        while 6 replaced it with a differently behaved private helper.  Keep
+        the small containment check here so wheel routing is stable across the
+        complete supported CustomTkinter range.
+        """
+
+        current = widget
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            if current is self._parent_canvas:
+                return True
+            visited.add(id(current))
+            current = getattr(current, "master", None)
+        return False
 
     @staticmethod
     def _nearest_managed_scrollable(widget: Any) -> ManagedScrollableFrame | None:

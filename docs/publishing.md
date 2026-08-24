@@ -43,6 +43,16 @@ repository workflow uses the project URL
    python -m twine check dist/*
    ```
 
+   CI installs the newest allowed CustomTkinter release, while its compatibility
+   job pins the minimum. Before a release, reproduce both dependency edges:
+
+   ```bash
+   python -m pip install "customtkinter==5.2.2"
+   python -m pytest -q
+   python -m pip install --upgrade "customtkinter>=6,<7"
+   python -m pytest -q
+   ```
+
    On Linux without a display, run GUI tests under Xvfb, for example
    `xvfb-run -a python -m pytest -q`. `tox` is a convenient alternative for
    the test and quality environments.
@@ -68,7 +78,7 @@ Build artifacts in `dist/` are local outputs and must not be committed.
 
 1. Create a GitHub release targeting the validated commit on `main`.
 2. Use a tag that exactly matches `ctk_kanban.__version__`, with an optional
-   leading `v` (for example `2.2.0` or `v2.2.0`).
+   leading `v` (for example `2.2.1` or `v2.2.1`).
 3. Use the matching changelog section as the release notes and publish the
    release. A draft does not trigger publishing.
 4. Publishing triggers the `Publish to PyPI` workflow. Prereleases are
@@ -84,6 +94,9 @@ Build artifacts in `dist/` are local outputs and must not be committed.
 
 Do not rebuild or manually upload different files after the workflow's build
 job. PyPI releases are immutable, so a broken artifact requires a new version.
+Likewise, do not move a tag after publishing a GitHub release. If validation or
+upload fails after the release is visible, fix the problem and increment the
+patch version for a new release commit and tag.
 
 ## Manual recovery for a missed release event
 

@@ -8,6 +8,15 @@ confirm that matching distributions were published to PyPI.
 
 No unreleased changes yet.
 
+## 2.2.1 - 2026-08-24
+
+[Release notes](docs/release-notes-2.2.1.md)
+
+- Restored wheel routing on CustomTkinter 6 by replacing a removed private
+  5.x containment helper with CTkKanban-owned widget ancestry handling.
+- Added a regression test that keeps scroll containment independent of
+  CustomTkinter private methods.
+
 ## 2.2.0 - 2026-08-24
 
 [Release notes](docs/release-notes-2.2.0.md)

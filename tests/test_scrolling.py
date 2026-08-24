@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
-from ctk_kanban._scrolling import _unbind_global_callback
+from ctk_kanban._scrolling import ManagedScrollableFrame, _unbind_global_callback
 
 
 class _FakeInterpreter:
@@ -41,3 +42,16 @@ def test_unbind_global_callback_does_not_require_misc_private_helper() -> None:
     assert owned not in root.tk.script
     assert sibling in root.tk.script
     assert root.deleted_commands == [owned]
+
+
+def test_scroll_containment_does_not_depend_on_customtkinter_private_helpers() -> None:
+    canvas = SimpleNamespace(master=None)
+    nested = SimpleNamespace(master=canvas)
+    child = SimpleNamespace(master=nested)
+    unrelated = SimpleNamespace(master=None)
+    frame = object.__new__(ManagedScrollableFrame)
+    frame._parent_canvas = canvas
+
+    assert frame._contains_widget(canvas)
+    assert frame._contains_widget(child)
+    assert not frame._contains_widget(unrelated)
