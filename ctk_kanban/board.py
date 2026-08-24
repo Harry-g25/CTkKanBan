@@ -20,6 +20,8 @@ from .adapters import snapshot_from_rows
 from .card import CTkKanbanCard
 from .column import CTkKanbanColumn
 from .config import ActionConfig, BoardConfig, merge_config
+from .context_menu import CTkContextMenu
+from .dropdown import CTkDropdown
 from .editor import CardEditor
 from .fields import FieldInput
 from .model import BoardModel, BoardModelError, BoardSnapshot, CardRecord, ColumnRecord
@@ -50,6 +52,29 @@ class CTkKanbanBoard(ctk.CTkFrame):
     the host application and is notified through one ``on_change`` callback.
     """
 
+    CARD_SIZE_SCALES = {"compact": 0.82, "normal": 1.0, "large": 1.2}
+    _SCALED_CARD_TOKENS = (
+        "card_corner_radius",
+        "card_accent_width",
+        "card_padding_x",
+        "card_padding_y",
+        "card_content_gap",
+        "card_action_size",
+        "card_action_margin",
+        "pill_height",
+        "pill_corner_radius",
+        "pill_padding_x",
+        "pill_gap",
+        "pill_row_gap",
+    )
+    _SCALED_CARD_FONTS = (
+        "card_title_font",
+        "card_body_font",
+        "card_metadata_font",
+        "card_action_font",
+        "pill_font",
+    )
+
     def __init__(
         self,
         master: Any,
@@ -65,6 +90,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         enable_drag: bool | None = None,
         use_builtin_editor: bool | None = None,
         fill_columns: bool | None = None,
+        card_size: str | None = None,
         column_width: int | None = None,
         column_height: int | None = None,
         editor_width: int | None = None,
@@ -86,6 +112,8 @@ class CTkKanbanBoard(ctk.CTkFrame):
             layout = replace(layout, use_builtin_editor=use_builtin_editor)
         if fill_columns is not None:
             layout = replace(layout, fill_columns=fill_columns)
+        if card_size is not None:
+            layout = replace(layout, card_size=card_size)
         if column_width is not None:
             layout = replace(layout, column_width=column_width)
         if column_height is not None:
@@ -122,6 +150,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self.enable_drag = resolved.layout.enable_drag and self.actions.move_cards
         self.use_builtin_editor = resolved.layout.use_builtin_editor
         self.fill_columns = resolved.layout.fill_columns
+        self.card_size = resolved.layout.card_size
         self.column_width = resolved.layout.column_width
         self.column_height = resolved.layout.column_height
         self.editor_width = resolved.layout.editor_width
@@ -139,11 +168,13 @@ class CTkKanbanBoard(ctk.CTkFrame):
         self._card_widgets: dict[Any, CTkKanbanCard] = {}
         self._card_widget_cache: dict[Any, CTkKanbanCard] = {}
         self._empty_widget: ctk.CTkFrame | None = None
-        self._active_menu: tk.Menu | None = None
+        self._active_menu: CTkContextMenu | None = None
         self._editor: CardEditor | None = None
         self._font_cache: dict[str, ctk.CTkFont] = {}
+        self._card_font_cache: dict[str, ctk.CTkFont] = {}
+        self._card_theme = self._make_card_theme()
+        self._column_theme = self._make_column_theme()
         self._rendered_column_slots = 0
-        self._editor_reserved = False
         self._loading = False
         self.load_error: Exception | None = None
         self._load_generation = 0
@@ -196,6 +227,53 @@ class CTkKanbanBoard(ctk.CTkFrame):
     # ------------------------------------------------------------------
     # Construction and rendering
     # ------------------------------------------------------------------
+    def _make_card_theme(self) -> dict[str, Any]:
+        """Return card-only tokens scaled for the active density preset."""
+
+        scale = self.CARD_SIZE_SCALES[self.card_size]
+        theme = dict(self.theme)
+        for key in self._SCALED_CARD_TOKENS:
+            theme[key] = max(1, int(round(float(self.theme[key]) * scale)))
+        for key in self._SCALED_CARD_FONTS:
+            font = dict(self.theme[key])
+            if "size" in font:
+                font["size"] = max(8, int(round(float(font["size"]) * scale)))
+            theme[key] = font
+        theme["card_description_max_chars"] = max(
+            40, int(round(float(self.theme["card_description_max_chars"]) * scale))
+        )
+        return theme
+
+    def _make_column_theme(self) -> dict[str, Any]:
+        theme = dict(self.theme)
+        theme["card_gap"] = max(
+            2,
+            int(round(float(self.theme["card_gap"]) * self.CARD_SIZE_SCALES[self.card_size])),
+        )
+        return theme
+
+    def set_card_size(self, size: str) -> None:
+        """Apply ``compact``, ``normal``, or ``large`` sizing to every card."""
+
+        if not isinstance(size, str):
+            raise TypeError("card size must be a string")
+        normalized = size.strip().casefold()
+        if normalized not in self.CARD_SIZE_SCALES:
+            raise ValueError("card size must be 'compact', 'normal', or 'large'")
+        if normalized == self.card_size:
+            return
+        self.card_size = normalized
+        self.config = replace(
+            self.config,
+            layout=replace(self.config.layout, card_size=normalized),
+        )
+        self._card_font_cache.clear()
+        self._card_theme = self._make_card_theme()
+        self._column_theme = self._make_column_theme()
+        if self.show_toolbar:
+            self.card_size_dropdown.set(normalized.title())
+        self.refresh(preserve_scroll=True)
+
     def _build_toolbar(self) -> None:
         self.toolbar = ctk.CTkFrame(
             self,
@@ -210,7 +288,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
             pady=self.theme["toolbar_padding_y"],
             sticky="ew",
         )
-        self.toolbar.grid_columnconfigure(4, weight=1)
+        self.toolbar.grid_columnconfigure(5, weight=1)
 
         heading = ctk.CTkFrame(self.toolbar, fg_color="transparent")
         heading.grid(row=0, column=0, padx=(16, 18), pady=10, sticky="w")
@@ -271,6 +349,20 @@ class CTkKanbanBoard(ctk.CTkFrame):
         if not self.actions.add_cards:
             self.add_card_button.configure(state="disabled")
         self.add_card_button.grid(row=0, column=3, padx=(4, 12), pady=12)
+        self.card_size_dropdown = CTkDropdown(
+            self.toolbar,
+            values=[size.title() for size in self.CARD_SIZE_SCALES],
+            label_prefix="Cards: ",
+            command=self.set_card_size,
+            width=132,
+            height=self.theme["button_height"],
+            corner_radius=self.theme["input_corner_radius"],
+            theme=self.theme,
+            _normalized_theme=True,
+        )
+        self.card_size_dropdown.set(self.card_size.title())
+        self.card_size_dropdown.grid(row=0, column=4, padx=(0, 12), pady=12)
+        self.card_size_button = self.card_size_dropdown
 
     def _build_board_area(self) -> None:
         row = 1 if self.show_toolbar else 0
@@ -372,7 +464,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         column = CTkKanbanColumn(
             self.column_track,
             column_data,
-            self.theme,
+            self._column_theme,
             width=self.column_width,
             height=self.column_height,
             accent_color=accent_palette[index % len(accent_palette)],
@@ -448,7 +540,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         card_data: Mapping[str, Any],
     ) -> CTkKanbanCard:
         scaling = ctk.ScalingTracker.get_widget_scaling(column)
-        border = int(self.theme["card_border_width"] * scaling + 0.5)
+        border = int(self._card_theme["card_border_width"] * scaling + 0.5)
         pack_inset = int(column.CARD_PADDING_X * scaling + 0.5) * 2
         initial_content_width = max(
             120,
@@ -457,7 +549,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         card = CTkKanbanCard(
             column.body,
             card_data,
-            self.theme,
+            self._card_theme,
             fields=self.fields,
             width=self.column_width - 22,
             drag_enabled=self.enable_drag,
@@ -482,7 +574,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
             on_drag_motion=self._on_drag_motion,
             on_drag_release=self._on_drag_release,
             _normalized_fields=True,
-            _font_cache=self._font_cache,
+            _font_cache=self._card_font_cache,
             _shared_theme=True,
             _initial_content_width=initial_content_width,
         )
@@ -1106,7 +1198,7 @@ class CTkKanbanBoard(ctk.CTkFrame):
         columns: Iterable[Mapping[str, Any]],
         on_save: Callable[[dict[str, Any]], bool | str],
     ) -> None:
-        """Replace any open drawer with the requested card editor."""
+        """Replace any open overlay with the requested card editor."""
 
         self._destroy_active_menu()
         self._clear_drag_feedback()
@@ -1114,7 +1206,6 @@ class CTkKanbanBoard(ctk.CTkFrame):
             editor = self._editor
             self._editor = None
             editor.destroy()
-        self._set_editor_reserved(True)
         try:
             self._editor = CardEditor(
                 self,
@@ -1126,35 +1217,18 @@ class CTkKanbanBoard(ctk.CTkFrame):
                 theme=self.theme,
                 fields=self.fields,
                 panel_width=self.editor_width,
+                relative_width=0.5,
                 allow_column_change=self.actions.move_cards,
                 _normalized_fields=True,
                 _normalized_theme=True,
                 _font_cache=self._font_cache,
             )
         except Exception:
-            self._set_editor_reserved(False)
             raise
 
     def _editor_closed(self, editor: CardEditor) -> None:
         if self._editor is editor:
             self._editor = None
-            self._set_editor_reserved(False)
-
-    def _set_editor_reserved(self, reserved: bool) -> None:
-        """Keep the board and toolbar clear of the overlaid inspector."""
-
-        if self._editor_reserved == reserved:
-            return
-        self._editor_reserved = reserved
-        base_padding = self.theme["board_padding_x"]
-        right_padding = self.editor_width + base_padding if reserved else base_padding
-        self.board_area.grid_configure(padx=(base_padding, right_padding))
-        if self.show_toolbar:
-            previous = getattr(self.toolbar, "_last_geometry_manager_call", {})
-            options = dict(previous.get("kwargs", {}))
-            options["padx"] = (base_padding, right_padding)
-            self.toolbar.grid(**options)
-        self.after_idle(self.board_area.fit_content_to_canvas)
 
     def open_add_column_dialog(self) -> None:
         if not self.actions.add_columns:
@@ -1183,7 +1257,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return
         menu = self._new_menu(self)
         if self.actions.edit_cards:
-            menu.add_command(label="Edit", command=lambda: self.open_edit_card_editor(card_id))
+            menu.add_command(
+                label="Edit",
+                command=lambda: self.open_edit_card_editor(card_id),
+            )
         column_id = current["column"]
         cards = self.model.get_cards(column_id)
         current_index = next(index for index, item in enumerate(cards) if item["id"] == card_id)
@@ -1213,8 +1290,12 @@ class CTkKanbanBoard(ctk.CTkFrame):
             menu.add_cascade(label="Move to column", menu=move_menu)
         if self.actions.delete_cards:
             menu.add_separator()
-            menu.add_command(label="Delete", command=lambda: self._request_delete_card(card_id))
-        self._popup_menu(menu, card_widget.menu_button)
+            menu.add_command(
+                label="Delete",
+                danger=True,
+                command=lambda: self._request_delete_card(card_id),
+            )
+        self._popup_menu(menu, card_widget)
 
     def _show_column_menu(self, column_id: Any, button: Any) -> None:
         columns = self.model.get_columns()
@@ -1223,7 +1304,10 @@ class CTkKanbanBoard(ctk.CTkFrame):
             return
         menu = self._new_menu(self)
         if self.actions.edit_columns:
-            menu.add_command(label="Rename", command=lambda: self._rename_column(column_id))
+            menu.add_command(
+                label="Rename",
+                command=lambda: self._rename_column(column_id),
+            )
         if self.actions.move_columns:
             menu.add_command(
                 label="Move left",
@@ -1244,51 +1328,38 @@ class CTkKanbanBoard(ctk.CTkFrame):
             )
             menu.add_command(
                 label="Delete",
+                danger=True,
                 state=cast(Any, state),
                 command=lambda: self._request_delete_column(column_id),
             )
         self._popup_menu(menu, button)
 
-    def _new_menu(self, master: Any) -> tk.Menu:
-        return tk.Menu(
+    def _new_menu(self, master: Any) -> CTkContextMenu:
+        return CTkContextMenu(
             master,
-            tearoff=False,
-            background=self._apply_appearance_mode(self.theme["menu_fg_color"]),
-            foreground=self._apply_appearance_mode(self.theme["menu_text_color"]),
-            activebackground=self._apply_appearance_mode(self.theme["menu_hover_color"]),
-            activeforeground=self._apply_appearance_mode(self.theme["menu_text_color"]),
-            disabledforeground=self._apply_appearance_mode(
-                self.theme["menu_disabled_text_color"]
-            ),
+            theme=self.theme,
+            on_close=self._menu_closed,
+            _normalized_theme=True,
         )
 
-    def _popup_menu(self, menu: tk.Menu, button: Any) -> None:
+    def _popup_menu(self, menu: CTkContextMenu, anchor: Any) -> None:
         self._destroy_active_menu()
         self._active_menu = menu
-        menu.bind(
-            "<Unmap>",
-            lambda _event: self._menu_unmapped(menu),
-            add="+",
-        )
-        try:
-            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
-        finally:
-            try:
-                menu.grab_release()
-            except tk.TclError:
-                pass
+        position = getattr(anchor, "_context_menu_position", None)
+        if position is not None:
+            menu.popup(*position)
+            return
+        widget = getattr(anchor, "menu_button", anchor)
+        menu.popup_at_widget(widget)
 
-    def _menu_unmapped(self, menu: tk.Menu) -> None:
-        if self._active_menu is menu:
-            self.after_idle(self._destroy_menu, menu)
-
-    def _destroy_menu(self, menu: tk.Menu) -> None:
+    def _menu_closed(self, menu: CTkContextMenu) -> None:
         if self._active_menu is menu:
             self._active_menu = None
-        try:
-            menu.destroy()
-        except tk.TclError:
-            pass
+
+    def _destroy_menu(self, menu: CTkContextMenu) -> None:
+        if self._active_menu is menu:
+            self._active_menu = None
+        menu.destroy()
 
     def _destroy_active_menu(self) -> None:
         if self._active_menu is not None:

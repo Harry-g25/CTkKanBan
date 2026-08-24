@@ -52,6 +52,10 @@ def test_default_theme_follows_customtkinter() -> None:
     assert theme["selected_border_color"] == tuple(native["CTkButton"]["fg_color"])
 
 
+def test_customtkinter_six_is_the_supported_widget_baseline() -> None:
+    assert int(ctk.__version__.split(".", 1)[0]) >= 6
+
+
 def test_structured_config_is_partial_and_strict() -> None:
     config = ctk_kanban.merge_config(
         {
@@ -59,6 +63,7 @@ def test_structured_config_is_partial_and_strict() -> None:
             "layout": {
                 "editor_width": 500,
                 "fill_columns": True,
+                "card_size": "compact",
                 "use_builtin_editor": False,
             },
             "text": {"board_title": "Roadmap"},
@@ -69,9 +74,12 @@ def test_structured_config_is_partial_and_strict() -> None:
     assert config.actions.add_cards
     assert config.layout.editor_width == 500
     assert config.layout.fill_columns
+    assert config.layout.card_size == "compact"
     assert not config.layout.use_builtin_editor
     assert config.text.board_title == "Roadmap"
     with pytest.raises(ValueError, match="unknown action"):
         ctk_kanban.merge_config({"actions": {"explode_cards": True}})
     with pytest.raises(TypeError, match="layout.fill_columns"):
         ctk_kanban.merge_config({"layout": {"fill_columns": 1}})
+    with pytest.raises(ValueError, match="layout.card_size"):
+        ctk_kanban.merge_config({"layout": {"card_size": "huge"}})

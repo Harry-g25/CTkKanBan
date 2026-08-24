@@ -307,6 +307,7 @@ def main() -> None:
         cards=CARDS,
         fields=FIELDS,
         config=CONFIG,
+        card_size="normal",  # "compact", "normal", or "large"
         theme=THEME,
         on_change=board_changed,
     )

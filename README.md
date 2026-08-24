@@ -42,7 +42,7 @@ a format suited to package and repository viewers.
 python -m pip install CTkKanBan
 ```
 
-CTkKanban requires Python 3.10 or newer and installs CustomTkinter 5.2.2 or
+CTkKanban requires Python 3.10 or newer and installs CustomTkinter 6.0.0 or
 newer (below major version 7). `CTkKanBan` is the PyPI distribution name;
 `ctk_kanban` is the lowercase Python package name.
 
@@ -75,6 +75,7 @@ board = CTkKanbanBoard(
             "tags": ["demo"],
         }
     ],
+    card_size="normal",  # "compact", "normal", or "large"
     on_change=lambda event: print(event["type"], event["data"]),
 )
 board.pack(fill="both", expand=True)
@@ -105,20 +106,26 @@ is useful for visually exploring the full board. See
 
 ## Interaction model
 
-- Click a card to select it and open the editor drawer.
+- Click a card to select it and open the editor overlay.
 - Save explicitly with **Save changes** or Enter; Escape cancels.
 - Drag cards only from their upper-right drag handle.
-- Use the visible menu for move and delete actions.
+- Use the visible menu, or right-click a card, for move and delete actions.
 - Columns use menu actions for left/right movement instead of column dragging.
 
 There is no inline editing, click-away autosave, whole-card dragging, floating
 drag preview, or window-wide drag binding. A local Tk grab makes sure a handle
 drag always receives its release event.
 
-The drawer marks changed state and disables Save until a value differs. Enter
-saves from ordinary controls, `Ctrl+Enter` saves from anywhere in the drawer,
+The overlay covers the right half of the board without shifting its columns.
+It marks changed state and disables Save until a value differs. Enter
+saves from ordinary controls, `Ctrl+Enter` saves from anywhere in the overlay,
 and Escape cancels. Enter inside a multiline textbox inserts a new
-line. Opening another editor replaces the currently open drawer.
+line. Opening another editor replaces the currently open overlay.
+
+Card and column menus are compact, text-only CustomTkinter popups rather than
+platform `tk.Menu` instances. The card-size selector and generated select
+fields use the same newer dropdown control, so their surfaces, hover states,
+disabled rows, and nested submenus follow the active CTk theme.
 
 Search is a case-insensitive substring match across only fields marked
 `searchable`; lists contribute each item. Search changes visibility, not data.
@@ -169,7 +176,7 @@ to `ctk.CTkFont`. Palette tokens such as `column_accent_colors` and
 ### Complete token reference
 
 The supported token set is intentionally closed. Values are shown through
-`DEFAULT_THEME`; the table below describes all 107 names.
+`DEFAULT_THEME`; the table below describes all 118 names.
 
 | Area | Tokens |
 | --- | --- |
@@ -178,7 +185,7 @@ The supported token set is intentionally closed. Values are shown through
 | Shared colors | `text_color`, `muted_text_color`, `accent_color`, `control_hover_color`, `count_fg_color`, `empty_icon_fg_color`, `divider_color`, `danger_color` |
 | Editor/input/scroll colors | `editor_fg_color`, `editor_section_fg_color`, `input_border_color`, `scrollbar_color`, `scrollbar_hover_color`, `error_text_color` |
 | Pills and priorities | `pill_text_color`, `priority_low_color`, `priority_medium_color`, `priority_high_color`, `priority_critical_color`, `tag_pill_colors` |
-| Native context menu | `menu_fg_color`, `menu_text_color`, `menu_hover_color`, `menu_disabled_text_color` |
+| Custom context menu | `menu_fg_color`, `menu_text_color`, `menu_hover_color`, `menu_disabled_text_color`, `menu_border_color`, `menu_corner_radius`, `menu_border_width`, `menu_padding`, `menu_min_width`, `menu_item_height`, `menu_item_corner_radius`, `menu_separator_margin`, `menu_font` |
 | Board and toolbar geometry | `board_padding_x`, `board_padding_y`, `toolbar_height`, `toolbar_corner_radius`, `toolbar_padding_x`, `toolbar_padding_y`, `toolbar_content_padding_y`, `search_width`, `button_height`, `control_corner_radius`, `small_control_size` |
 | Toolbar fonts | `toolbar_title_font`, `toolbar_summary_font` |
 | Column geometry | `column_corner_radius`, `column_border_width`, `column_gap`, `column_accent_height`, `column_header_padding_x`, `card_gap` |
@@ -187,7 +194,7 @@ The supported token set is intentionally closed. Values are shown through
 | Card fonts | `card_title_font`, `card_body_font`, `card_metadata_font`, `card_action_font`, `pill_font` |
 | Editor layout | `editor_border_width`, `editor_header_padding_x`, `editor_header_padding_y`, `editor_form_padding_x`, `editor_form_padding_y`, `editor_field_padding_x`, `editor_field_gap`, `editor_section_gap`, `editor_section_corner_radius`, `editor_section_border_width`, `editor_section_title_padding_y` |
 | Editor motion | `editor_slide_step`, `editor_slide_interval_ms` |
-| Editor fonts | `editor_eyebrow_font`, `editor_title_font`, `editor_status_font`, `section_title_font`, `field_label_font`, `help_text_font`, `status_text_font` |
+| Editor fonts | `editor_eyebrow_font`, `editor_title_font`, `editor_status_font`, `section_title_font`, `field_label_font`, `help_text_font`, `status_text_font`, `editor_input_font`, `editor_button_font` |
 | Inputs and scrollbar | `input_height`, `compact_input_height`, `input_corner_radius`, `input_border_width`, `textbox_height`, `scrollbar_width` |
 
 Theme mappings are resolved at construction time. Changing the source mapping
@@ -214,6 +221,7 @@ board = CTkKanbanBoard(
             "show_toolbar": True,
             "fill_columns": True,
             "use_builtin_editor": True,
+            "card_size": "compact",
             "column_width": 340,
             "column_height": 560,
             "editor_width": 480,
@@ -276,11 +284,12 @@ started by the built-in menus; direct API deletions never prompt.
 | --- | ---: | --- |
 | `show_toolbar` | `True` | Show the title, summary, search, and add buttons. `search()` remains usable when hidden. |
 | `enable_drag` | `True` | Enable handle-only card dragging when `move_cards` is also enabled. Menu/API movement remains available when only dragging is off. |
-| `use_builtin_editor` | `True` | Use the generated drawer. When false, `on_card_open(card)` can handle card clicks and add-editor opening is a no-op. |
+| `use_builtin_editor` | `True` | Use the generated overlay. When false, `on_card_open(card)` can handle card clicks and add-editor opening is a no-op. |
 | `fill_columns` | `False` | Give every column an equal share of surplus horizontal space. `column_width` remains the minimum, so narrower boards still scroll. |
+| `card_size` | `"normal"` | Initial card density: `"compact"`, `"normal"`, or `"large"`. The toolbar menu and `set_card_size()` can change it at runtime. |
 | `column_width` | `320` | Column width in widget pixels; integer at least `220`. |
 | `column_height` | `500` | Minimum board-column height; integer at least `240`. |
-| `editor_width` | `420` | Width of the embedded drawer; integer at least `320`. |
+| `editor_width` | `420` | Compatibility setting for the editor's fixed-width fallback; the built-in board editor occupies exactly the right half of the board. Integer at least `320`. |
 
 Scrollbars use a 14-pixel default thickness and can be resized with the
 `scrollbar_width` theme token. The horizontal range is recalculated after host
@@ -322,7 +331,7 @@ board = CTkKanbanBoard(
 
 Existing direct options such as `show_toolbar`, `enable_drag`,
 `use_builtin_editor`, `fill_columns`, `column_width`, `column_height`,
-`editor_width`, `confirm_delete`, and `board_title` override
+`card_size`, `editor_width`, `confirm_delete`, and `board_title` override
 the corresponding structured setting when explicitly supplied. The two
 `allow_*_deletion` arguments override `actions.delete_cards` and
 `actions.delete_columns`. Remaining keyword arguments are forwarded to the
@@ -456,7 +465,7 @@ board = CTkKanbanBoard(app, columns=columns, cards=cards, fields=fields)
 | `textarea` | Multi-line textbox | Trimmed `str`; `None` becomes `""`. |
 | `number` | Entry | `float`, or `None` when blank. Booleans are rejected. |
 | `integer` | Entry | `int`, or `None` when blank; a fractional float is rejected. |
-| `select` | Option menu | The selected value. Non-empty `options` are enforced. |
+| `select` | Custom dropdown | The selected value. Non-empty `options` are enforced. |
 | `multiselect` | Add/remove pill input | Deduplicated `list`; non-empty `options` are enforced on save. |
 | `date` | Entry | ISO `YYYY-MM-DD` string or `""`; accepts `datetime.date` input. |
 | `datetime` | Entry | ISO date-time string or `""`; accepts `datetime.datetime` and `Z` input. |
@@ -789,7 +798,7 @@ worker, block public mutations, or alter data.
 
 Pass `on_card_open` to run a function when a card is clicked. The callback
 receives one detached card dictionary. Set `use_builtin_editor=False` when the
-callback should run without CTkKanban opening its generated drawer:
+callback should run without CTkKanban opening its generated overlay:
 
 ```python
 def card_clicked(card):
@@ -805,7 +814,7 @@ board = CTkKanbanBoard(
 )
 ```
 
-Providing `on_card_open` also replaces the edit drawer when
+Providing `on_card_open` also replaces the edit overlay when
 `use_builtin_editor=True`, preserving the original callback behavior. Use the
 public `add_card()` and `update_card()` methods when your own form saves.
 
@@ -838,6 +847,7 @@ CTkKanbanBoard(
     enable_drag=None,
     use_builtin_editor=None,
     fill_columns=None,
+    card_size=None,
     column_width=None,
     column_height=None,
     editor_width=None,
@@ -889,6 +899,7 @@ targets; `column_keys` accepts `id` and `title`.
 | `get_selected_card()` | `CardRecord | None` | Current detached selection, if it still exists. |
 | `search(query)` | `None` | Set case-insensitive local search; non-string values are converted with `str()`. |
 | `refresh(preserve_scroll=True)` | `None` | Rebuild structural widgets from current model state. Ordinary public mutations already refresh what they need. |
+| `set_card_size(size)` | `None` | Apply `"compact"`, `"normal"`, or `"large"` card geometry and typography, preserving the choice through later refreshes. |
 
 ### Board mutation methods
 
@@ -910,8 +921,8 @@ event only when data changes.
 
 | Member | Return | Behavior |
 | --- | --- | --- |
-| `open_add_card_editor(column_id=None)` | `None` | Open the generated drawer. It is a no-op when `use_builtin_editor=False`; otherwise, if no column exists and adding columns is allowed, prompt for one first. |
-| `open_edit_card_editor(card_id)` | `None` | Open the drawer or invoke the configured custom callback; invalid/unknown IDs are ignored. |
+| `open_add_card_editor(column_id=None)` | `None` | Open the generated overlay. It is a no-op when `use_builtin_editor=False`; otherwise, if no column exists and adding columns is allowed, prompt for one first. |
+| `open_edit_card_editor(card_id)` | `None` | Open the overlay or invoke the configured custom callback; invalid/unknown IDs are ignored. |
 | `open_add_column_dialog()` | `None` | Prompt for a title and create a UUID-backed column. |
 | `is_loading` | `bool` | Read-only property describing pending async delivery/manual presentation. |
 | `load_error` | `Exception | None` | Most recent async load error; cleared when a new load starts. |
@@ -982,7 +993,7 @@ for incorrect value kinds and `ValueError` for invalid names/ranges. Theme
 helpers reject unknown token names with `ValueError`; CustomTkinter may report
 invalid token values later while constructing a widget.
 
-Editor validation errors are shown in the drawer and keep it open. Public
+Editor validation errors are shown in the overlay and keep it open. Public
 method errors are not swallowed. `on_change` and `on_card_open` callback
 exceptions are logged so the Tk interaction can finish; async success/error
 callbacks are application code and should handle their own failures.
@@ -1005,7 +1016,7 @@ large constructor-flag frameworks. Custom record keys are now preserved.
 | --- | --- |
 | `from CTkKanBan import ...` | `from ctk_kanban import ...` |
 | Dynamic/generated fields | The smaller `fields` schema documented above. |
-| Inline and popup editing modes | One embedded explicit-save drawer, or `on_card_open`. |
+| Inline and popup editing modes | One embedded explicit-save overlay, or `on_card_open`. |
 | Mutation-specific callbacks | One `on_change(event)` callback with before/current snapshots. |
 | Built-in persistence/data sources | Application repositories plus snapshots, row adapters, and `load_async()`. |
 | Advanced filters/sorts | Schema-aware local search and manual order; transform source data in the host. |

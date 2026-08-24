@@ -436,7 +436,7 @@
           <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>python -m pip install --upgrade CTkKanBan</code></pre>
         </div>
-        <p>CTkKanban requires Python 3.10 or newer. Its package metadata accepts CustomTkinter 5.2.2 or newer below major version 7.</p>
+        <p>CTkKanban requires Python 3.10 or newer. Its package metadata accepts CustomTkinter 6.0.0 or newer below major version 7.</p>
         <p>Although the distribution name uses capitals, import the package with its canonical lowercase module name:</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
@@ -491,7 +491,7 @@ from ctk_kanban import CTkKanbanBoard</code></pre>
               <tr><td>Responsive layout</td><td><code>fill_columns</code> shares surplus width equally; editor close restores centred columns and columns retain their vertical fill.</td></tr>
               <tr><td>Scrolling</td><td>Thicker scrollbars, coalesced geometry updates, resize-aware horizontal ranges, and axis-aware wheel input improve navigation.</td></tr>
               <tr><td>Rendering</td><td>Normalized schemas and fonts are reused, unused per-card widgets are removed, and search reuses existing card widgets.</td></tr>
-              <tr><td>Compatibility</td><td>Wheel containment is now owned by CTkKanban and tested across CustomTkinter 5.2.2 and 6.0.0.</td></tr>
+              <tr><td>Compatibility</td><td>Wheel containment is owned by CTkKanban, and CustomTkinter 6.0.0 is now the minimum supported release.</td></tr>
               <tr><td>Examples</td><td>Focused runnable programs now cover normal setup, every input type, SQLite, custom editors, and asynchronous loading.</td></tr>
             </tbody>
           </table>
@@ -614,12 +614,12 @@ board = CTkKanbanBoard(
         <hr class="section-hr">
         <p>CTkKanban makes destructive and mutating actions visible and deliberate. Use <code>config["actions"]</code> or <code>allow_card_deletion=False</code> to remove operations that a particular application must not expose:</p>
         <ul>
-          <li>Click a card body or its <strong>Edit</strong> action to select it and open the editor drawer.</li>
+          <li>Click a card body or its <strong>Edit</strong> action to select it and open the editor overlay across the right half of the board.</li>
           <li>Save with <strong>Save changes</strong>, Enter outside a multiline textbox, or Ctrl+Enter anywhere in the editor.</li>
-          <li>Press Escape or choose <strong>Cancel</strong> to close the drawer without saving.</li>
+          <li>Press Escape or choose <strong>Cancel</strong> to close the overlay without saving.</li>
           <li>Drag from the handle in the card's upper-right corner. A six-pixel threshold prevents accidental drags.</li>
-          <li>Use card menus to move up, move down, move between columns, edit, or delete.</li>
-          <li>Use column menus to rename, move left, move right, or delete a column.</li>
+          <li>Use card menus or right-click a card to move up, move down, move between columns, edit, or delete.</li>
+          <li>Use column menus or right-click a column header to rename, move left, move right, or delete a column.</li>
         </ul>
         <div class="callout c-info">
           <div class="callout-t">Search and movement</div>
@@ -871,7 +871,7 @@ board = CTkKanbanBoard(
               <tr><td><code>textarea</code></td><td>Multiline textbox</td><td>Trimmed <code>str</code>; <code>None</code> becomes empty text.</td></tr>
               <tr><td><code>number</code></td><td>Entry</td><td><code>float | None</code>; booleans are rejected.</td></tr>
               <tr><td><code>integer</code></td><td>Entry</td><td><code>int | None</code>; fractional float input is rejected.</td></tr>
-              <tr><td><code>select</code></td><td>Option menu</td><td>One value; non-empty <code>options</code> are enforced.</td></tr>
+              <tr><td><code>select</code></td><td>Custom dropdown</td><td>One value; non-empty <code>options</code> are enforced.</td></tr>
               <tr><td><code>multiselect</code></td><td>Add/remove pills</td><td>Deduplicated <code>list</code>; non-empty <code>options</code> are enforced on save.</td></tr>
               <tr><td><code>date</code></td><td>Entry</td><td>ISO <code>YYYY-MM-DD</code> or empty text; accepts <code>date</code> input.</td></tr>
               <tr><td><code>datetime</code></td><td>Entry</td><td>ISO date-time or empty text; accepts <code>datetime</code> and trailing <code>Z</code> input.</td></tr>
@@ -898,7 +898,7 @@ board = CTkKanbanBoard(
               <tr><td><code>placeholder</code></td><td>Empty</td><td>Entry hint; list inputs fall back to “Add a value”.</td></tr>
               <tr><td><code>options</code></td><td><code>()</code></td><td>Allowed sequence for select/multiselect. Empty means no model-level restriction.</td></tr>
               <tr><td><code>show_on_card</code></td><td>Role-dependent</td><td>Render on compact cards; true unless the inferred role is hidden.</td></tr>
-              <tr><td><code>show_in_editor</code></td><td>Type-dependent</td><td>Generate a drawer control; false by default only for hidden fields.</td></tr>
+              <tr><td><code>show_in_editor</code></td><td>Type-dependent</td><td>Generate an overlay control; false by default only for hidden fields.</td></tr>
               <tr><td><code>searchable</code></td><td><code>False</code></td><td>Include the field in case-insensitive substring search.</td></tr>
               <tr><td><code>read_only</code></td><td><code>False</code></td><td>Disable the generated control while retaining its value.</td></tr>
               <tr><td><code>section</code></td><td><code>"Details"</code></td><td>Drawer group; groups follow first appearance. Column selection lives in <code>Organisation</code>.</td></tr>
@@ -938,7 +938,7 @@ board = CTkKanbanBoard(
           <li>Fields omitted from a loaded card are only materialized when they have an explicit default or are required; a new editor presents type defaults.</li>
           <li>Undeclared card keys are preserved as private application metadata.</li>
         </ul>
-        <p><code>get_fields()</code> returns detached normalized definitions. <code>set_fields(fields)</code> validates every existing card before committing, rebuilds cards and an open drawer, and leaves the old schema/data untouched on failure. It emits one <code>fields_changed</code> event only when normalization actually changes stored card data. Treat changes that add defaults, coerce types, or narrow choices as data migrations.</p>
+        <p><code>get_fields()</code> returns detached normalized definitions. <code>set_fields(fields)</code> validates every existing card before committing, rebuilds cards and an open overlay, and leaves the old schema/data untouched on failure. It emits one <code>fields_changed</code> event only when normalization actually changes stored card data. Treat changes that add defaults, coerce types, or narrow choices as data migrations.</p>
       </section>
 
       <section id="data-snapshots">
@@ -1041,7 +1041,7 @@ board.set_data(snapshot)</code></pre>
       <section id="feat-editor">
         <h2>Feature: Editor Drawer</h2>
         <hr class="section-hr">
-        <p>The built-in editor is an inspector-style drawer attached to the right side of the board. It keeps the board visible, reserves layout space at high display scaling, and only changes data after an explicit save. Its controls are generated from the active field schema.</p>
+        <p>The built-in editor is an inspector-style overlay attached immediately to the right half of the board. It does not shift the toolbar or columns and only changes data after an explicit save. Its controls are generated from the active field schema, with select fields rendered by the same theme-aware dropdown used in the toolbar.</p>
         <div class="tbl">
           <table>
             <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
@@ -1078,11 +1078,11 @@ board = CTkKanbanBoard(app, columns=columns, cards=cards, fields=fields)</code><
             <tbody>
               <tr><td><code>Enter</code></td><td>Saves while focus is inside the editor, except when focus is in any multiline textbox.</td></tr>
               <tr><td><code>Ctrl+Enter</code></td><td>Saves from any field, including multiline textboxes.</td></tr>
-              <tr><td><code>Escape</code></td><td>Closes the drawer without applying unsaved changes.</td></tr>
+              <tr><td><code>Escape</code></td><td>Closes the overlay without applying unsaved changes.</td></tr>
             </tbody>
           </table>
         </div>
-        <p>Open the drawer directly when a surrounding application has its own buttons or shortcuts:</p>
+        <p>Open the overlay directly when a surrounding application has its own buttons or shortcuts:</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>board.open_add_card_editor("todo")
@@ -1185,7 +1185,7 @@ board = CTkKanbanBoard(app, on_change=board_changed)</code></pre>
       <section id="feat-external-editor">
         <h2>Feature: External Card Editor</h2>
         <hr class="section-hr">
-        <p>Pass <code>on_card_open</code> to run a function when a card is clicked. It receives one detached card dictionary. Set <code>use_builtin_editor=False</code> when the callback should run without CTkKanban opening its generated drawer.</p>
+        <p>Pass <code>on_card_open</code> to run a function when a card is clicked. It receives one detached card dictionary. Set <code>use_builtin_editor=False</code> when the callback should run without CTkKanban opening its generated overlay.</p>
         <div class="cb">
           <div class="cb-header"><span class="cb-lang">python</span><button class="copy-btn" type="button">Copy</button></div>
           <pre><code>def card_clicked(card):
@@ -1200,7 +1200,7 @@ board = CTkKanbanBoard(
     on_card_open=card_clicked,
 )</code></pre>
         </div>
-        <p>Providing <code>on_card_open</code> also replaces the edit drawer when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas, fonts, and search text are shared across compact cards; static text uses lightweight appearance-aware Tk primitives; the accent strip, action buttons, and pooled pills use anti-aliased native CustomTkinter widgets; search reuses existing card widgets; column mutations retain their widget trees; and all board scroll frames share one routed wheel binding.</p>
+        <p>Providing <code>on_card_open</code> also replaces the edit overlay when <code>use_builtin_editor=True</code>, preserving the original callback behavior. Use <code>add_card()</code> and <code>update_card()</code> when your form saves. Card schemas, fonts, and search text are shared across compact cards; static text uses lightweight appearance-aware Tk primitives; the accent strip, action buttons, and pooled pills use anti-aliased native CustomTkinter widgets; search reuses existing card widgets; column mutations retain their widget trees; and all board scroll frames share one routed wheel binding.</p>
       </section>
 
       <section id="feat-loading">
@@ -1259,6 +1259,7 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
             "show_toolbar": True,
             "fill_columns": True,
             "use_builtin_editor": True,
+            "card_size": "compact",
             "column_width": 340,
             "column_height": 560,
             "editor_width": 480,
@@ -1279,9 +1280,9 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
           <table>
             <thead><tr><th>Setting</th><th>Built-in UI</th><th>Protected board API</th></tr></thead>
             <tbody>
-              <tr><td><code>add_cards</code></td><td>Add-card buttons and drawer opening</td><td><code>add_card()</code></td></tr>
+              <tr><td><code>add_cards</code></td><td>Add-card buttons and overlay opening</td><td><code>add_card()</code></td></tr>
               <tr><td><code>edit_cards</code></td><td>Card opening/edit commands, including <code>on_card_open</code></td><td><code>update_card()</code></td></tr>
-              <tr><td><code>move_cards</code></td><td>Drag handle, card move menus, and drawer column changes</td><td><code>move_card()</code>, plus column-changing <code>update_card()</code></td></tr>
+              <tr><td><code>move_cards</code></td><td>Drag handle, card move menus, and overlay column changes</td><td><code>move_card()</code>, plus column-changing <code>update_card()</code></td></tr>
               <tr><td><code>delete_cards</code></td><td>Card delete command</td><td><code>delete_card()</code> and non-empty column cascades</td></tr>
               <tr><td><code>add_columns</code></td><td>Add-column controls/dialog</td><td><code>add_column()</code></td></tr>
               <tr><td><code>edit_columns</code></td><td>Rename command</td><td><code>update_column()</code></td></tr>
@@ -1303,11 +1304,12 @@ print(board.load_error)  # None, or the most recent async exception.</code></pre
             <tbody>
               <tr><td><code>show_toolbar</code></td><td><code>True</code></td><td>Show title, summary, search, and add controls. Programmatic <code>search()</code> still works when hidden.</td></tr>
               <tr><td><code>enable_drag</code></td><td><code>True</code></td><td>Enable handle dragging only when <code>move_cards</code> is also true. Menus/API remain available when only drag is off.</td></tr>
-              <tr><td><code>use_builtin_editor</code></td><td><code>True</code></td><td>Use the generated drawer. When false, <code>on_card_open(card)</code> can handle card clicks and add-editor opening is a no-op.</td></tr>
+              <tr><td><code>use_builtin_editor</code></td><td><code>True</code></td><td>Use the generated overlay. When false, <code>on_card_open(card)</code> can handle card clicks and add-editor opening is a no-op.</td></tr>
               <tr><td><code>fill_columns</code></td><td><code>False</code></td><td>Give columns equal shares of surplus width while retaining <code>column_width</code> as their scrolling minimum.</td></tr>
+              <tr><td><code>card_size</code></td><td><code>"normal"</code></td><td>Initial <code>compact</code>, <code>normal</code>, or <code>large</code> card geometry and typography; the toolbar menu and <code>set_card_size()</code> can change it at runtime.</td></tr>
               <tr><td><code>column_width</code></td><td><code>320</code></td><td>Integer at least 220.</td></tr>
               <tr><td><code>column_height</code></td><td><code>500</code></td><td>Integer at least 240.</td></tr>
-              <tr><td><code>editor_width</code></td><td><code>420</code></td><td>Integer at least 320.</td></tr>
+              <tr><td><code>editor_width</code></td><td><code>420</code></td><td>Compatibility setting for the fixed-width editor fallback; the built-in board editor uses exactly half the board. Integer at least 320.</td></tr>
               <tr><td><code>confirm_delete</code></td><td><code>True</code></td><td>Prompt only for built-in menu deletions. Direct deletion methods never prompt.</td></tr>
             </tbody>
           </table>
@@ -1397,7 +1399,7 @@ board = CTkKanbanBoard(
               <tr><td><code>control_hover_color</code></td><td>Menu-like and secondary control hover state.</td></tr>
               <tr><td><code>count_fg_color</code></td><td>Column count badge surface.</td></tr>
               <tr><td><code>empty_icon_fg_color</code></td><td>Empty-board icon surface.</td></tr>
-              <tr><td><code>editor_fg_color</code></td><td>Inspector drawer surface.</td></tr>
+              <tr><td><code>editor_fg_color</code></td><td>Inspector overlay surface.</td></tr>
               <tr><td><code>editor_section_fg_color</code></td><td>Grouped editor section surface.</td></tr>
               <tr><td><code>divider_color</code></td><td>Editor separators.</td></tr>
               <tr><td><code>input_border_color</code></td><td>Search and editor input borders.</td></tr>
@@ -1418,7 +1420,7 @@ board = CTkKanbanBoard(
             </tbody>
           </table>
         </div>
-        <h3>Complete 97-token index</h3>
+        <h3>Complete 118-token index</h3>
         <p><code>DEFAULT_THEME</code> exposes the exact current defaults. This index lists every accepted name so a misspelling never has to be discovered by trial and error.</p>
         <div class="tbl">
           <table>
@@ -1429,7 +1431,7 @@ board = CTkKanbanBoard(
               <tr><td>Shared colors</td><td><code>text_color</code>, <code>muted_text_color</code>, <code>accent_color</code>, <code>control_hover_color</code>, <code>count_fg_color</code>, <code>empty_icon_fg_color</code>, <code>divider_color</code>, <code>danger_color</code></td></tr>
               <tr><td>Editor/input/scroll colors</td><td><code>editor_fg_color</code>, <code>editor_section_fg_color</code>, <code>input_border_color</code>, <code>scrollbar_color</code>, <code>scrollbar_hover_color</code>, <code>error_text_color</code></td></tr>
               <tr><td>Pills and priorities</td><td><code>pill_text_color</code>, <code>priority_low_color</code>, <code>priority_medium_color</code>, <code>priority_high_color</code>, <code>priority_critical_color</code>, <code>tag_pill_colors</code></td></tr>
-              <tr><td>Native menu colors</td><td><code>menu_fg_color</code>, <code>menu_text_color</code>, <code>menu_hover_color</code>, <code>menu_disabled_text_color</code></td></tr>
+              <tr><td>Custom context menu</td><td><code>menu_fg_color</code>, <code>menu_text_color</code>, <code>menu_hover_color</code>, <code>menu_disabled_text_color</code>, <code>menu_border_color</code>, <code>menu_corner_radius</code>, <code>menu_border_width</code>, <code>menu_padding</code>, <code>menu_min_width</code>, <code>menu_item_height</code>, <code>menu_item_corner_radius</code>, <code>menu_separator_margin</code>, <code>menu_font</code></td></tr>
               <tr><td>Board/toolbar geometry</td><td><code>board_padding_x</code>, <code>board_padding_y</code>, <code>toolbar_height</code>, <code>toolbar_corner_radius</code>, <code>toolbar_padding_x</code>, <code>toolbar_padding_y</code>, <code>toolbar_content_padding_y</code>, <code>search_width</code>, <code>button_height</code>, <code>control_corner_radius</code>, <code>small_control_size</code></td></tr>
               <tr><td>Toolbar fonts</td><td><code>toolbar_title_font</code>, <code>toolbar_summary_font</code></td></tr>
               <tr><td>Column geometry</td><td><code>column_corner_radius</code>, <code>column_border_width</code>, <code>column_gap</code>, <code>column_accent_height</code>, <code>column_header_padding_x</code>, <code>card_gap</code></td></tr>
@@ -1438,7 +1440,7 @@ board = CTkKanbanBoard(
               <tr><td>Card fonts</td><td><code>card_title_font</code>, <code>card_body_font</code>, <code>card_metadata_font</code>, <code>card_action_font</code>, <code>pill_font</code></td></tr>
               <tr><td>Editor layout</td><td><code>editor_border_width</code>, <code>editor_header_padding_x</code>, <code>editor_header_padding_y</code>, <code>editor_form_padding_x</code>, <code>editor_form_padding_y</code>, <code>editor_field_padding_x</code>, <code>editor_field_gap</code>, <code>editor_section_gap</code>, <code>editor_section_corner_radius</code>, <code>editor_section_border_width</code>, <code>editor_section_title_padding_y</code></td></tr>
               <tr><td>Editor motion</td><td><code>editor_slide_step</code>, <code>editor_slide_interval_ms</code></td></tr>
-              <tr><td>Editor fonts</td><td><code>editor_eyebrow_font</code>, <code>editor_title_font</code>, <code>editor_status_font</code>, <code>section_title_font</code>, <code>field_label_font</code>, <code>help_text_font</code>, <code>status_text_font</code></td></tr>
+              <tr><td>Editor fonts</td><td><code>editor_eyebrow_font</code>, <code>editor_title_font</code>, <code>editor_status_font</code>, <code>section_title_font</code>, <code>field_label_font</code>, <code>help_text_font</code>, <code>status_text_font</code>, <code>editor_input_font</code>, <code>editor_button_font</code></td></tr>
               <tr><td>Inputs and scrollbar</td><td><code>input_height</code>, <code>compact_input_height</code>, <code>input_corner_radius</code>, <code>input_border_width</code>, <code>textbox_height</code>, <code>scrollbar_width</code></td></tr>
             </tbody>
           </table>
@@ -1469,6 +1471,7 @@ board = CTkKanbanBoard(
     enable_drag=None,
     use_builtin_editor=None,
     fill_columns=None,
+    card_size=None,
     column_width=None,
     column_height=None,
     editor_width=None,
@@ -1492,6 +1495,7 @@ board = CTkKanbanBoard(
               <tr><td><code>fields</code></td><td><code>Iterable[FieldInput] | None</code></td><td>Strings, <code>CardField</code>, fluent <code>Field</code>, or mapping definitions used by validation, the generated editor, compact cards, and search.</td></tr>
               <tr><td><code>config</code></td><td><code>BoardConfig | Mapping | None</code></td><td>Structured action, layout, text, and deletion-confirmation configuration.</td></tr>
               <tr><td><code>show_toolbar</code>, <code>enable_drag</code>, <code>use_builtin_editor</code>, <code>fill_columns</code></td><td><code>bool | None</code></td><td>Optional direct overrides for the matching layout settings.</td></tr>
+              <tr><td><code>card_size</code></td><td><code>str | None</code></td><td>Optional direct card-density override: <code>compact</code>, <code>normal</code>, or <code>large</code>.</td></tr>
               <tr><td><code>column_width</code>, <code>column_height</code>, <code>editor_width</code></td><td><code>int | None</code></td><td>Optional direct size overrides. Defaults are 320, 500, and 420.</td></tr>
               <tr><td><code>confirm_delete</code></td><td><code>bool | None</code></td><td>Optional override for built-in menu confirmation.</td></tr>
               <tr><td><code>allow_card_deletion</code>, <code>allow_column_deletion</code></td><td><code>bool | None</code></td><td>Convenience permission overrides; disabled card deletion also blocks non-empty column cascades.</td></tr>
@@ -1515,6 +1519,7 @@ board = CTkKanbanBoard(
               <tr><td><code>get_data()</code></td><td><code>BoardSnapshot</code></td><td>Detached complete board state.</td></tr>
               <tr><td><code>set_data(data)</code></td><td><code>None</code></td><td>Atomically validate and replace the board without a change event.</td></tr>
               <tr><td><code>refresh(preserve_scroll=True)</code></td><td><code>None</code></td><td>Rebuild structural widgets, optionally retaining horizontal and per-column scroll positions.</td></tr>
+              <tr><td><code>set_card_size(size)</code></td><td><code>None</code></td><td>Apply compact, normal, or large card geometry and typography while retaining the setting through later refreshes.</td></tr>
               <tr><td><code>get_card(card_id)</code></td><td><code>CardRecord | None</code></td><td>Detached card, or <code>None</code> when the ID is unknown.</td></tr>
               <tr><td><code>get_cards(column_id=None)</code></td><td><code>list[CardRecord]</code></td><td>All cards in board order, or cards in one existing column.</td></tr>
               <tr><td><code>get_columns()</code></td><td><code>list[ColumnRecord]</code></td><td>Detached columns in manual order.</td></tr>
@@ -1554,14 +1559,14 @@ board = CTkKanbanBoard(
           <table>
             <thead><tr><th>Method / property</th><th>Returns</th><th>Description</th></tr></thead>
             <tbody>
-              <tr><td><code>open_add_card_editor(column_id=None)</code></td><td><code>None</code></td><td>Open the add drawer, or do nothing when <code>use_builtin_editor</code> is false. With no columns, first opens the add-column dialog.</td></tr>
+              <tr><td><code>open_add_card_editor(column_id=None)</code></td><td><code>None</code></td><td>Open the add overlay, or do nothing when <code>use_builtin_editor</code> is false. With no columns, first opens the add-column dialog.</td></tr>
               <tr><td><code>open_edit_card_editor(card_id)</code></td><td><code>None</code></td><td>Open the built-in editor or call the configured custom callback. Unknown IDs are ignored.</td></tr>
               <tr><td><code>open_add_column_dialog()</code></td><td><code>None</code></td><td>Prompt for a title and add a UUID-backed column.</td></tr>
               <tr><td><code>is_loading</code></td><td><code>bool</code></td><td>Read-only property for pending asynchronous work.</td></tr>
               <tr><td><code>load_error</code></td><td><code>Exception | None</code></td><td>Most recent async load exception; reset when a new load starts.</td></tr>
               <tr><td><code>set_loading(loading)</code></td><td><code>None</code></td><td>Set loading presentation. Requires an actual boolean.</td></tr>
               <tr><td><code>load_async(fetch_snapshot, *, on_success=None, on_error=None, clear_on_error=False)</code></td><td><code>threading.Thread</code></td><td>Fetch and validate off-thread, then deliver through Tk.</td></tr>
-              <tr><td><code>destroy()</code></td><td><code>None</code></td><td>Invalidate pending delivery, close the drawer/menu, release drag/scroll bindings, and tear down safely; repeated calls are ignored.</td></tr>
+              <tr><td><code>destroy()</code></td><td><code>None</code></td><td>Invalidate pending delivery, close the overlay/menu, release drag/scroll bindings, and tear down safely; repeated calls are ignored.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1716,7 +1721,7 @@ theme = merge_theme({
               <tr><td>Configuration</td><td><code>TypeError</code> for incorrect kinds and <code>ValueError</code> for unknown options or invalid dimension bounds.</td></tr>
               <tr><td>Theme names</td><td><code>ValueError</code> for unknown tokens; value-shape failures may come from CustomTkinter during construction.</td></tr>
               <tr><td>Row adapters</td><td><code>TypeError</code> for an unsupported row, or <code>ValueError</code> for missing cursor metadata/duplicate result names; snapshot validation may raise <code>BoardModelError</code>.</td></tr>
-              <tr><td>Generated editor</td><td>Validation text appears in the drawer, focus moves to the failing control when possible, and unsaved data remains open.</td></tr>
+              <tr><td>Generated editor</td><td>Validation text appears in the overlay, focus moves to the failing control when possible, and unsaved data remains open.</td></tr>
               <tr><td><code>on_change</code> / <code>on_card_open</code></td><td>Callback exceptions are logged under <code>ctk_kanban</code>; an already-applied mutation is not automatically rolled back.</td></tr>
               <tr><td>Async fetch</td><td>The original exception is stored in <code>load_error</code> and delivered to <code>on_error</code>. Success/error callbacks should handle their own failures.</td></tr>
             </tbody>
@@ -1735,7 +1740,7 @@ theme = merge_theme({
             <thead><tr><th>1.x concept</th><th>2.0 replacement</th></tr></thead>
             <tbody>
               <tr><td><code>from CTkKanBan import ...</code></td><td><code>from ctk_kanban import ...</code></td></tr>
-              <tr><td>Dynamic field definitions</td><td>The focused <code>fields</code> schema and generated explicit-save drawer.</td></tr>
+              <tr><td>Dynamic field definitions</td><td>The focused <code>fields</code> schema and generated explicit-save overlay.</td></tr>
               <tr><td>Inline editing</td><td>The explicit-save embedded editor, or the simple <code>on_card_open(card)</code> callback for your own behavior.</td></tr>
               <tr><td>Mutation-specific callbacks</td><td>One <code>on_change(event)</code> callback.</td></tr>
               <tr><td>Built-in persistence/data sources</td><td>Your repository layer plus snapshots, row adapters, and <code>load_async()</code>.</td></tr>

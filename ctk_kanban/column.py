@@ -48,6 +48,8 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self._font_cache = {} if _font_cache is None else _font_cache
         self.accent_color = accent_color or self.theme["accent_color"]
         self._on_add = on_add
+        self._on_menu = on_menu
+        self._context_menu_position: tuple[int, int] | None = None
         self.text = text or TextConfig()
         self.card_widgets: list[CTkKanbanCard] = []
         self._drop_active = False
@@ -141,8 +143,10 @@ class CTkKanbanColumn(ctk.CTkFrame):
             font=self._font("card_action_font"),
         )
         if on_menu is not None:
-            self.menu_button.configure(command=lambda: on_menu(self.column_id, self.menu_button))
+            self.menu_button.configure(command=self._open_menu)
             self.menu_button.grid(row=0, column=3, padx=(2, 0))
+            for target in (header, self.title_label, self.count_label):
+                target.bind("<Button-3>", self._open_context_menu, add="+")
 
         self.body: Any = ManagedScrollableFrame(
             self,
@@ -184,6 +188,18 @@ class CTkKanbanColumn(ctk.CTkFrame):
         self.drop_indicator.configure(
             background=self._apply_appearance_mode(self.theme["drop_indicator_color"])
         )
+
+    def _open_menu(self) -> None:
+        if self._on_menu is not None:
+            self._on_menu(self.column_id, self)
+
+    def _open_context_menu(self, event: Any) -> str:
+        self._context_menu_position = (int(event.x_root), int(event.y_root))
+        try:
+            self._open_menu()
+        finally:
+            self._context_menu_position = None
+        return "break"
 
     def _set_appearance_mode(self, mode_string: str) -> None:
         super()._set_appearance_mode(mode_string)

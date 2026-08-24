@@ -11,6 +11,8 @@ import customtkinter as ctk
 import pytest
 
 from ctk_kanban import BoardModelError, CTkKanbanBoard, Field
+from ctk_kanban.context_menu import CTkContextMenu
+from ctk_kanban.dropdown import CTkDropdown
 from ctk_kanban.editor import CardEditor
 
 
@@ -693,7 +695,7 @@ def test_opening_another_editor_replaces_the_existing_drawer(tk_root: Any) -> No
     assert len([widget for widget in descendants(board) if isinstance(widget, CardEditor)]) == 1
 
 
-def test_editor_open_and_close_preserves_board_canvas_and_column_fill(tk_root: Any) -> None:
+def test_editor_overlays_half_the_board_without_moving_columns(tk_root: Any) -> None:
     tk_root.geometry("1200x760")
     tk_root.deiconify()
     board = make_board(tk_root, column_height=320, show_toolbar=True)
@@ -707,9 +709,13 @@ def test_editor_open_and_close_preserves_board_canvas_and_column_fill(tk_root: A
 
     assert board.board_area.winfo_manager() == "canvas"
     assert column.winfo_height() == initial_height
-    assert board.column_track.winfo_x() <= initial_track_x
-
+    assert board.column_track.winfo_x() == initial_track_x
     assert board._editor is not None
+    assert board._editor.winfo_width() == pytest.approx(board.winfo_width() / 2, abs=3)
+    assert float(board._editor.place_info()["relx"]) == pytest.approx(0.5)
+    assert float(board._editor.place_info()["relwidth"]) == pytest.approx(0.5)
+    assert board._editor._slide_after_id is None
+
     board._editor.close()
     tk_root.update()
 
@@ -849,16 +855,69 @@ def test_card_menu_move_fallback_invokes_the_public_move(monkeypatch: Any, tk_ro
     assert board.get_card(1)["column"] == "done"
 
 
-def test_repeated_menu_use_keeps_a_bounded_widget_count(monkeypatch: Any, tk_root: Any) -> None:
+def test_repeated_custom_menu_use_keeps_a_bounded_widget_count(tk_root: Any) -> None:
     board = make_board(tk_root)
-    monkeypatch.setattr(tk.Menu, "tk_popup", lambda self, x, y: None)
 
     for _ in range(10):
         board._show_card_menu(board._card_widgets[1])
 
-    assert len([widget for widget in descendants(board) if isinstance(widget, tk.Menu)]) == 2
+    assert len(
+        [widget for widget in tk_root.winfo_children() if isinstance(widget, CTkContextMenu)]
+    ) == 2
     board._destroy_active_menu()
-    assert not [widget for widget in descendants(board) if isinstance(widget, tk.Menu)]
+    assert not [
+        widget for widget in tk_root.winfo_children() if isinstance(widget, CTkContextMenu)
+    ]
+
+
+def test_card_size_presets_scale_card_geometry_and_typography(tk_root: Any) -> None:
+    board = make_board(tk_root, show_toolbar=True)
+    tk_root.update_idletasks()
+    normal_height = board._card_widgets[1]._rendered_height
+    normal_font = board._card_widgets[1]._font("card_title_font").cget("size")
+
+    board.set_card_size("compact")
+    tk_root.update_idletasks()
+    compact_height = board._card_widgets[1]._rendered_height
+    compact_font = board._card_widgets[1]._font("card_title_font").cget("size")
+
+    board.set_card_size("large")
+    tk_root.update_idletasks()
+    large_height = board._card_widgets[1]._rendered_height
+    large_font = board._card_widgets[1]._font("card_title_font").cget("size")
+
+    assert compact_height < normal_height < large_height
+    assert compact_font < normal_font < large_font
+    assert board.card_size == "large"
+    assert board.config.layout.card_size == "large"
+    assert isinstance(board.card_size_dropdown, CTkDropdown)
+    assert "Large" in board.card_size_button.cget("text")
+    with pytest.raises(ValueError, match="compact"):
+        board.set_card_size("huge")
+
+
+def test_card_size_can_be_selected_in_the_board_constructor(tk_root: Any) -> None:
+    board = make_board(tk_root, show_toolbar=True, card_size="compact")
+
+    assert board.card_size == "compact"
+    assert board.config.layout.card_size == "compact"
+    assert board.card_size_dropdown.get() == "Compact"
+
+
+def test_board_menus_use_customtkinter_popup_rows(tk_root: Any) -> None:
+    board = make_board(tk_root)
+
+    board._show_card_menu(board._card_widgets[1])
+
+    menu = board._active_menu
+    assert isinstance(menu, CTkContextMenu)
+    assert menu.cget("fg_color") == board.theme["menu_border_color"]
+    labels = [menu.entrycget(index, "label") for index in range(menu.index("end") + 1)]
+    assert labels == ["Edit", "Move up", "Move down", "Move to column", "", "Delete"]
+    tk_root.update_idletasks()
+    row_text = [button.cget("text") for button in menu._entry_widgets.values()]
+    assert row_text == ["Edit", "Move up", "Move down", "Move to column   \u203a", "Delete"]
+    assert menu.winfo_width() < 300
 
 
 def test_refresh_preserves_viewports_and_global_binding_count(tk_root: Any) -> None:

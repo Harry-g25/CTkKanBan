@@ -12,26 +12,11 @@ from typing import Any, Callable, Mapping, cast
 import customtkinter as ctk
 
 from ._scrolling import ManagedScrollableFrame
+from .dropdown import CTkDropdown
 from .fields import FieldInput, default_for_field, normalize_field_value, normalize_fields
 from .themes import merge_theme
 
 SaveCallback = Callable[[dict[str, Any]], bool | str | None]
-
-
-class _FastOptionMenu(ctk.CTkOptionMenu):
-    """CTk option menu without a full application idle flush per redraw."""
-
-    def _draw(self, no_color_updates: bool = False) -> None:
-        canvas = getattr(self, "_canvas", None)
-        if canvas is None:
-            super()._draw(no_color_updates)
-            return
-        flush = canvas.update_idletasks
-        canvas.update_idletasks = lambda: None
-        try:
-            super()._draw(no_color_updates)
-        finally:
-            canvas.update_idletasks = flush
 
 
 class _FastTextbox(ctk.CTkTextbox):
@@ -59,54 +44,8 @@ class _FastTextbox(ctk.CTkTextbox):
             ctk.CTkScrollbar._draw = original_draw
 
 
-class _FastLabel(tk.Label):
-    """Native label with CTk-compatible appearance-aware color options."""
-
-    def __init__(
-        self,
-        master: Any,
-        *,
-        resolve: Callable[[Any], Any],
-        background: Any,
-        text_color: Any,
-        **kwargs: Any,
-    ) -> None:
-        self._resolve = resolve
-        self._background_token = background
-        self._text_token = text_color
-        super().__init__(
-            master,
-            borderwidth=0,
-            highlightthickness=0,
-            background=resolve(background),
-            foreground=resolve(text_color),
-            **kwargs,
-        )
-
-    def apply_appearance(self) -> None:
-        super().configure(
-            background=self._resolve(self._background_token),
-            foreground=self._resolve(self._text_token),
-        )
-
-    def configure(  # type: ignore[override]
-        self, cnf: Mapping[str, Any] | None = None, **kwargs: Any
-    ) -> Any:
-        values = dict(cnf or {})
-        values.update(kwargs)
-        if "text_color" in values:
-            self._text_token = values.pop("text_color")
-            values["foreground"] = self._resolve(self._text_token)
-        if "fg_color" in values:
-            self._background_token = values.pop("fg_color")
-            values["background"] = self._resolve(self._background_token)
-        super().configure(**values)
-
-    config = configure  # type: ignore[assignment]
-
-
 class CardEditor(ctk.CTkFrame):
-    """Generate card controls from field definitions in a right-side drawer."""
+    """Generate card controls in a right-side overlay."""
 
     PANEL_WIDTH = 420
 
@@ -122,6 +61,7 @@ class CardEditor(ctk.CTkFrame):
         theme: Mapping[str, Any] | None = None,
         fields: Sequence[FieldInput] | None = None,
         panel_width: int | None = None,
+        relative_width: float | None = None,
         allow_column_change: bool = True,
         _normalized_fields: bool = False,
         _normalized_theme: bool = False,
@@ -136,10 +76,16 @@ class CardEditor(ctk.CTkFrame):
             else normalize_fields(fields)
         )
         self._font_cache = {} if _font_cache is None else _font_cache
-        self._native_labels: list[_FastLabel] = []
-        self._native_pill_buttons: list[tuple[tk.Button, Any]] = []
-        self._native_sections: list[tk.Frame] = []
+        self._label_widgets: list[ctk.CTkLabel] = []
+        self._section_widgets: list[ctk.CTkFrame] = []
         self.panel_width = self.PANEL_WIDTH if panel_width is None else panel_width
+        if relative_width is not None and (
+            isinstance(relative_width, bool)
+            or not isinstance(relative_width, (int, float))
+            or not 0 < float(relative_width) <= 1
+        ):
+            raise ValueError("relative_width must be greater than 0 and at most 1")
+        self.relative_width = None if relative_width is None else float(relative_width)
         self.allow_column_change = bool(allow_column_change)
         super().__init__(
             master,
@@ -212,26 +158,21 @@ class CardEditor(ctk.CTkFrame):
         self._update_dirty_state()
         self._bind_shortcuts()
 
-        self.place(relx=1.0, rely=0.0, x=0, relheight=1.0)
+        if self.relative_width is not None:
+            self.place(
+                relx=1.0 - self.relative_width,
+                rely=0.0,
+                relwidth=self.relative_width,
+                relheight=1.0,
+            )
+        else:
+            display_width = self._desired_panel_width()
+            self.configure(width=display_width)
+            self.place(relx=1.0, rely=0.0, x=0, relheight=1.0)
+            self._slide_target = -display_width
+            self._slide_after_id = self.after_idle(self._slide_open)
         self.lift()
-        self._slide_target = -self.winfo_reqwidth()
-        self._slide_after_id = self.after_idle(self._slide_open)
         self._activate_after_id = self.after(20, self._activate)
-
-    def _label_background(self, master: Any) -> Any:
-        current = master
-        while current is not None:
-            try:
-                if isinstance(current, ctk.CTkBaseClass):
-                    color = current.cget("fg_color")
-                    if color != "transparent":
-                        return color
-                elif isinstance(current, tk.Misc):
-                    return current.cget("background")
-            except (AttributeError, tk.TclError, ValueError):
-                pass
-            current = getattr(current, "master", None)
-        return self.theme["editor_fg_color"]
 
     def _make_label(
         self,
@@ -240,44 +181,15 @@ class CardEditor(ctk.CTkFrame):
         text_color: Any | None = None,
         fg_color: Any | None = None,
         **kwargs: Any,
-    ) -> _FastLabel:
-        label = _FastLabel(
+    ) -> ctk.CTkLabel:
+        label = ctk.CTkLabel(
             master,
-            resolve=self._apply_appearance_mode,
-            background=(self._label_background(master) if fg_color is None else fg_color),
+            fg_color="transparent" if fg_color is None else fg_color,
             text_color=self.theme["text_color"] if text_color is None else text_color,
             **kwargs,
         )
-        self._native_labels.append(label)
+        self._label_widgets.append(label)
         return label
-
-    def _set_appearance_mode(self, mode_string: str) -> None:
-        super()._set_appearance_mode(mode_string)
-        for label in getattr(self, "_native_labels", ()):
-            label.apply_appearance()
-        for button, color in getattr(self, "_native_pill_buttons", ()):
-            try:
-                button.configure(
-                    background=self._apply_appearance_mode(color),
-                    foreground=self._apply_appearance_mode(self.theme["pill_text_color"]),
-                    activebackground=self._apply_appearance_mode(
-                        self.theme["danger_color"]
-                    ),
-                )
-            except tk.TclError:
-                pass
-        for section in getattr(self, "_native_sections", ()):
-            try:
-                section.configure(
-                    background=self._apply_appearance_mode(
-                        self.theme["editor_section_fg_color"]
-                    ),
-                    highlightbackground=self._apply_appearance_mode(
-                        self.theme["divider_color"]
-                    ),
-                )
-            except tk.TclError:
-                pass
 
     def _build_header(self, title: str) -> None:
         header = ctk.CTkFrame(self, fg_color="transparent")
@@ -293,6 +205,7 @@ class CardEditor(ctk.CTkFrame):
             header,
             text="CARD DETAILS",
             anchor="w",
+            height=16,
             text_color=self.theme["accent_color"],
             font=self._font("editor_eyebrow_font"),
         ).grid(row=0, column=0, sticky="ew")
@@ -302,6 +215,7 @@ class CardEditor(ctk.CTkFrame):
             heading_row,
             text=title,
             anchor="w",
+            height=28,
             font=self._font("editor_title_font"),
         ).pack(side="left")
         self._make_label(
@@ -310,8 +224,10 @@ class CardEditor(ctk.CTkFrame):
             fg_color=self.theme["count_fg_color"],
             text_color=self.theme["muted_text_color"],
             font=self._font("editor_status_font"),
+            width=48,
+            height=20,
+            corner_radius=4,
             padx=7,
-            pady=2,
         ).pack(side="left", padx=(9, 0))
         self.close_button = ctk.CTkButton(
             header,
@@ -322,6 +238,7 @@ class CardEditor(ctk.CTkFrame):
             fg_color="transparent",
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
+            font=self._font("editor_button_font"),
             command=self.close,
         )
         self.close_button.grid(row=0, column=1, rowspan=2, padx=(12, 0))
@@ -341,13 +258,15 @@ class CardEditor(ctk.CTkFrame):
                 row = self._build_field(section, row, section_field)
             if section_name == "Organisation":
                 self._label(section, "Column", row=row)
-                self.column_menu = _FastOptionMenu(
+                self.column_menu = CTkDropdown(
                     section,
                     values=column_labels,
                     variable=self._column_var,
-                    dynamic_resizing=False,
                     height=self.theme["input_height"],
                     corner_radius=self.theme["input_corner_radius"],
+                    font=self._font("editor_input_font"),
+                    theme=self.theme,
+                    _normalized_theme=True,
                 )
                 self.column_menu.grid(
                     row=row + 1,
@@ -375,6 +294,7 @@ class CardEditor(ctk.CTkFrame):
                 border_width=self.theme["input_border_width"],
                 border_color=self.theme["input_border_color"],
                 corner_radius=self.theme["input_corner_radius"],
+                font=self._font("editor_input_font"),
             )
             widget.insert("1.0", self._text(initial))
             widget.edit_modified(False)
@@ -388,18 +308,21 @@ class CardEditor(ctk.CTkFrame):
                 text=str(field.get("help_text") or field["label"]),
                 variable=bool_variable,
                 height=self.theme["input_height"],
+                font=self._font("editor_input_font"),
             )
             self._variables[key] = bool_variable
         elif field_type == "select":
             labels, selected = self._prepare_options(field, initial)
             select_variable = tk.StringVar(self, value=selected)
-            widget = _FastOptionMenu(
+            widget = CTkDropdown(
                 section,
                 values=labels,
                 variable=select_variable,
-                dynamic_resizing=False,
                 height=self.theme["input_height"],
                 corner_radius=self.theme["input_corner_radius"],
+                font=self._font("editor_input_font"),
+                theme=self.theme,
+                _normalized_theme=True,
             )
             self._variables[key] = select_variable
             if key == "priority":
@@ -417,6 +340,7 @@ class CardEditor(ctk.CTkFrame):
                 corner_radius=self.theme["input_corner_radius"],
                 border_width=self.theme["input_border_width"],
                 border_color=self.theme["input_border_color"],
+                font=self._font("editor_input_font"),
             )
             self._variables[key] = text_variable
             if field.get("card_role") == "title":
@@ -477,6 +401,7 @@ class CardEditor(ctk.CTkFrame):
             corner_radius=self.theme["input_corner_radius"],
             border_width=self.theme["input_border_width"],
             border_color=self.theme["input_border_color"],
+            font=self._font("editor_input_font"),
         )
         entry.grid(row=1, column=0, sticky="ew", padx=(0, 7), pady=(7, 0))
         entry.bind(
@@ -493,6 +418,7 @@ class CardEditor(ctk.CTkFrame):
             border_color=self.theme["column_border_color"],
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
+            font=self._font("editor_button_font"),
             command=lambda field_key=key: self._commit_list_field(field_key),
         )
         button.grid(row=1, column=1, pady=(7, 0))
@@ -532,41 +458,38 @@ class CardEditor(ctk.CTkFrame):
         self.cancel_button = ctk.CTkButton(
             footer,
             text="Cancel",
-            width=80,
-            height=self.theme["button_height"],
+            width=116,
+            height=self.theme["input_height"],
             corner_radius=self.theme["control_corner_radius"],
             fg_color="transparent",
             border_width=1,
             border_color=self.theme["column_border_color"],
             hover_color=self.theme["control_hover_color"],
             text_color=self.theme["text_color"],
+            font=self._font("editor_button_font"),
             command=self.close,
         )
         self.cancel_button.grid(row=2, column=1, padx=(0, 8), pady=(13, 18))
         self.save_button = ctk.CTkButton(
             footer,
             text="Save changes",
-            width=108,
-            height=self.theme["button_height"],
+            width=116,
+            height=self.theme["input_height"],
             corner_radius=self.theme["control_corner_radius"],
+            font=self._font("editor_button_font"),
             command=self.save,
         )
         self.save_button.grid(row=2, column=2, padx=(0, 20), pady=(13, 18))
 
-    def _section(self, master: Any, *, row: int, title: str) -> tk.Frame:
-        section = tk.Frame(
+    def _section(self, master: Any, *, row: int, title: str) -> ctk.CTkFrame:
+        section = ctk.CTkFrame(
             master,
-            height=1,
-            borderwidth=0,
-            highlightthickness=self.theme["editor_section_border_width"],
-            background=self._apply_appearance_mode(
-                self.theme["editor_section_fg_color"]
-            ),
-            highlightbackground=self._apply_appearance_mode(
-                self.theme["divider_color"]
-            ),
+            fg_color=self.theme["editor_section_fg_color"],
+            border_width=self.theme["editor_section_border_width"],
+            border_color=self.theme["divider_color"],
+            corner_radius=self.theme["editor_section_corner_radius"],
         )
-        self._native_sections.append(section)
+        self._section_widgets.append(section)
         section.grid(
             row=row,
             column=0,
@@ -578,6 +501,7 @@ class CardEditor(ctk.CTkFrame):
             section,
             text=title,
             anchor="w",
+            height=22,
             font=self._font("section_title_font"),
         ).grid(
             row=0,
@@ -593,6 +517,7 @@ class CardEditor(ctk.CTkFrame):
             master,
             text=text,
             anchor="w",
+            height=18,
             font=self._font("field_label_font"),
         ).grid(
             row=row,
@@ -713,11 +638,6 @@ class CardEditor(ctk.CTkFrame):
         frame = self._list_frames[key]
         for child in frame.winfo_children():
             child.destroy()
-        self._native_pill_buttons = [
-            (button, color)
-            for button, color in self._native_pill_buttons
-            if button.winfo_exists()
-        ]
         values = self._list_values[key]
         if not values:
             self._make_label(
@@ -733,26 +653,21 @@ class CardEditor(ctk.CTkFrame):
             text = str(item)
             prefix = "#" if self._field_type(key) == "tags" else ""
             color = palette[index % len(palette)]
-            button = tk.Button(
+            button_text = f"{prefix}{text}  ×"
+            pill_font = self._font("pill_font")
+            button = ctk.CTkButton(
                 frame,
-                text=f"{prefix}{text}  ×",
-                width=max(6, len(text) + 4),
-                borderwidth=0,
-                highlightthickness=0,
-                relief="flat",
-                cursor="hand2",
-                padx=5,
-                pady=2,
-                background=self._apply_appearance_mode(color),
-                foreground=self._apply_appearance_mode(self.theme["pill_text_color"]),
-                activebackground=self._apply_appearance_mode(self.theme["danger_color"]),
-                activeforeground=self._apply_appearance_mode(
-                    self.theme["pill_text_color"]
-                ),
-                font=self._font("pill_font"),
+                text=button_text,
+                width=max(64, pill_font.measure(button_text) + 22),
+                height=self.theme["pill_height"],
+                corner_radius=self.theme["pill_corner_radius"],
+                border_width=0,
+                fg_color=color,
+                hover_color=self.theme["danger_color"],
+                text_color=self.theme["pill_text_color"],
+                font=pill_font,
                 command=partial(self._remove_list_value, key, item),
             )
-            self._native_pill_buttons.append((button, color))
             button.grid(
                 row=index // 3,
                 column=index % 3,
@@ -864,12 +779,18 @@ class CardEditor(ctk.CTkFrame):
             if isinstance(widget, ctk.CTkEntry):
                 widget.icursor("end")
 
+    def _desired_panel_width(self) -> int:
+        return int(self.panel_width)
+
     def _slide_open(self) -> None:
         self._slide_after_id = None
         if not self.winfo_exists():
             return
-        target = self._slide_target
+        width = self._desired_panel_width()
+        target = -width
+        self._slide_target = target
         self._slide_x = max(target, self._slide_x - self.theme["editor_slide_step"])
+        self.configure(width=width)
         self.place_configure(x=self._slide_x)
         self.lift()
         if self._slide_x > target:
@@ -975,7 +896,7 @@ class CardEditor(ctk.CTkFrame):
         self.destroy()
 
     def destroy(self) -> None:
-        """Cancel drawer callbacks and release window-level shortcuts."""
+        """Cancel overlay callbacks and release window-level shortcuts."""
 
         if self._destroying:
             return

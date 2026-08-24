@@ -132,6 +132,7 @@ class CTkKanbanCard(ctk.CTkFrame):
         self._interaction_color = ""
         self._handle_bounds = (0, 0, 0, 0)
         self._menu_bounds = (0, 0, 0, 0)
+        self._context_menu_position: tuple[int, int] | None = None
         self._pill_widgets: list[ctk.CTkLabel] = []
 
         self._content_canvas = tk.Canvas(
@@ -219,6 +220,9 @@ class CTkKanbanCard(ctk.CTkFrame):
         self._content_canvas.bind("<ButtonPress-1>", self._canvas_press, add="+")
         self._content_canvas.bind("<B1-Motion>", self._canvas_drag, add="+")
         self._content_canvas.bind("<ButtonRelease-1>", self._canvas_release, add="+")
+        if self._on_menu is not None:
+            self._content_canvas.bind("<Button-3>", self._context_menu, add="+")
+            self.bind("<Button-3>", self._context_menu, add="+")
         self.bind("<Enter>", self._hover_enter, add="+")
         self.bind("<Leave>", self._hover_leave, add="+")
 
@@ -330,6 +334,8 @@ class CTkKanbanCard(ctk.CTkFrame):
         for target in targets:
             target.bind("<Enter>", self._hover_enter, add="+")
             target.bind("<Leave>", self._hover_leave, add="+")
+            if self._on_menu is not None:
+                target.bind("<Button-3>", self._context_menu, add="+")
 
     def _draw_pill(
         self,
@@ -756,6 +762,16 @@ class CTkKanbanCard(ctk.CTkFrame):
     def _menu(self) -> None:
         if self._on_menu is not None:
             self._on_menu(self)
+
+    def _context_menu(self, event: Any) -> str:
+        self._context_menu_position = (int(event.x_root), int(event.y_root))
+        try:
+            if self._on_select is not None:
+                self._on_select(self)
+            self._menu()
+        finally:
+            self._context_menu_position = None
+        return "break"
 
     def _dispatch_pointer(self, callback: PointerCallback | None, event: Any) -> str:
         if callback is not None:

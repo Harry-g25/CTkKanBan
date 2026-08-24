@@ -28,6 +28,7 @@ class LayoutConfig:
     enable_drag: bool = True
     use_builtin_editor: bool = True
     fill_columns: bool = False
+    card_size: str = "normal"
     column_width: int = 320
     column_height: int = 500
     editor_width: int = 420
@@ -109,6 +110,10 @@ def merge_config(config: BoardConfig | Mapping[str, Any] | None = None) -> Board
     for name in ("show_toolbar", "enable_drag", "use_builtin_editor", "fill_columns"):
         if not isinstance(getattr(result.layout, name), bool):
             raise TypeError(f"layout.{name} must be a bool")
+    if not isinstance(result.layout.card_size, str):
+        raise TypeError("layout.card_size must be a string")
+    if result.layout.card_size not in {"compact", "normal", "large"}:
+        raise ValueError("layout.card_size must be 'compact', 'normal', or 'large'")
     limits = {
         "column_width": (result.layout.column_width, 220),
         "column_height": (result.layout.column_height, 240),

@@ -6,6 +6,18 @@ confirm that matching distributions were published to PyPI.
 
 ## Unreleased
 
+- Replaced native Tk card and column menus with compact, text-only,
+  content-sized CustomTkinter popup menus, including nested submenus and
+  right-click access.
+- Added compact, normal, and large card-size presets through configuration, a
+  toolbar control, and the runtime `set_card_size()` method.
+- Replaced standard `CTkOptionMenu` controls with a theme-aware dropdown for
+  card sizing and generated select fields.
+- Changed the generated card editor into an immediate, exact right-half
+  overlay so opening it no longer shifts or resizes the board beneath it.
+- Unified the generated editor on DPI-aware CustomTkinter labels, sections,
+  pills, fonts, and control dimensions for consistent high-DPI rendering.
+- Raised the minimum supported CustomTkinter release to 6.0.0.
 - Reworked card rendering around lightweight, appearance-aware static content
   and anti-aliased CustomTkinter controls for the accent, actions, and pooled
   pills while retaining theme behavior.
